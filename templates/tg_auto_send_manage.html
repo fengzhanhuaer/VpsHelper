@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}管理任务 - 自动发送{% endblock %}
+
+{% block content %}
+<h1>📋 管理自动发送任务</h1>
+
+{% if error %}
+<div class="alert alert-error">
+    {{ error }}
+</div>
+{% endif %}
+
+{% if message %}
+<div class="alert alert-success">
+    {{ message }}
+</div>
+{% endif %}
+
+<form method="GET" action="{{ url_for('tg_auto_send_manage', token=token) if token else url_for('tg_auto_send_manage') }}">
+    {% if token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    {% endif %}
+
+    <div class="form-group">
+        <label for="account_id">选择账号</label>
+        <select id="account_id" name="account_id" onchange="this.form.submit()">
+            <option value="">请选择账号</option>
+            {% for account in accounts %}
+            <option value="{{ account.id }}" {{ 'selected' if account.id|string == selected_account_id else '' }}>
+                {{ account.account_name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+
+{% if selected_account_id and tasks %}
+<div style="overflow-x: auto; margin: 30px 0;">
+    <table>
+        <thead>
+            <tr>
+                <th>会话</th>
+                <th>消息内容</th>
+                <th>发送时间</th>
+                <th>随机延迟</th>
+                <th>状态</th>
+                <th>下次运行</th>
+                <th>最后结果</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">
+                    {{ task.dialog_name }}
+                </td>
+                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;" 
+                    title="{{ task.message }}">
+                    {{ task.message[:50] }}{{ '...' if task.message|length > 50 else '' }}
+                </td>
+                <td>{{ task.time_of_day }}</td>
+                <td>{{ task.jitter_seconds }}秒</td>
+                <td>
+                    <span style="color: {{ 'green' if task.enabled else 'red' }}; font-weight: 600;">
+                        {{ '✅ 启用' if task.enabled else '⏸️ 暂停' }}
+                    </span>
+                </td>
+                <td style="font-size: 0.9em;">{{ task.next_run_at or '-' }}</td>
+                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; font-size: 0.85em;" 
+                    title="{{ task.last_result or '-' }}">
+                    {{ (task.last_result[:40] + '...') if task.last_result and task.last_result|length > 40 else (task.last_result or '-') }}
+                </td>
+                <td style="white-space: nowrap;">
+                    <form method="POST" style="display: inline;" 
+                          action="{{ url_for('tg_toggle_task', task_id=task.id, token=token) if token else url_for('tg_toggle_task', task_id=task.id) }}">
+                        {% if token %}
+                        <input type="hidden" name="token" value="{{ token }}">
+                        {% endif %}
+                        <input type="hidden" name="account_id" value="{{ selected_account_id }}">
+                        <button type="submit" style="background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline;">
+                            {{ '⏸️' if task.enabled else '▶️' }}
+                        </button>
+                    </form>
+                    
+                    <form method="POST" style="display: inline;" 
+                          action="{{ url_for('tg_run_task', task_id=task.id, token=token) if token else url_for('tg_run_task', task_id=task.id) }}">
+                        {% if token %}
+                        <input type="hidden" name="token" value="{{ token }}">
+                        {% endif %}
+                        <input type="hidden" name="account_id" value="{{ selected_account_id }}">
+                        <button type="submit" style="background: none; border: none; color: #28a745; cursor: pointer; text-decoration: underline;">
+                            ▶️运行
+                        </button>
+                    </form>
+                    
+                    <a href="{{ url_for('tg_edit_task', task_id=task.id, account_id=selected_account_id, token=token) if token else url_for('tg_edit_task', task_id=task.id, account_id=selected_account_id) }}" 
+                       style="color: #ffc107; text-decoration: none; margin: 0 5px;">✏️</a>
+                    
+                    <form method="POST" style="display: inline;" 
+                          action="{{ url_for('tg_delete_task', task_id=task.id, token=token) if token else url_for('tg_delete_task', task_id=task.id) }}"
+                          onsubmit="return confirm('确定要删除这个任务吗？')">
+                        {% if token %}
+                        <input type="hidden" name="token" value="{{ token }}">
+                        {% endif %}
+                        <input type="hidden" name="account_id" value="{{ selected_account_id }}">
+                        <button type="submit" style="background: none; border: none; color: #dc3545; cursor: pointer; text-decoration: underline;">
+                            🗑️
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% if task.last_reply %}
+            <tr style="background: #f0f8ff;">
+                <td colspan="8" style="padding: 10px; font-size: 0.9em; color: #666;">
+                    <strong>💬 最后回复：</strong> {{ task.last_reply }}
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% elif selected_account_id %}
+<div style="text-align: center; padding: 40px; color: #999;">
+    <p style="font-size: 1.2em;">暂无任务</p>
+    <p>点击下方"新建任务"按钮来创建您的第一个自动发送任务</p>
+</div>
+{% endif %}
+
+<div style="margin-top: 30px; text-align: center;">
+    <a href="{{ url_for('tg_new_task', account_id=selected_account_id, token=token) if token else url_for('tg_new_task', account_id=selected_account_id) }}" class="btn">
+        ➕ 新建任务
+    </a>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_auto_send', token=token) if token else url_for('tg_auto_send') }}" class="btn btn-secondary">⬅️ 返回</a>
+</div>
+{% endblock %}

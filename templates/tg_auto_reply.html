@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}自动回复 - TG助手{% endblock %}
+
+{% block content %}
+<h1>💬 自动回复</h1>
+
+<div style="text-align: center; padding: 60px 20px; color: #999;">
+    <p style="font-size: 3em; margin-bottom: 20px;">🚧</p>
+    <p style="font-size: 1.5em; margin-bottom: 15px;">功能开发中</p>
+    <p style="font-size: 1.1em; line-height: 1.6;">
+        自动回复功能即将上线，敬请期待！<br>
+        将支持关键词匹配、智能回复等功能。
+    </p>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_helper', token=token) if token else url_for('tg_helper') }}" class="btn btn-secondary">⬅️ 返回</a>
+</div>
+{% endblock %}

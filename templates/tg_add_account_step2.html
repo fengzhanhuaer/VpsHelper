@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}添加账号 - 步骤2{% endblock %}
+
+{% block content %}
+<h1>➕ 添加 Telegram 账号</h1>
+<h2 style="font-size: 1.3em; color: #999;">步骤 2/2: 输入验证码</h2>
+
+{% if error %}
+<div class="alert alert-error">
+    {{ error }}
+</div>
+{% endif %}
+
+<div style="margin-bottom: 30px; padding: 15px; background: #e7f3ff; border-radius: 10px; border-left: 4px solid #667eea;">
+    <p style="color: #333; font-size: 1.1em;">
+        📱 验证码已发送到: <strong>{{ phone }}</strong>
+    </p>
+</div>
+
+<form method="POST" action="{{ url_for('tg_add_account_step2', token=token) if token else url_for('tg_add_account_step2') }}">
+    {% if token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    {% endif %}
+    <input type="hidden" name="flow_id" value="{{ flow_id }}">
+
+    <div class="form-group">
+        <label for="code">验证码</label>
+        <input type="text" id="code" name="code" required 
+               placeholder="请输入收到的验证码">
+    </div>
+
+    <div class="form-group">
+        <label for="password">两步验证密码（如果启用）</label>
+        <input type="password" id="password" name="password" 
+               placeholder="如果您的账号启用了两步验证，请输入密码">
+        <small style="color: #666; display: block; margin-top: 5px;">
+            如果没有启用两步验证，可以留空
+        </small>
+    </div>
+
+    <div class="form-group" style="text-align: center;">
+        <button type="submit" class="btn">✅ 完成登录</button>
+    </div>
+</form>
+
+<div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 15px;">📖 说明</h3>
+    <ul style="line-height: 1.8; color: #666;">
+        <li>请查看您的 Telegram 应用，应该收到了一条包含验证码的消息</li>
+        <li>验证码通常是 5 位数字</li>
+        <li>如果您的账号启用了两步验证，还需要输入两步验证密码</li>
+        <li>验证成功后，账号会被自动添加到账号列表</li>
+    </ul>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_accounts', token=token) if token else url_for('tg_accounts') }}" class="btn btn-secondary">⬅️ 返回</a>
+</div>
+{% endblock %}

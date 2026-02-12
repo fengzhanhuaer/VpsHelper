@@ -7,32 +7,32 @@
 <h2>功能菜单</h2>
 
 <div class="button-grid">
-    <a href="{{ url_for('tg_accounts') }}" class="btn">
+    <a href="{{ url_for('tg_accounts', token=token) if token else url_for('tg_accounts') }}" class="btn">
         👥 账号管理
     </a>
     
-    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
+    <a href="{{ url_for('tg_auto_send', token=token) if token else url_for('tg_auto_send') }}" class="btn">
         📤 自动发送
     </a>
     
-    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
-        💬 消息管理
+    <a href="{{ url_for('tg_auto_reply', token=token) if token else url_for('tg_auto_reply') }}" class="btn">
+        💬 自动回复
     </a>
     
-    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
-        👤 用户管理
+    <a href="{{ url_for('tg_api_settings', token=token) if token else url_for('tg_api_settings') }}" class="btn">
+        🔑 API配置
     </a>
     
-    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
-        📊 统计报表
+    <a href="{{ url_for('tg_proxy_settings', token=token) if token else url_for('tg_proxy_settings') }}" class="btn">
+        🌐 代理配置
     </a>
     
-    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
-        ⚙️ TG设置
+    <a href="{{ url_for('tg_database_settings', token=token) if token else url_for('tg_database_settings') }}" class="btn">
+        💾 数据库管理
     </a>
 </div>
 
 <div class="back-button">
-    <a href="{{ url_for('home') }}" class="btn btn-secondary">⬅️ 返回主菜单</a>
+    <a href="{{ url_for('home', token=token) if token else url_for('home') }}" class="btn btn-secondary">⬅️ 返回主菜单</a>
 </div>
 {% endblock %}

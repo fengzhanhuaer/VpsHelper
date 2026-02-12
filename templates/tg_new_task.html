@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}新建任务 - 自动发送{% endblock %}
+
+{% block content %}
+<h1>➕ 新建自动发送任务</h1>
+
+{% if error %}
+<div class="alert alert-error">
+    {{ error }}
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('tg_new_task', token=token) if token else url_for('tg_new_task') }}">
+    {% if token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    {% endif %}
+
+    <div class="form-group">
+        <label for="account_id">选择账号</label>
+        <select id="account_id" name="account_id" required onchange="this.form.submit()">
+            <option value="">请选择账号</option>
+            {% for account in accounts %}
+            <option value="{{ account.id }}" {{ 'selected' if account.id|string == selected_account_id else '' }}>
+                {{ account.account_name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    {% if selected_account_id %}
+    <div class="form-group">
+        <label for="dialog_id">选择会话</label>
+        <select id="dialog_id" name="dialog_id" required>
+            <option value="">请选择会话</option>
+            {% for dialog in dialogs %}
+            <option value="{{ dialog.dialog_id }}">
+                {{ dialog.title or dialog.username or dialog.dialog_id }}
+            </option>
+            {% endfor %}
+        </select>
+        <div style="margin-top: 10px;">
+            <button type="submit" formaction="{{ url_for('tg_refresh_dialogs', token=token) if token else url_for('tg_refresh_dialogs') }}" 
+                    class="btn btn-secondary" style="padding: 8px 20px; font-size: 0.9em;">
+                🔄 刷新会话列表
+            </button>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="message">发送内容</label>
+        <textarea id="message" name="message" rows="6" required 
+                  placeholder="请输入要发送的消息内容"></textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="time_of_day">每天发送时间</label>
+        <input type="text" id="time_of_day" name="time_of_day" required 
+               placeholder="HH:MM 格式，例如: 09:30">
+        <small style="color: #666; display: block; margin-top: 5px;">
+            24小时制，例如 09:30 表示每天早上9点30分
+        </small>
+    </div>
+
+    <div class="form-group">
+        <label for="jitter_seconds">随机延迟（秒）</label>
+        <input type="text" id="jitter_seconds" name="jitter_seconds" value="0" 
+               placeholder="0-3600">
+        <small style="color: #666; display: block; margin-top: 5px;">
+            在设定时间基础上随机延迟0到指定秒数，避免被检测
+        </small>
+    </div>
+
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="enabled" checked>
+            启用任务
+        </label>
+    </div>
+
+    <div class="form-group" style="text-align: center;">
+        <button type="submit" class="btn">💾 保存任务</button>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 40px; color: #999;">
+        <p>请先选择一个账号</p>
+    </div>
+    {% endif %}
+</form>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_auto_send', token=token) if token else url_for('tg_auto_send') }}" class="btn btn-secondary">⬅️ 返回</a>
+</div>
+{% endblock %}
