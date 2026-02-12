@@ -7,16 +7,16 @@
 <h2>主菜单</h2>
 
 <div style="text-align: right; margin-bottom: 20px;">
-    <span style="color: #667eea; font-weight: 600;">欢迎, {{ current_user.username }}!</span>
-    <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="margin-left: 15px; padding: 10px 20px; font-size: 0.9em;">退出登录</a>
+    <span style="color: #667eea; font-weight: 600;">欢迎, {{ username }}!</span>
+    <a href="{{ url_for('logout', token=token) if token else url_for('logout') }}" class="btn btn-secondary" style="margin-left: 15px; padding: 10px 20px; font-size: 0.9em;">退出登录</a>
 </div>
 
 <div class="button-grid">
-    <a href="{{ url_for('tg_helper') }}" class="btn">
+    <a href="{{ url_for('tg_helper', token=token) if token else url_for('tg_helper') }}" class="btn">
         📱 TG助手
     </a>
     
-    <a href="{{ url_for('firewall') }}" class="btn">
+    <a href="{{ url_for('firewall', token=token) if token else url_for('firewall') }}" class="btn">
         🛡️ 防火墙
     </a>
     
