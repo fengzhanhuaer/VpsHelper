@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}数据库管理 - TG助手{% endblock %}
+
+{% block content %}
+<h1>💾 数据库管理</h1>
+
+{% if message %}
+<div class="alert alert-{{ 'success' if '成功' in message or '已保存' in message or '已找到' in message else 'error' if '失败' in message else 'info' }}">
+    {{ message }}
+</div>
+{% endif %}
+
+<h2 style="font-size: 1.5em; margin-top: 30px;">Cloudflare D1 配置</h2>
+
+<form method="POST" action="{{ url_for('tg_database_settings', token=token) if token else url_for('tg_database_settings') }}">
+    {% if token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    {% endif %}
+
+    <div class="form-group">
+        <label for="cf_api_token">Cloudflare API Token</label>
+        <input type="text" id="cf_api_token" name="cf_api_token" value="{{ cf_api_token }}" 
+               placeholder="从 Cloudflare 控制台获取">
+    </div>
+
+    <div class="form-group">
+        <label>数据库名称</label>
+        <input type="text" value="{{ cf_d1_database_name }}" disabled 
+               style="background: #f0f0f0; cursor: not-allowed;">
+        <small style="color: #666; display: block; margin-top: 5px;">固定为 VpsHelper</small>
+    </div>
+
+    {% if cf_d1_database_id %}
+    <div class="form-group">
+        <label>数据库 ID</label>
+        <input type="text" value="{{ cf_d1_database_id }}" disabled 
+               style="background: #f0f0f0; cursor: not-allowed;">
+    </div>
+    {% endif %}
+
+    <div class="form-group" style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+        <button type="submit" name="action" value="save" class="btn">💾 保存配置</button>
+        <button type="submit" name="action" value="create" class="btn" 
+                style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+            ➕ 创建/查找数据库
+        </button>
+        <button type="submit" name="action" value="backup" class="btn" 
+                style="background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);">
+            ☁️ 备份到云端
+        </button>
+        <button type="submit" name="action" value="pull" class="btn" 
+                style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);">
+            📥 拉取云端数据
+        </button>
+    </div>
+</form>
+
+<h2 style="font-size: 1.5em; margin-top: 40px;">⏰ 自动备份设置</h2>
+
+<form method="POST" action="{{ url_for('tg_database_settings', token=token) if token else url_for('tg_database_settings') }}">
+    {% if token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    {% endif %}
+    <input type="hidden" name="action" value="auto_backup">
+
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="db_auto_backup_enabled" {{ 'checked' if db_auto_backup_enabled else '' }}>
+            启用每日自动备份
+        </label>
+    </div>
+
+    <div class="form-group">
+        <label for="db_auto_backup_time">备份时间</label>
+        <input type="text" id="db_auto_backup_time" name="db_auto_backup_time" 
+               value="{{ db_auto_backup_time }}" placeholder="HH:MM 格式，例如: 03:30">
+    </div>
+
+    {% if db_auto_backup_last_result %}
+    <div class="form-group">
+        <label>最后备份结果</label>
+        <textarea readonly style="background: #f0f0f0; cursor: not-allowed; min-height: 60px;">{{ db_auto_backup_last_result }}</textarea>
+    </div>
+    {% endif %}
+
+    <div class="form-group" style="text-align: center;">
+        <button type="submit" class="btn">💾 保存自动备份设置</button>
+    </div>
+</form>
+
+<div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 15px;">📖 说明</h3>
+    <ul style="line-height: 1.8; color: #666;">
+        <li>Cloudflare D1 是免费的边缘数据库服务</li>
+        <li>访问 <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" style="color: #667eea;">Cloudflare</a> 创建 API Token</li>
+        <li>API Token 需要 D1 编辑权限</li>
+        <li>点击"创建/查找数据库"会自动创建或查找名为 VpsHelper 的数据库</li>
+        <li>建议开启自动备份，每天定时将本地数据备份到云端</li>
+    </ul>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_helper', token=token) if token else url_for('tg_helper') }}" class="btn btn-secondary">⬅️ 返回</a>
+</div>
+{% endblock %}

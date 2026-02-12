@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}添加账号 - 步骤1{% endblock %}
+
+{% block content %}
+<h1>➕ 添加 Telegram 账号</h1>
+<h2 style="font-size: 1.3em; color: #999;">步骤 1/2: 输入手机号</h2>
+
+{% if error %}
+<div class="alert alert-error">
+    {{ error }}
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('tg_add_account_step1', token=token) if token else url_for('tg_add_account_step1') }}">
+    {% if token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    {% endif %}
+
+    <div class="form-group">
+        <label for="phone">手机号</label>
+        <input type="text" id="phone" name="phone" required 
+               placeholder="请输入手机号（含国家代码，如 +86）">
+        <small style="color: #666; display: block; margin-top: 5px;">
+            例如：+8613800138000（中国大陆）
+        </small>
+    </div>
+
+    <div class="form-group">
+        <label for="account_name">账号备注（可选）</label>
+        <input type="text" id="account_name" name="account_name" 
+               placeholder="为此账号添加备注，方便识别">
+    </div>
+
+    <div class="form-group" style="text-align: center;">
+        <button type="submit" class="btn">📱 发送验证码</button>
+    </div>
+</form>
+
+<div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 15px;">📖 说明</h3>
+    <ul style="line-height: 1.8; color: #666;">
+        <li>请确保已经在"设置"中配置好 Telegram API ID 和 API Hash</li>
+        <li>如果在中国大陆，请先配置代理</li>
+        <li>手机号必须包含国家代码（如中国 +86）</li>
+        <li>点击"发送验证码"后，Telegram 会向您的手机发送验证码</li>
+    </ul>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_accounts', token=token) if token else url_for('tg_accounts') }}" class="btn btn-secondary">⬅️ 返回</a>
+</div>
+{% endblock %}

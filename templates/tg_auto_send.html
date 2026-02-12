@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}自动发送 - TG助手{% endblock %}
+
+{% block content %}
+<h1>📤 自动发送管理</h1>
+
+<div class="button-grid" style="margin: 30px 0;">
+    <a href="{{ url_for('tg_auto_send_new', token=token) if token else url_for('tg_auto_send_new') }}" class="btn">
+        ➕ 新建任务
+    </a>
+    <a href="{{ url_for('tg_auto_send_manage', token=token) if token else url_for('tg_auto_send_manage') }}" class="btn" 
+       style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+        📋 管理任务
+    </a>
+</div>
+
+<div style="margin: 30px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 15px;">📖 功能说明</h3>
+    <ul style="line-height: 1.8; color: #666;">
+        <li><strong>新建任务：</strong>创建新的自动发送任务，可以设置每天定时发送消息</li>
+        <li><strong>管理任务：</strong>查看、编辑、启用/禁用或删除现有的自动发送任务</li>
+        <li>支持设置每天固定时间发送，可添加随机延迟避免检测</li>
+        <li>可以查看每次发送的结果和收到的回复</li>
+    </ul>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_helper', token=token) if token else url_for('tg_helper') }}" class="btn btn-secondary">⬅️ 返回</a>
+</div>
+{% endblock %}

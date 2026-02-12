@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}编辑任务 - 自动发送{% endblock %}
+
+{% block content %}
+<h1>✏️ 编辑自动发送任务</h1>
+
+{% if error %}
+<div class="alert alert-error">
+    {{ error }}
+</div>
+{% endif %}
+
+{% if message %}
+<div class="alert alert-success">
+    {{ message }}
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('tg_edit_task', task_id=task.id, token=token) if token else url_for('tg_edit_task', task_id=task.id) }}">
+    {% if token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    {% endif %}
+    <input type="hidden" name="account_id" value="{{ account_id }}">
+
+    <div class="form-group">
+        <label>账号</label>
+        <input type="text" value="{{ account_name }}" disabled 
+               style="background: #f0f0f0; cursor: not-allowed;">
+    </div>
+
+    <div class="form-group">
+        <label>会话</label>
+        <input type="text" value="{{ dialog_name }}" disabled 
+               style="background: #f0f0f0; cursor: not-allowed;">
+    </div>
+
+    <div class="form-group">
+        <label for="message">发送内容</label>
+        <textarea id="message" name="message" rows="6" required>{{ task.message }}</textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="time_of_day">每天发送时间</label>
+        <input type="text" id="time_of_day" name="time_of_day" required 
+               value="{{ task.time_of_day }}" placeholder="HH:MM 格式，例如: 09:30">
+    </div>
+
+    <div class="form-group">
+        <label for="jitter_seconds">随机延迟（秒）</label>
+        <input type="text" id="jitter_seconds" name="jitter_seconds" 
+               value="{{ task.jitter_seconds }}" placeholder="0-3600">
+    </div>
+
+    <div class="form-group" style="text-align: center;">
+        <button type="submit" class="btn">💾 保存修改</button>
+    </div>
+</form>
+
+<div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 15px;">📊 任务状态</h3>
+    <table style="width: 100%; margin: 0;">
+        <tr>
+            <td style="border: none; padding: 8px; font-weight: 600;">状态:</td>
+            <td style="border: none; padding: 8px;">{{ '✅ 启用' if task.enabled else '⏸️ 暂停' }}</td>
+        </tr>
+        <tr>
+            <td style="border: none; padding: 8px; font-weight: 600;">下次运行:</td>
+            <td style="border: none; padding: 8px;">{{ task.next_run_at or '-' }}</td>
+        </tr>
+        {% if task.last_run_at %}
+        <tr>
+            <td style="border: none; padding: 8px; font-weight: 600;">最后运行:</td>
+            <td style="border: none; padding: 8px;">{{ task.last_run_at }}</td>
+        </tr>
+        {% endif %}
+        {% if task.last_result %}
+        <tr>
+            <td style="border: none; padding: 8px; font-weight: 600; vertical-align: top;">最后结果:</td>
+            <td style="border: none; padding: 8px;">{{ task.last_result }}</td>
+        </tr>
+        {% endif %}
+        {% if task.last_reply %}
+        <tr>
+            <td style="border: none; padding: 8px; font-weight: 600; vertical-align: top;">收到回复:</td>
+            <td style="border: none; padding: 8px;">{{ task.last_reply }}</td>
+        </tr>
+        {% endif %}
+    </table>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_auto_send_manage', account_id=account_id, token=token) if token else url_for('tg_auto_send_manage', account_id=account_id) }}" class="btn btn-secondary">⬅️ 返回任务列表</a>
+</div>
+{% endblock %}

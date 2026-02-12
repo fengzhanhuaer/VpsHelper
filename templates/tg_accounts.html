@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}账号管理 - TG助手{% endblock %}
+
+{% block content %}
+<h1>👥 TG账号管理</h1>
+
+{% if error %}
+<div class="alert alert-error">
+    {{ error }}
+</div>
+{% endif %}
+
+<div style="margin-bottom: 30px; text-align: right;">
+    <a href="{{ url_for('tg_add_account_step1', token=token) if token else url_for('tg_add_account_step1') }}" class="btn">➕ 添加账号</a>
+</div>
+
+{% if accounts %}
+<div style="margin-bottom: 30px;">
+    <label for="accountSelect" style="display: block; margin-bottom: 10px; font-weight: 600;">选择账号：</label>
+    <form method="GET" action="{{ url_for('tg_accounts', token=token) if token else url_for('tg_accounts') }}">
+        {% if token %}
+        <input type="hidden" name="token" value="{{ token }}">
+        {% endif %}
+        <select id="accountSelect" name="account_id" onchange="this.form.submit()" 
+                style="width: 100%; max-width: 400px;">
+            {% for account in accounts %}
+            <option value="{{ account.id }}" {{ 'selected' if account.id|string == selected_account_id else '' }}>
+                {{ account.account_name }} ({{ account.created_at[:10] if account.created_at else '' }})
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+{% if selected_account_id %}
+<div style="margin-bottom: 30px;">
+    <h3 style="color: #667eea; margin-bottom: 15px;">会话列表</h3>
+    <form method="POST" action="{{ url_for('tg_refresh_account_dialogs', account_id=selected_account_id, token=token) if token else url_for('tg_refresh_account_dialogs', account_id=selected_account_id) }}" style="margin-bottom: 15px;">
+        {% if token %}
+        <input type="hidden" name="token" value="{{ token }}">
+        {% endif %}
+        <button type="submit" class="btn btn-secondary" style="padding: 8px 20px; font-size: 0.9em;">
+            🔄 刷新会话列表
+        </button>
+    </form>
+    
+    {% if dialogs %}
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>会话名称</th>
+                    <th>用户名</th>
+                    <th>会话ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dialog in dialogs %}
+                <tr>
+                    <td>{{ dialog.title or '-' }}</td>
+                    <td>{{ ('@' + dialog.username) if dialog.username else '-' }}</td>
+                    <td style="font-family: monospace; font-size: 0.9em;">{{ dialog.dialog_id }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 40px; color: #999;">
+        <p>暂无会话</p>
+        <p style="font-size: 0.9em;">点击上方"刷新会话列表"按钮加载最近的对话</p>
+    </div>
+    {% endif %}
+</div>
+
+<div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 15px;">账号操作</h3>
+    <form method="POST" action="{{ url_for('delete_account', account_id=selected_account_id, token=token) if token else url_for('delete_account', account_id=selected_account_id) }}"
+          onsubmit="return confirm('确定要删除这个账号吗？此操作不可恢复。')" style="display: inline;">
+        {% if token %}
+        <input type="hidden" name="token" value="{{ token }}">
+        {% endif %}
+        <button type="submit" class="btn" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+            🗑️ 删除当前账号
+        </button>
+    </form>
+</div>
+{% endif %}
+
+{% else %}
+<div style="text-align: center; padding: 40px; color: #999;">
+    <p style="font-size: 1.2em;">暂无账号</p>
+    <p>点击上方"添加账号"按钮来添加您的第一个TG账号</p>
+</div>
+{% endif %}
+
+<div class="back-button">
+    <a href="{{ url_for('tg_helper', token=token) if token else url_for('tg_helper') }}" class="btn btn-secondary">⬅️ 返回TG助手</a>
+</div>
+{% endblock %}

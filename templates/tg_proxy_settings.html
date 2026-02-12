@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}代理配置 - TG助手{% endblock %}
+
+{% block content %}
+<h1>🌐 代理配置</h1>
+
+{% if message %}
+<div class="alert alert-{{ 'success' if '保存' in message or '可用' in message else 'error' if '不可用' in message or '失败' in message else 'info' }}">
+    {{ message }}
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('tg_proxy_settings', token=token) if token else url_for('tg_proxy_settings') }}">
+    {% if token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    {% endif %}
+
+    <div class="form-group">
+        <label for="proxy_host">代理地址</label>
+        <input type="text" id="proxy_host" name="proxy_host" value="{{ proxy_host }}" 
+               placeholder="例如: 127.0.0.1">
+    </div>
+
+    <div class="form-group">
+        <label for="proxy_port">代理端口</label>
+        <input type="text" id="proxy_port" name="proxy_port" value="{{ proxy_port }}" 
+               placeholder="例如: 1080">
+    </div>
+
+    <div class="form-group">
+        <label for="proxy_username">用户名（可选）</label>
+        <input type="text" id="proxy_username" name="proxy_username" value="{{ proxy_username }}" 
+               placeholder="如果代理需要认证则填写">
+    </div>
+
+    <div class="form-group">
+        <label for="proxy_password">密码（可选）</label>
+        <input type="password" id="proxy_password" name="proxy_password" value="{{ proxy_password }}" 
+               placeholder="如果代理需要认证则填写">
+    </div>
+
+    <div class="form-group" style="display: flex; gap: 15px; justify-content: center;">
+        <button type="submit" name="action" value="save" class="btn">💾 保存配置</button>
+        <button type="submit" name="action" value="test" class="btn" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">🔍 测试连接</button>
+    </div>
+</form>
+
+<div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 15px;">📖 说明</h3>
+    <ul style="line-height: 1.8; color: #666;">
+        <li>如果您在中国大陆，需要配置代理才能连接 Telegram</li>
+        <li>支持 SOCKS5 代理</li>
+        <li>代理地址和端口必须同时填写或同时留空</li>
+        <li>用户名和密码仅在代理需要认证时填写</li>
+        <li>配置保存后，点击"测试连接"验证代理是否可用</li>
+    </ul>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('tg_helper', token=token) if token else url_for('tg_helper') }}" class="btn btn-secondary">⬅️ 返回</a>
+</div>
+{% endblock %}
