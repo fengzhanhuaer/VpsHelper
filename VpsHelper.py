@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "VpsHelper.db"
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or token_urlsafe(32)
 app.config["APP_NAME"] = "VpsHelper"
 app.config["TELEGRAM_API_ID"] = os.environ.get("TELEGRAM_API_ID")
 app.config["TELEGRAM_API_HASH"] = os.environ.get("TELEGRAM_API_HASH")
@@ -1713,4 +1713,5 @@ def tg_run_task(task_id: int):
 if __name__ == "__main__":
     configure_scheduler_jobs()
     SCHEDULER.start()
-    app.run(host="0.0.0.0", port=15018, debug=False)
+    host = os.environ.get("FLASK_HOST", "127.0.0.1")
+    app.run(host=host, port=15018, debug=False)
