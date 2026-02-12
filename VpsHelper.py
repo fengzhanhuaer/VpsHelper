@@ -863,7 +863,7 @@ def ensure_db_initialized():
 
 @app.context_processor
 def inject_app_name():
-    return {"app_name": app.config.get("APP_NAME", "TgHelper")}
+    return {"app_name": app.config.get("APP_NAME", "VpsHelper")}
 
 
 @app.route("/")
@@ -1121,7 +1121,7 @@ def database_settings():
                     ok_find, _, found_db_id = cloudflare_find_d1_by_name(api_token, account_id, db_name)
                     if ok_find and found_db_id:
                         db_id = found_db_id
-                        message = "已找到云端数据库 TgHelper。"
+                        message = "已找到云端数据库 VpsHelper。"
                         use_d1 = True
                     else:
                         ok_create, msg, created_id = cloudflare_create_d1(api_token, account_id, db_name)
@@ -1140,7 +1140,7 @@ def database_settings():
                     account_id = resolved_account_id
                     ok_find, _, found_db_id = cloudflare_find_d1_by_name(api_token, account_id, db_name)
                     if not ok_find or not found_db_id:
-                        message = "未找到云端数据库 TgHelper，请先创建。"
+                        message = "未找到云端数据库 VpsHelper，请先创建。"
                     else:
                         db_id = found_db_id
                         ok_bak, msg_bak = backup_local_to_d1(api_token, account_id, db_id, db)
@@ -1157,7 +1157,7 @@ def database_settings():
                     account_id = resolved_account_id
                     ok_find, _, found_db_id = cloudflare_find_d1_by_name(api_token, account_id, db_name)
                     if not ok_find or not found_db_id:
-                        message = "未找到云端数据库 TgHelper，请先创建。"
+                        message = "未找到云端数据库 VpsHelper，请先创建。"
                     else:
                         db_id = found_db_id
                         ok_pull, msg_pull = pull_d1_to_local(api_token, account_id, db_id, db)
@@ -1198,7 +1198,7 @@ def database_settings():
         token=token,
         message=message,
         cf_api_token=app.config.get("CF_API_TOKEN") or "",
-        cf_d1_database_name="TgHelper",
+        cf_d1_database_name="VpsHelper",
         cf_d1_database_id=app.config.get("CF_D1_DATABASE_ID") or "",
         cf_use_d1=app.config.get("CF_USE_D1") or False,
         db_auto_backup_enabled=app.config.get("DB_AUTO_BACKUP_ENABLED") or False,
