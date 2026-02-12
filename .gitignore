@@ -1,0 +1,16 @@
+*.db
+*.db-shm
+*.db-wal
+*.pyc
+__pycache__/
+.venv/
+venv/
+*.log
+.DS_Store
+*.swp
+*.swo
+*~
+.env
+*.session
+*.session-journal
+TgHelper_reference.py

@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('auto_send', token=token) }}">返回自动发送</a>
+    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>新建任务</h1>
+  <p>创建每日固定时间自动发送任务。</p>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if accounts %}
+    <form method="get" action="{{ url_for('auto_send_new') }}" style="margin-bottom: 12px;">
+      <input type="hidden" name="token" value="{{ token }}" />
+      <div class="field">
+        <label for="account_select">选择账号</label>
+        <select id="account_select" name="account_id" style="width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px;">
+          {% for account in accounts %}
+            <option value="{{ account['id'] }}" {% if selected_account_id == (account['id'] | string) %}selected{% endif %}>{{ account['account_name'] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="ghost" type="submit">切换账号</button>
+    </form>
+
+    <form method="post" action="{{ url_for('auto_send_refresh_dialogs') }}" style="margin-bottom: 12px;">
+      <input type="hidden" name="token" value="{{ token }}" />
+      <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
+      <button class="ghost" type="submit">更新会话ID</button>
+    </form>
+
+    <form method="post" action="{{ url_for('auto_send_save') }}">
+      <input type="hidden" name="token" value="{{ token }}" />
+      <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
+      <input type="hidden" name="schedule_type" value="daily" />
+      <div class="field">
+        <label for="dialog_id">选择会话ID（优先本地缓存）</label>
+        <input id="dialog_search" placeholder="输入名称或ID过滤" style="margin-bottom:8px;" />
+        <select id="dialog_id" name="dialog_id" required style="width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px;">
+          {% if dialogs %}
+            {% for dialog in dialogs %}
+              <option value="{{ dialog['dialog_id'] }}" data-search="{{ (dialog['title'] or '') ~ ' ' ~ (dialog['username'] or '') ~ ' ' ~ dialog['dialog_id'] }}">
+                {{ dialog['title'] or dialog['username'] or dialog['dialog_id'] }} ({{ dialog['dialog_id'] }})
+              </option>
+            {% endfor %}
+          {% else %}
+            <option value="">暂无会话，请先更新</option>
+          {% endif %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="message">发送内容</label>
+        <input id="message" name="message" value="" required placeholder="例如：签到" />
+      </div>
+      <div class="field">
+        <label for="time_of_day">每天时间点（HH:MM）</label>
+        <input id="time_of_day" name="time_of_day" value="" placeholder="09:30" />
+      </div>
+      <div class="field">
+        <label for="jitter_seconds">随机延时（秒）</label>
+        <input id="jitter_seconds" name="jitter_seconds" value="30" required />
+      </div>
+      <div class="field">
+        <label for="enabled">启用</label>
+        <input id="enabled" name="enabled" type="checkbox" checked />
+      </div>
+      <button class="btn" type="submit">保存任务</button>
+    </form>
+    <script>
+      (function () {
+        const searchInput = document.getElementById('dialog_search');
+        const select = document.getElementById('dialog_id');
+        if (!searchInput || !select) return;
+
+        const originalOptions = Array.from(select.options).map((opt) => ({
+          value: opt.value,
+          text: opt.text,
+          search: (opt.dataset.search || opt.text || '').toLowerCase(),
+        }));
+
+        function render(filterText) {
+          const key = (filterText || '').trim().toLowerCase();
+          const filtered = key
+            ? originalOptions.filter((o) => o.search.includes(key))
+            : originalOptions;
+
+          const currentValue = select.value;
+          select.innerHTML = '';
+          filtered.forEach((o) => {
+            const opt = document.createElement('option');
+            opt.value = o.value;
+            opt.text = o.text;
+            select.appendChild(opt);
+          });
+
+          if (filtered.some((o) => o.value === currentValue)) {
+            select.value = currentValue;
+          }
+        }
+
+        searchInput.addEventListener('input', function () {
+          render(searchInput.value);
+        });
+      })();
+    </script>
+  {% else %}
+    <p style="color:#6b7280;">暂无账号，请先在管理帐号页面登录。</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions">
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>欢迎，{{ username }}</h1>
+  <p>VpsHelper - 选择您需要的功能模块</p>
+  <div style="margin-top: 12px; display: grid; gap: 10px;">
+    <a class="btn" href="{{ url_for('tg_helper', token=token) }}">Tg助手</a>
+    <a class="btn" href="{{ url_for('firewall', token=token) }}">防火墙</a>
+  </div>
+{% endblock %}

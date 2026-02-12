@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>数据库管理</h1>
+  <p>默认使用本地 sqlite。可创建云端私有 D1，并手动备份/拉取。</p>
+
+  {% if message %}
+    <div class="error">{{ message }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('database_settings') }}">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <div class="field">
+      <label for="cf_api_token">Cloudflare API Token</label>
+      <input id="cf_api_token" name="cf_api_token" value="{{ cf_api_token }}" />
+    </div>
+    <div class="field">
+      <label>D1 数据库名称（固定）</label>
+      <input value="TgHelper" readonly />
+    </div>
+    <div class="field">
+      <label>D1 数据库 ID</label>
+      <input value="{{ cf_d1_database_id }}" readonly />
+    </div>
+    <div style="display:grid; gap:8px;">
+      <button class="btn" type="submit" name="action" value="save">保存 Token</button>
+      <button class="ghost" type="submit" name="action" value="create">自动创建/绑定 TgHelper 数据库</button>
+      <button class="ghost" type="submit" name="action" value="backup">备份本地数据库到云端</button>
+      <button class="ghost" type="submit" name="action" value="pull">将云端数据库拉取到本地</button>
+    </div>
+  </form>
+
+  <form method="post" action="{{ url_for('database_settings') }}" style="margin-top:14px;">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <div class="field">
+      <label for="db_auto_backup_enabled">启用每天自动备份</label>
+      <input id="db_auto_backup_enabled" name="db_auto_backup_enabled" type="checkbox" {% if db_auto_backup_enabled %}checked{% endif %} />
+    </div>
+    <div class="field">
+      <label for="db_auto_backup_time">每日备份时间（HH:MM）</label>
+      <input id="db_auto_backup_time" name="db_auto_backup_time" value="{{ db_auto_backup_time }}" placeholder="03:30" />
+    </div>
+    <button class="ghost" type="submit" name="action" value="auto_backup">保存自动备份设置</button>
+  </form>
+
+  {% if db_auto_backup_last_result %}
+    <p style="margin-top:12px; font-size:12px; color:#6b7280;">最近自动备份：{{ db_auto_backup_last_result }}</p>
+  {% endif %}
+{% endblock %}
