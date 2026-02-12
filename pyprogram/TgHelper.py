@@ -27,6 +27,9 @@ TG_TABLES = [
     "app_settings",
 ]
 
+AUTO_SEND_JOB_ID = "auto_send_tick"
+AUTO_BACKUP_JOB_ID = "auto_backup_daily"
+
 UTC_PLUS_8 = timezone(timedelta(hours=8))
 
 
@@ -754,11 +757,11 @@ def run_auto_backup_job():
         conn.close()
 
 
-def configure_scheduler_jobs(scheduler, auto_send_job_id: str, auto_backup_job_id: str) -> None:
+def configure_scheduler_jobs(scheduler) -> None:
     from apscheduler.triggers.cron import CronTrigger
 
-    if scheduler.get_job(auto_send_job_id) is None:
-        scheduler.add_job(run_auto_send_job, CronTrigger(second="*/5"), id=auto_send_job_id, replace_existing=True)
+    if scheduler.get_job(AUTO_SEND_JOB_ID) is None:
+        scheduler.add_job(run_auto_send_job, CronTrigger(second="*/5"), id=AUTO_SEND_JOB_ID, replace_existing=True)
 
     backup_time = APP.config.get("DB_AUTO_BACKUP_TIME") or "03:30"
     hour = 3
@@ -771,9 +774,9 @@ def configure_scheduler_jobs(scheduler, auto_send_job_id: str, auto_backup_job_i
         except ValueError:
             hour, minute = 3, 30
 
-    if scheduler.get_job(auto_backup_job_id):
-        scheduler.remove_job(auto_backup_job_id)
-    scheduler.add_job(run_auto_backup_job, CronTrigger(hour=hour, minute=minute), id=auto_backup_job_id, replace_existing=True)
+    if scheduler.get_job(AUTO_BACKUP_JOB_ID):
+        scheduler.remove_job(AUTO_BACKUP_JOB_ID)
+    scheduler.add_job(run_auto_backup_job, CronTrigger(hour=hour, minute=minute), id=AUTO_BACKUP_JOB_ID, replace_existing=True)
 
 
 def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
