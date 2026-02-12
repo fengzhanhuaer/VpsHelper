@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}TG助手 - VPS助手{% endblock %}
+
+{% block content %}
+<h1>📱 TG助手</h1>
+<h2>功能菜单</h2>
+
+<div class="button-grid">
+    <a href="{{ url_for('tg_accounts') }}" class="btn">
+        👥 账号管理
+    </a>
+    
+    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
+        📤 自动发送
+    </a>
+    
+    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
+        💬 消息管理
+    </a>
+    
+    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
+        👤 用户管理
+    </a>
+    
+    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
+        📊 统计报表
+    </a>
+    
+    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
+        ⚙️ TG设置
+    </a>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('home') }}" class="btn btn-secondary">⬅️ 返回主菜单</a>
+</div>
+{% endblock %}

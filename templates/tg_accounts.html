@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}账号管理 - TG助手{% endblock %}
+
+{% block content %}
+<h1>👥 TG账号管理</h1>
+
+<div style="margin-bottom: 30px; text-align: right;">
+    <a href="#" class="btn" onclick="showAddForm(); return false;">➕ 添加账号</a>
+</div>
+
+<div id="addFormContainer" style="display: none; margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 20px;">添加新账号</h3>
+    <form method="POST" action="{{ url_for('tg_accounts') }}">
+        <div class="form-group">
+            <label for="phone">手机号</label>
+            <input type="text" id="phone" name="phone" required 
+                   placeholder="请输入手机号（含国家代码）">
+        </div>
+
+        <div class="form-group">
+            <label for="api_id">API ID</label>
+            <input type="text" id="api_id" name="api_id" required 
+                   placeholder="请输入Telegram API ID">
+        </div>
+
+        <div class="form-group">
+            <label for="api_hash">API Hash</label>
+            <input type="text" id="api_hash" name="api_hash" required 
+                   placeholder="请输入Telegram API Hash">
+        </div>
+
+        <div class="form-group">
+            <label for="note">备注</label>
+            <input type="text" id="note" name="note" 
+                   placeholder="账号备注（可选）">
+        </div>
+
+        <div class="form-group" style="display: flex; gap: 10px; justify-content: center;">
+            <button type="submit" class="btn">保存</button>
+            <button type="button" class="btn btn-secondary" onclick="hideAddForm()">取消</button>
+        </div>
+    </form>
+</div>
+
+{% if accounts %}
+<div style="overflow-x: auto;">
+    <table>
+        <thead>
+            <tr>
+                <th>手机号</th>
+                <th>API ID</th>
+                <th>状态</th>
+                <th>备注</th>
+                <th>添加时间</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for account in accounts %}
+            <tr>
+                <td>{{ account.phone }}</td>
+                <td>{{ account.api_id }}</td>
+                <td>
+                    <span style="color: {{ 'green' if account.is_active else 'red' }}; font-weight: 600;">
+                        {{ '✓ 活跃' if account.is_active else '✗ 未激活' }}
+                    </span>
+                </td>
+                <td>{{ account.note or '-' }}</td>
+                <td>{{ account.created_at.strftime('%Y-%m-%d %H:%M') if account.created_at else '-' }}</td>
+                <td>
+                    <a href="#" style="color: #667eea; text-decoration: none; margin-right: 10px;">编辑</a>
+                    <a href="#" style="color: #dc3545; text-decoration: none;" 
+                       onclick="return confirm('确定要删除这个账号吗？')">删除</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div style="text-align: center; padding: 40px; color: #999;">
+    <p style="font-size: 1.2em;">暂无账号</p>
+    <p>点击上方"添加账号"按钮来添加您的第一个TG账号</p>
+</div>
+{% endif %}
+
+<div class="back-button">
+    <a href="{{ url_for('tg_helper') }}" class="btn btn-secondary">⬅️ 返回TG助手</a>
+</div>
+
+<script>
+function showAddForm() {
+    document.getElementById('addFormContainer').style.display = 'block';
+}
+
+function hideAddForm() {
+    document.getElementById('addFormContainer').style.display = 'none';
+}
+</script>
+{% endblock %}

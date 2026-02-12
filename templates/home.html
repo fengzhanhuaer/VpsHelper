@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}主菜单 - VPS助手{% endblock %}
+
+{% block content %}
+<h1>VPS助手</h1>
+<h2>主菜单</h2>
+
+<div style="text-align: right; margin-bottom: 20px;">
+    <span style="color: #667eea; font-weight: 600;">欢迎, {{ current_user.username }}!</span>
+    <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="margin-left: 15px; padding: 10px 20px; font-size: 0.9em;">退出登录</a>
+</div>
+
+<div class="button-grid">
+    <a href="{{ url_for('tg_helper') }}" class="btn">
+        📱 TG助手
+    </a>
+    
+    <a href="{{ url_for('firewall') }}" class="btn">
+        🛡️ 防火墙
+    </a>
+    
+    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
+        ⚙️ 系统设置
+    </a>
+    
+    <a href="#" class="btn" style="opacity: 0.6; cursor: not-allowed;">
+        📊 监控面板
+    </a>
+</div>
+
+<div style="text-align: center; margin-top: 30px; color: #999; font-size: 0.9em;">
+    <p>VPS助手 v1.0 | 更多功能开发中...</p>
+</div>
+{% endblock %}

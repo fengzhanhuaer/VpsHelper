@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}防火墙 - VPS助手{% endblock %}
+
+{% block content %}
+<h1>🛡️ 防火墙管理</h1>
+
+<div style="text-align: center; padding: 60px 20px;">
+    <div style="font-size: 4em; margin-bottom: 20px;">🚧</div>
+    <h2 style="color: #667eea; margin-bottom: 20px;">防火墙功能开发中...</h2>
+    <p style="color: #666; font-size: 1.1em; margin-bottom: 10px;">该功能正在积极开发中，敬请期待！</p>
+    <p style="color: #999;">即将支持：防火墙规则管理、端口控制、IP白名单/黑名单等功能</p>
+</div>
+
+<div class="back-button">
+    <a href="{{ url_for('home') }}" class="btn btn-secondary">⬅️ 返回主菜单</a>
+</div>
+{% endblock %}
