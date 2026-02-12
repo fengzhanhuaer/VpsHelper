@@ -5,17 +5,15 @@
 {% block content %}
 <h1>用户注册</h1>
 
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
 <form method="POST" action="{{ url_for('register') }}">
     <div class="form-group">
         <label for="username">用户名</label>
         <input type="text" id="username" name="username" required 
                placeholder="请输入用户名" minlength="3" maxlength="50">
-    </div>
-
-    <div class="form-group">
-        <label for="email">邮箱</label>
-        <input type="email" id="email" name="email" required 
-               placeholder="请输入邮箱地址">
     </div>
 
     <div class="form-group">
