@@ -1019,48 +1019,6 @@ def tg_accounts():
     )
 
 
-@app.route("/tg/accounts")
-def tg_accounts():
-    token = request.args.get("token")
-    error = request.args.get("error")
-    selected_account_id = request.args.get("account_id")
-    username = require_login()
-    if not username:
-        return redirect(url_for("login"))
-
-    db = get_db()
-    accounts_list = db.execute(
-        "SELECT id, account_name, session_text, created_at FROM tg_accounts WHERE owner = ? ORDER BY id DESC",
-        (username,),
-    ).fetchall()
-
-    if not selected_account_id and accounts_list:
-        selected_account_id = str(accounts_list[0]["id"])
-
-    dialogs = []
-    sign_task = None
-    if selected_account_id:
-        dialogs = db.execute(
-            "SELECT dialog_id, title, username FROM tg_dialogs WHERE account_id = ? ORDER BY id DESC",
-            (selected_account_id,),
-        ).fetchall()
-        sign_task = db.execute(
-            "SELECT dialog_id, message FROM tg_sign_tasks WHERE owner = ? AND account_id = ?",
-            (username, selected_account_id),
-        ).fetchone()
-
-    return render_template(
-        "tg_accounts.html",
-        username=username,
-        token=token,
-        accounts=accounts_list,
-        error=error,
-        selected_account_id=selected_account_id,
-        dialogs=dialogs,
-        sign_task=sign_task,
-    )
-
-
 @app.route("/tg/settings/api", methods=["GET", "POST"])
 def tg_api_settings():
     token = request.args.get("token") or request.form.get("token")
