@@ -58,6 +58,7 @@ python VpsHelper.py
 ## 目录说明
 
 - `VpsHelper.py`: 主程序入口与全部后端逻辑
+- `pyprogram/TgHelper.py`: Tg助手子程序（TG操作、配置、调度、云备份）
 - `templates/`: 前端模板
 - `requirements.txt`: Python 依赖
 - `VpsHelper.bat`: Windows 启动脚本
@@ -65,6 +66,8 @@ python VpsHelper.py
 
 ## 备注
 
-- 本地数据库文件名为 `VpsHelper.db`
+- 用户数据统一存放在安装目录 `./userdata/`
+- 主程序本地数据库文件名为 `./userdata/VpsHelper.db`（登录账号与会话）
+- Tg助手本地数据库文件名为 `./userdata/TgHelper.db`（TG账号、任务、配置）
 - 端口默认 15018
 - 自动任务时间展示为 UTC+8

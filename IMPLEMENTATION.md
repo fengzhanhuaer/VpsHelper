@@ -48,6 +48,10 @@ VpsHelper 是一个基于 Flask 的 VPS 管理工具集，采用 2 级页面结�
 
 ## 技术实现
 
+### Tg 子程序拆分
+- Tg 相关操作已拆分至 `pyprogram/TgHelper.py` 子程序文件。
+- 主程序 `VpsHelper.py` 保留一级菜单、登录认证与模块入口，Tg 业务逻辑由子程序接管。
+
 ### 路由结构
 ```python
 # 一级页面
@@ -124,8 +128,10 @@ def new_module():
 3. 在子功能模板中添加"返回[模块名]"按钮
 
 ## 数据库
-- 数据库文件: `VpsHelper.db`
-- Cloudflare D1 数据库名: `VpsHelper`
+- 用户数据目录: `./userdata/`
+- 主程序数据库文件: `./userdata/VpsHelper.db`（users/sessions）
+- Tg助手数据库文件: `./userdata/TgHelper.db`（tg_accounts、tg_dialogs、tg_sign_tasks、tg_auto_send_tasks、tg_login_flows、app_settings）
+- Cloudflare D1 数据库名: `TgHelper`
 - 端口: 15018
 
 ## 从 TgHelper 迁移的功能
