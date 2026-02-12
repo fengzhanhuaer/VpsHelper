@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('home') }}">返回首页</a>
+  </div>
+  <h1>注册账号</h1>
+  <p>首次使用请先注册账号。</p>
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+  <form method="post">
+    <div class="field">
+      <label for="username">用户名</label>
+      <input id="username" name="username" required />
+    </div>
+    <div class="field">
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" required />
+    </div>
+    <div class="field">
+      <label for="confirm">确认密码</label>
+      <input id="confirm" name="confirm" type="password" required />
+    </div>
+    <button class="btn" type="submit">注册并登录</button>
+  </form>
+  {% if has_users %}
+    <div class="link">已有账号？<a href="{{ url_for('login') }}">去登录</a></div>
+  {% endif %}
+{% endblock %}

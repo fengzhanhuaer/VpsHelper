@@ -1,0 +1,5 @@
+Flask==3.0.2
+Werkzeug==3.0.1
+Telethon==1.36.0
+PySocks==1.7.1
+APScheduler==3.10.4

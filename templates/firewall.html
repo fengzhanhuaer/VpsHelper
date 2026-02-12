@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions">
+    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}" style="margin-left: auto;">退出登录</a>
+  </div>
+  <h1>防火墙</h1>
+  <p>防火墙管理功能 - 开发中</p>
+  <div style="margin-top: 12px;">
+    <p style="color: var(--muted);">此功能正在开发中，敬请期待。</p>
+  </div>
+{% endblock %}

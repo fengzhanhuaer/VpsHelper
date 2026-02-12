@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions" style="justify-content: space-between;">
+    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>Telegram 登录</h1>
+  <p>请输入发送到 {{ phone }} 的验证码。</p>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('tg_login_verify') }}">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <input type="hidden" name="flow_id" value="{{ flow_id }}" />
+    <div class="field">
+      <label for="code">验证码</label>
+      <input id="code" name="code" placeholder="12345" required />
+    </div>
+    <div class="field">
+      <label for="password">两步验证密码（如有）</label>
+      <input id="password" name="password" type="password" />
+    </div>
+    <button class="btn" type="submit">完成登录</button>
+  </form>
+{% endblock %}

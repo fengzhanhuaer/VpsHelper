@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>SOCKS5h 代理设置</h1>
+  <p>填写代理后用于 Telegram 通讯。</p>
+
+  {% if message %}
+    <div class="error">{{ message }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('proxy_settings') }}">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <div class="field">
+      <label for="proxy_host">代理地址</label>
+      <input id="proxy_host" name="proxy_host" value="{{ proxy_host }}" placeholder="127.0.0.1" />
+    </div>
+    <div class="field">
+      <label for="proxy_port">代理端口</label>
+      <input id="proxy_port" name="proxy_port" value="{{ proxy_port }}" placeholder="1080" />
+    </div>
+    <div class="field">
+      <label for="proxy_username">代理用户名（可选）</label>
+      <input id="proxy_username" name="proxy_username" value="{{ proxy_username }}" />
+    </div>
+    <div class="field">
+      <label for="proxy_password">代理密码（可选）</label>
+      <input id="proxy_password" name="proxy_password" type="password" value="{{ proxy_password }}" />
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" type="submit" name="action" value="save">保存</button>
+      <button class="ghost" type="submit" name="action" value="test">测试代理</button>
+    </div>
+  </form>
+{% endblock %}

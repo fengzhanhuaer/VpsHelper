@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+  <style>
+    .card {
+      max-width: 1100px;
+      width: min(1100px, calc(100vw - 48px));
+    }
+    .task-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 12px;
+    }
+    .task-text {
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+  </style>
+
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('auto_send', token=token) }}">返回自动发送</a>
+    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>管理任务</h1>
+  <p>查看任务、手动触发、删除任务。</p>
+
+  {% if message %}
+    <div class="error" style="border-color:#bbf7d0;color:#16a34a;background:#f0fdf4;">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if accounts %}
+    <form method="get" action="{{ url_for('auto_send_manage') }}" style="margin-bottom: 12px;">
+      <input type="hidden" name="token" value="{{ token }}" />
+      <div class="field">
+        <label for="account_select">选择账号</label>
+        <select id="account_select" name="account_id" style="width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px;">
+          {% for account in accounts %}
+            <option value="{{ account['id'] }}" {% if selected_account_id == (account['id'] | string) %}selected{% endif %}>{{ account['account_name'] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="ghost" type="submit">切换账号</button>
+    </form>
+
+    <div style="margin-top: 12px;">
+      {% if tasks %}
+        <div class="task-grid">
+        {% for task in tasks %}
+          <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;">
+            <div class="task-text" style="font-weight: 600;">会话 {{ task['dialog_name'] }} ({{ task['dialog_id'] }})</div>
+            <form method="post" action="{{ url_for('auto_send_update', task_id=task['id']) }}" style="margin: 8px 0 6px 0;">
+              <input type="hidden" name="token" value="{{ token }}" />
+              <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
+              <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 6px;">发送内容</label>
+              <textarea name="message" rows="4" style="width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 13px; resize: vertical;">{{ task['message'] }}</textarea>
+              <div style="display:flex; gap:8px; margin-top: 8px;">
+                <div style="flex:1;">
+                  <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 6px;">每天时间 (HH:MM)</label>
+                  <input name="time_of_day" type="time" value="{{ task['time_of_day'] or '' }}" style="width: 100%; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 13px;" />
+                </div>
+                <div style="width: 150px;">
+                  <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 6px;">随机延时(秒)</label>
+                  <input name="jitter_seconds" type="number" min="0" value="{{ task['jitter_seconds'] }}" style="width: 100%; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 13px;" />
+                </div>
+              </div>
+              <div style="margin-top: 8px;">
+                <button class="ghost" type="submit">保存内容与计划</button>
+              </div>
+            </form>
+            <div style="font-size: 12px; color: #6b7280; margin: 6px 0;">
+              计划：每天 {{ task['time_of_day'] or '--:--' }}，随机延时 {{ task['jitter_seconds'] }} 秒
+            </div>
+            <div class="task-text" style="font-size: 12px; color: #6b7280; margin: 6px 0;">
+              上次结果：{{ task['last_result'] or '暂无' }}
+            </div>
+            <div class="task-text" style="font-size: 12px; color: #6b7280; margin: 6px 0;">
+              回复：{{ task['last_reply'] or '暂无' }}
+            </div>
+            <div style="display:flex; gap:8px;">
+              <form method="post" action="{{ url_for('auto_send_run', task_id=task['id']) }}">
+                <input type="hidden" name="token" value="{{ token }}" />
+                <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
+                <button class="ghost" type="submit">手动触发</button>
+              </form>
+              <form method="post" action="{{ url_for('auto_send_delete', task_id=task['id']) }}">
+                <input type="hidden" name="token" value="{{ token }}" />
+                <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
+                <button class="ghost" type="submit">删除</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+        </div>
+      {% else %}
+        <p style="color:#6b7280;">暂无任务。</p>
+      {% endif %}
+    </div>
+  {% else %}
+    <p style="color:#6b7280;">暂无账号，请先在管理帐号页面登录。</p>
+  {% endif %}
+{% endblock %}
