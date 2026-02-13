@@ -122,7 +122,7 @@ def _set_ssh_socket_port(socket_unit: str, port: int) -> tuple[bool, str]:
     dropin_dir = Path(f"/etc/systemd/system/{socket_unit}.d")
     dropin_file = dropin_dir / "vpshelper.conf"
 
-    content = "[Socket]\nListenStream=\nListenStream={port}\n".format(port=port)
+    content = "[Socket]\nListenStream=\nListenStream=0.0.0.0:{port}\nListenStream=[::]:{port}\nBindIPv6Only=both\n".format(port=port)
     try:
         dropin_dir.mkdir(parents=True, exist_ok=True)
         dropin_file.write_text(content, encoding="utf-8")
@@ -137,7 +137,46 @@ def _set_ssh_socket_port(socket_unit: str, port: int) -> tuple[bool, str]:
     if not ok_restart:
         return False, f"重启 {socket_unit} 失败：{msg_restart}"
 
+    if socket_unit == "ssh.socket":
+        _run_command(["systemctl", "restart", "ssh"])
+    elif socket_unit == "sshd.socket":
+        _run_command(["systemctl", "restart", "sshd"])
+
+    if not _is_port_listening_ipv4(port):
+        return False, f"{socket_unit} 已重启，但未检测到 IPv4 监听 {port} 端口。"
+
     return True, f"已更新 {socket_unit} 监听端口为 {port}。"
+
+
+def _is_port_listening_ipv4(port: int) -> bool:
+    proc_path = Path("/proc/net/tcp")
+    if not proc_path.exists():
+        return False
+
+    target_hex = f"{port:04X}"
+    try:
+        content = proc_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return False
+
+    for line in content.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        local = parts[1]
+        state = parts[3]
+        if ":" not in local:
+            continue
+        local_ip_hex, local_port_hex = local.split(":", 1)
+        if local_port_hex.upper() != target_hex:
+            continue
+        if state != "0A":
+            continue
+        if local_ip_hex.upper() == "00000000":
+            return True
+        return True
+
+    return False
 
 
 def _apply_firewall_port_change(new_port: int, old_port: int) -> tuple[bool, str]:
