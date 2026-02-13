@@ -252,8 +252,18 @@ def _restart_ssh_service() -> tuple[bool, str]:
     commands = [
         ["systemctl", "restart", "sshd"],
         ["systemctl", "restart", "ssh"],
+        ["systemctl", "start", "sshd"],
+        ["systemctl", "start", "ssh"],
         ["service", "sshd", "restart"],
         ["service", "ssh", "restart"],
+        ["service", "sshd", "start"],
+        ["service", "ssh", "start"],
+        ["rc-service", "sshd", "restart"],
+        ["rc-service", "sshd", "start"],
+        ["/etc/init.d/sshd", "restart"],
+        ["/etc/init.d/sshd", "start"],
+        ["/etc/init.d/ssh", "restart"],
+        ["/etc/init.d/ssh", "start"],
     ]
 
     last_error = ""
@@ -268,6 +278,26 @@ def _restart_ssh_service() -> tuple[bool, str]:
 
         if result.returncode == 0:
             return True, "已重启 SSH 服务。"
+
+        detail = (result.stderr or result.stdout or "").strip()
+        if detail:
+            last_error = detail
+
+    direct_commands = [
+        ["sshd", "-f", "/etc/ssh/sshd_config"],
+        ["/usr/sbin/sshd", "-f", "/etc/ssh/sshd_config"],
+    ]
+    for cmd in direct_commands:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            continue
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+
+        if result.returncode == 0:
+            return True, "已直接启动 sshd 进程。"
 
         detail = (result.stderr or result.stdout or "").strip()
         if detail:
@@ -519,6 +549,17 @@ def diagnose_ssh_status(target_port: int | None = None) -> str:
     lines.append("=== SSH 诊断结果 ===")
     lines.append(f"配置文件: {config_path}")
     lines.append(f"目标端口: {target_port if target_port else '未指定'}")
+    lines.append(
+        "服务管理器: "
+        f"systemctl={'有' if shutil.which('systemctl') else '无'}, "
+        f"service={'有' if shutil.which('service') else '无'}, "
+        f"rc-service={'有' if shutil.which('rc-service') else '无'}"
+    )
+    lines.append(
+        "sshd 二进制: "
+        f"sshd={'有' if shutil.which('sshd') else '无'}, "
+        f"/usr/sbin/sshd={'有' if Path('/usr/sbin/sshd').exists() else '无'}"
+    )
 
     ok_runtime, runtime_message = _ensure_sshd_runtime_dir()
     lines.append(f"运行时目录: {runtime_message}")
