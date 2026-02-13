@@ -10,7 +10,7 @@ from secrets import token_urlsafe
 from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
-from pyprogram import TgHelper
+from pyprogram import SshHelper, TgHelper
 
 BASE_DIR = Path(__file__).resolve().parent
 USERDATA_DIR = BASE_DIR / "userdata"
@@ -21,6 +21,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
 app.config["APP_NAME"] = "VpsHelper"
 TgHelper.setup(app, BASE_DIR)
+SshHelper.setup(app, BASE_DIR)
 
 SCHEDULER = BackgroundScheduler(timezone="Asia/Shanghai")
 
@@ -201,6 +202,7 @@ def configure_scheduler_jobs():
 
 
 TgHelper.register_routes(require_login, configure_scheduler_jobs)
+SshHelper.register_routes(require_login, get_db)
 
 
 @app.before_request
@@ -284,62 +286,6 @@ def home():
     if not username:
         return redirect(url_for("login"))
     return render_template("home.html", username=username, token=token)
-
-
-@app.route("/settings/ssh", methods=["GET", "POST"])
-def ssh_settings():
-    token = request.args.get("token") or request.form.get("token")
-    username = require_login()
-    if not username:
-        return redirect(url_for("login"))
-
-    db = get_db()
-    message = None
-
-    if request.method == "POST":
-        ssh_port = request.form.get("ssh_port", "").strip()
-        ssh_public_key = request.form.get("ssh_public_key", "").strip()
-        allow_password_login = "1" if request.form.get("allow_password_login") == "on" else "0"
-        allow_key_login = "1" if request.form.get("allow_key_login") == "on" else "0"
-
-        if not ssh_port.isdigit():
-            message = "SSH 端口必须是数字。"
-        else:
-            port = int(ssh_port)
-            if port < 1 or port > 65535:
-                message = "SSH 端口范围必须在 1-65535。"
-            else:
-                db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_port', ?)", (str(port),))
-                db.execute(
-                    "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_allow_password_login', ?)",
-                    (allow_password_login,),
-                )
-                db.execute(
-                    "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_allow_key_login', ?)",
-                    (allow_key_login,),
-                )
-                db.execute(
-                    "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_public_key', ?)",
-                    (ssh_public_key,),
-                )
-                db.commit()
-                message = "SSH 设置已保存。"
-
-    rows = db.execute(
-        "SELECT key, value FROM app_settings WHERE key IN ('ssh_port', 'ssh_allow_password_login', 'ssh_allow_key_login', 'ssh_public_key')"
-    ).fetchall()
-    data = {row["key"]: row["value"] for row in rows}
-
-    return render_template(
-        "ssh_settings.html",
-        username=username,
-        token=token,
-        message=message,
-        ssh_port=data.get("ssh_port") or "22",
-        ssh_public_key=data.get("ssh_public_key") or "",
-        allow_password_login=(data.get("ssh_allow_password_login", "1") == "1"),
-        allow_key_login=(data.get("ssh_allow_key_login", "1") == "1"),
-    )
 
 
 @app.route("/system/update", methods=["GET", "POST"])
