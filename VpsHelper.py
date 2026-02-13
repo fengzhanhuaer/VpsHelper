@@ -205,7 +205,7 @@ def configure_scheduler_jobs():
 
 TgHelper.register_routes(require_login, configure_scheduler_jobs)
 SshHelper.register_routes(require_login, get_db)
-ShellHelper.register_routes(require_login)
+ShellHelper.register_routes(require_login, get_db)
 FirewallHelper.register_routes(require_login)
 
 

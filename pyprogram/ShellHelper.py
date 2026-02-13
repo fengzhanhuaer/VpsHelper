@@ -1,22 +1,74 @@
+import json
+import re
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from flask import jsonify, redirect, render_template, request, session, url_for
 
 APP = None
+USERDATA_DIR: Path | None = None
+HISTORY_LIMIT = 2048
 
 
 def setup(app, _base_dir: Path) -> None:
-    global APP
+    global APP, USERDATA_DIR
     APP = app
+    USERDATA_DIR = _base_dir / "userdata"
+    USERDATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _require_setup() -> None:
-    if APP is None:
+    if APP is None or USERDATA_DIR is None:
         raise RuntimeError("ShellHelper 未初始化，请先调用 setup(app, base_dir)")
 
 
-def register_routes(require_login) -> None:
+def _ensure_shell_tables(db) -> None:
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS shell_shortcuts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT NOT NULL,
+            name TEXT NOT NULL,
+            command TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    db.commit()
+
+
+def _history_file_path(owner: str) -> Path:
+    safe_owner = re.sub(r"[^a-zA-Z0-9_.-]", "_", owner)
+    return USERDATA_DIR / f"shell_history_{safe_owner}.json"
+
+
+def _load_history(owner: str) -> list[str]:
+    path = _history_file_path(owner)
+    if not path.exists():
+        return []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return [str(item) for item in data][-HISTORY_LIMIT:]
+    except Exception:
+        pass
+    return []
+
+
+def _save_history(owner: str, commands: list[str]) -> None:
+    path = _history_file_path(owner)
+    path.write_text(json.dumps(commands[-HISTORY_LIMIT:], ensure_ascii=False), encoding="utf-8")
+
+
+def _append_history(owner: str, command: str) -> None:
+    history = _load_history(owner)
+    history.append(command)
+    _save_history(owner, history)
+
+
+def register_routes(require_login, get_db) -> None:
     _require_setup()
 
     @APP.route("/shell")
@@ -31,7 +83,74 @@ def register_routes(require_login) -> None:
             cwd = str(Path.home())
             session["shell_cwd"] = cwd
 
-        return render_template("shell_console.html", username=username, token=token, cwd=cwd)
+        db = get_db()
+        _ensure_shell_tables(db)
+
+        history_commands = _load_history(username)
+
+        shortcut_rows = db.execute(
+            "SELECT id, name, command FROM shell_shortcuts WHERE owner = ? ORDER BY id ASC",
+            (username,),
+        ).fetchall()
+        shortcuts = [
+            {"id": row["id"], "name": row["name"], "command": row["command"]}
+            for row in shortcut_rows
+        ]
+
+        return render_template(
+            "shell_console.html",
+            username=username,
+            token=token,
+            cwd=cwd,
+            history_commands=history_commands,
+            shortcuts=shortcuts,
+        )
+
+    @APP.route("/shell/shortcuts/add", methods=["POST"])
+    def shell_shortcuts_add():
+        username = require_login()
+        if not username:
+            return jsonify({"ok": False, "message": "未登录或会话已过期。"}), 401
+
+        name = (request.form.get("name") or "").strip()
+        command = (request.form.get("command") or "").strip()
+        if not name or not command:
+            return jsonify({"ok": False, "message": "名称和命令不能为空。"}), 400
+
+        db = get_db()
+        _ensure_shell_tables(db)
+        db.execute(
+            "INSERT INTO shell_shortcuts (owner, name, command, created_at) VALUES (?, ?, ?, ?)",
+            (username, name, command, datetime.utcnow().isoformat()),
+        )
+        db.commit()
+
+        row = db.execute("SELECT last_insert_rowid() AS id").fetchone()
+        return jsonify({"ok": True, "item": {"id": row["id"], "name": name, "command": command}})
+
+    @APP.route("/shell/shortcuts/delete/<int:shortcut_id>", methods=["POST"])
+    def shell_shortcuts_delete(shortcut_id: int):
+        username = require_login()
+        if not username:
+            return jsonify({"ok": False, "message": "未登录或会话已过期。"}), 401
+
+        db = get_db()
+        _ensure_shell_tables(db)
+        db.execute("DELETE FROM shell_shortcuts WHERE id = ? AND owner = ?", (shortcut_id, username))
+        db.commit()
+        return jsonify({"ok": True})
+
+    @APP.route("/shell/shortcuts/clear", methods=["POST"])
+    def shell_shortcuts_clear():
+        username = require_login()
+        if not username:
+            return jsonify({"ok": False, "message": "未登录或会话已过期。"}), 401
+
+        db = get_db()
+        _ensure_shell_tables(db)
+        db.execute("DELETE FROM shell_shortcuts WHERE owner = ?", (username,))
+        db.commit()
+        return jsonify({"ok": True})
 
     @APP.route("/shell/exec", methods=["POST"])
     def shell_exec():
@@ -50,6 +169,8 @@ def register_routes(require_login) -> None:
         current_path = Path(cwd)
         if not current_path.exists():
             current_path = Path.home()
+
+        _append_history(username, command)
 
         if command == "cd" or command.startswith("cd "):
             target = command[2:].strip() if command.startswith("cd ") else "~"

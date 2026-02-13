@@ -18,6 +18,33 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .command-area {
+      width: 100%;
+      min-height: 90px;
+      resize: vertical;
+      padding: 10px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: Consolas, "Courier New", monospace;
+    }
+    .shortcut-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .shortcut-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
   </style>
 
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
@@ -29,32 +56,149 @@
 
   <div id="terminal" class="terminal">欢迎使用 Shell 交互。输入命令后点击执行。</div>
 
-  <form id="shell-form" style="margin-top: 10px; display:flex; gap:8px;">
+  <form id="shell-form" style="margin-top: 10px; display:grid; gap:8px;">
     <input type="hidden" id="token" value="{{ token }}" />
-    <input id="command" placeholder="输入命令，例如 ls -al" autocomplete="off" required />
-    <button class="ghost" type="submit" style="white-space:nowrap;">执行</button>
+    <textarea id="command" class="command-area" placeholder="输入命令，可多行。Ctrl+Enter 执行" required></textarea>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button class="ghost" type="submit" style="white-space:nowrap;">执行</button>
+      <span class="muted">支持上下键查看历史（服务端保存）</span>
+    </div>
   </form>
+
+  <div style="margin-top:12px;">
+    <h3 style="margin:0 0 8px 0; font-size:16px;">快捷命令按钮</h3>
+    <div class="muted">自定义按钮数量与命令，保存在服务端。</div>
+
+    <form id="shortcut-form" style="margin-top:8px; display:grid; gap:8px;">
+      <div style="display:grid; grid-template-columns: 160px 1fr; gap:8px;">
+        <input id="shortcut-name" placeholder="按钮名称，如 查看日志" />
+        <input id="shortcut-command" placeholder="按钮命令，如 journalctl -u ssh -n 50" />
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="ghost" type="submit">新增快捷按钮</button>
+        <button class="ghost" id="clear-shortcuts" type="button">清空全部快捷按钮</button>
+      </div>
+    </form>
+
+    <div id="shortcut-list" class="shortcut-grid"></div>
+  </div>
 
   <script>
     const form = document.getElementById("shell-form");
+    const shortcutForm = document.getElementById("shortcut-form");
+    const shortcutNameInput = document.getElementById("shortcut-name");
+    const shortcutCommandInput = document.getElementById("shortcut-command");
+    const clearShortcutsBtn = document.getElementById("clear-shortcuts");
+    const shortcutList = document.getElementById("shortcut-list");
     const commandInput = document.getElementById("command");
     const terminal = document.getElementById("terminal");
     const cwdText = document.getElementById("cwd-text");
     const token = document.getElementById("token").value;
+    const shortcutsAddUrl = "{{ url_for('shell_shortcuts_add') }}";
+    const shortcutsDeleteUrlBase = "{{ url_for('shell_shortcuts_delete', shortcut_id=0) }}";
+    const shortcutsClearUrl = "{{ url_for('shell_shortcuts_clear') }}";
+
+    const history = {{ history_commands | tojson }};
+    let shortcuts = {{ shortcuts | tojson }};
+    let historyCursor = 0;
+
+    historyCursor = history.length;
+
+    function pushHistory(cmd) {
+      if (!cmd) {
+        return;
+      }
+      if (history.length === 0 || history[history.length - 1] !== cmd) {
+        history.push(cmd);
+      }
+      historyCursor = history.length;
+    }
 
     function appendLine(text) {
       terminal.textContent += "\n" + text;
       terminal.scrollTop = terminal.scrollHeight;
     }
 
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
+    function renderShortcuts() {
+      shortcutList.innerHTML = "";
+
+      shortcuts.forEach((item, idx) => {
+        const wrap = document.createElement("div");
+        wrap.className = "shortcut-item";
+
+        const title = document.createElement("div");
+        title.style.fontWeight = "600";
+        title.textContent = item.name || `快捷命令 ${idx + 1}`;
+
+        const command = document.createElement("div");
+        command.className = "muted";
+        command.textContent = item.command || "";
+
+        const actions = document.createElement("div");
+        actions.style.display = "flex";
+        actions.style.gap = "6px";
+
+        const useBtn = document.createElement("button");
+        useBtn.type = "button";
+        useBtn.className = "ghost";
+        useBtn.textContent = "使用";
+        useBtn.addEventListener("click", () => {
+          commandInput.value = item.command || "";
+          commandInput.focus();
+        });
+
+        const runBtn = document.createElement("button");
+        runBtn.type = "button";
+        runBtn.className = "ghost";
+        runBtn.textContent = "执行";
+        runBtn.addEventListener("click", async () => {
+          commandInput.value = item.command || "";
+          await executeCurrentCommand();
+        });
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "ghost";
+        delBtn.textContent = "删除";
+        delBtn.addEventListener("click", async () => {
+          try {
+            const body = new URLSearchParams();
+            body.set("token", token);
+            const res = await fetch(shortcutsDeleteUrlBase.replace(/0$/, String(item.id)), {
+              method: "POST",
+              headers: {"Content-Type": "application/x-www-form-urlencoded"},
+              body: body.toString(),
+            });
+            const data = await res.json();
+            if (!data.ok) {
+              appendLine("删除快捷命令失败：" + (data.message || "未知错误"));
+              return;
+            }
+            shortcuts = shortcuts.filter((s) => s.id !== item.id);
+            renderShortcuts();
+          } catch (error) {
+            appendLine("删除快捷命令失败：" + error);
+          }
+        });
+
+        actions.appendChild(useBtn);
+        actions.appendChild(runBtn);
+        actions.appendChild(delBtn);
+        wrap.appendChild(title);
+        wrap.appendChild(command);
+        wrap.appendChild(actions);
+        shortcutList.appendChild(wrap);
+      });
+    }
+
+    async function executeCurrentCommand() {
       const cmd = commandInput.value.trim();
       if (!cmd) {
         return;
       }
 
       appendLine("\n$ " + cmd);
+      pushHistory(cmd);
       commandInput.value = "";
 
       const body = new URLSearchParams();
@@ -73,6 +217,98 @@
       } catch (error) {
         appendLine("请求失败：" + error);
       }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await executeCurrentCommand();
     });
+
+    commandInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && event.ctrlKey) {
+        event.preventDefault();
+        form.requestSubmit();
+        return;
+      }
+
+      if (event.key === "ArrowUp" && !event.shiftKey) {
+        event.preventDefault();
+        if (historyCursor > 0) {
+          historyCursor -= 1;
+          commandInput.value = history[historyCursor] || "";
+        }
+        return;
+      }
+
+      if (event.key === "ArrowDown" && !event.shiftKey) {
+        event.preventDefault();
+        if (historyCursor < history.length - 1) {
+          historyCursor += 1;
+          commandInput.value = history[historyCursor] || "";
+        } else {
+          historyCursor = history.length;
+          commandInput.value = "";
+        }
+      }
+    });
+
+    shortcutForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const name = shortcutNameInput.value.trim();
+      const command = shortcutCommandInput.value.trim();
+      if (!name || !command) {
+        return;
+      }
+
+      (async () => {
+        const body = new URLSearchParams();
+        body.set("token", token);
+        body.set("name", name);
+        body.set("command", command);
+        try {
+          const res = await fetch(shortcutsAddUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+            body: body.toString(),
+          });
+          const data = await res.json();
+          if (!data.ok) {
+            appendLine("新增快捷命令失败：" + (data.message || "未知错误"));
+            return;
+          }
+          shortcuts.push(data.item);
+          shortcutNameInput.value = "";
+          shortcutCommandInput.value = "";
+          renderShortcuts();
+        } catch (error) {
+          appendLine("新增快捷命令失败：" + error);
+        }
+      })();
+    });
+
+    clearShortcutsBtn.addEventListener("click", () => {
+      (async () => {
+        const body = new URLSearchParams();
+        body.set("token", token);
+        try {
+          const res = await fetch(shortcutsClearUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+            body: body.toString(),
+          });
+          const data = await res.json();
+          if (!data.ok) {
+            appendLine("清空快捷命令失败：" + (data.message || "未知错误"));
+            return;
+          }
+          shortcuts = [];
+          renderShortcuts();
+        } catch (error) {
+          appendLine("清空快捷命令失败：" + error);
+        }
+      })();
+    });
+
+    renderShortcuts();
   </script>
 {% endblock %}
