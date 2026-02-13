@@ -447,6 +447,85 @@ def install_fail2ban() -> tuple[bool, str]:
     return _enable_and_start_fail2ban()
 
 
+def diagnose_ssh_status(target_port: int | None = None) -> str:
+    if os.name == "nt":
+        return "当前系统是 Windows，无法诊断 Linux SSH 服务。"
+
+    lines = []
+    config_path = Path("/etc/ssh/sshd_config")
+    lines.append("=== SSH 诊断结果 ===")
+    lines.append(f"配置文件: {config_path}")
+    lines.append(f"目标端口: {target_port if target_port else '未指定'}")
+
+    effective_ok, effective_settings, effective_message = _get_effective_sshd_settings(config_path)
+    if effective_ok:
+        lines.append(f"sshd -T 生效端口: {effective_settings.get('port', '未知')}")
+        lines.append(f"PasswordAuthentication: {effective_settings.get('passwordauthentication', '未知')}")
+        lines.append(f"PubkeyAuthentication: {effective_settings.get('pubkeyauthentication', '未知')}")
+    else:
+        lines.append(f"sshd -T 读取失败: {effective_message}")
+
+    source_lines = _collect_port_sources(config_path)
+    if source_lines:
+        lines.append("Port 来源:")
+        for item in source_lines:
+            lines.append(f"- {item}")
+    else:
+        lines.append("Port 来源: 未发现显式 Port 行")
+
+    for unit in ("ssh", "sshd", "ssh.socket", "sshd.socket"):
+        ok_active, active_out = _run_command(["systemctl", "is-active", unit])
+        state = active_out.strip() if ok_active else "inactive/not-found"
+        lines.append(f"{unit} 状态: {state}")
+
+    ok_listen, listen_out = _run_command(["ss", "-lnt"])
+    if ok_listen:
+        listen_lines = []
+        for row in (listen_out or "").splitlines():
+            if ":22" in row:
+                listen_lines.append(row)
+            if target_port and f":{target_port}" in row:
+                listen_lines.append(row)
+        lines.append("监听端口摘要:")
+        if listen_lines:
+            for row in listen_lines[:10]:
+                lines.append(f"- {row}")
+        else:
+            lines.append("- 未在 ss -lnt 中发现 22 或目标端口")
+    else:
+        lines.append(f"监听检测失败(ss -lnt): {listen_out}")
+
+    if shutil.which("ufw"):
+        ok_ufw, ufw_out = _run_command(["ufw", "status"])
+        if ok_ufw:
+            lines.append("UFW 规则摘要:")
+            for row in (ufw_out or "").splitlines()[:20]:
+                lines.append(f"- {row}")
+        else:
+            lines.append(f"UFW 状态读取失败: {ufw_out}")
+
+    if shutil.which("iptables"):
+        ok_ip, ip_out = _run_command(["iptables", "-S", "INPUT"])
+        if ok_ip:
+            wanted = []
+            for row in (ip_out or "").splitlines():
+                if "--dport 22" in row:
+                    wanted.append(row)
+                if target_port and f"--dport {target_port}" in row:
+                    wanted.append(row)
+            lines.append("iptables INPUT 规则摘要:")
+            if wanted:
+                for row in wanted[:20]:
+                    lines.append(f"- {row}")
+            else:
+                lines.append("- 未发现 22 或目标端口规则")
+        else:
+            lines.append(f"iptables 规则读取失败: {ip_out}")
+
+    lines.append("提示: 如在云服务器上，请同时检查安全组/防火墙放行目标端口。")
+    return "\n".join(lines)
+
+
 def apply_ssh_system_settings(
     ssh_port: int,
     allow_password_login: bool,
@@ -570,12 +649,17 @@ def register_routes(require_login, get_db) -> None:
                 installed, install_message = install_fail2ban()
                 message = install_message if installed else f"安装失败：{install_message}"
 
+            if action == "diagnose_ssh":
+                port_text = request.form.get("ssh_port", "").strip()
+                diag_port = int(port_text) if port_text.isdigit() else None
+                message = diagnose_ssh_status(diag_port)
+
             ssh_port = request.form.get("ssh_port", "").strip()
             ssh_public_key = request.form.get("ssh_public_key", "").strip()
             allow_password_login = request.form.get("allow_password_login") == "on"
             allow_key_login = request.form.get("allow_key_login") == "on"
 
-            if action != "install_fail2ban":
+            if action not in {"install_fail2ban", "diagnose_ssh"}:
                 if not ssh_port.isdigit():
                     message = "SSH 端口必须是数字。"
                 else:

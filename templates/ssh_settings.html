@@ -8,7 +8,7 @@
   <p>配置 SSH 端口与登录方式。</p>
 
   {% if message %}
-    <div class="error">{{ message }}</div>
+    <div class="error" style="white-space: pre-wrap;">{{ message }}</div>
   {% endif %}
 
   <form method="post" action="{{ url_for('ssh_settings') }}">
@@ -46,5 +46,11 @@
   <form method="post" action="{{ url_for('ssh_settings') }}" style="margin-top: 10px;">
     <input type="hidden" name="token" value="{{ token }}" />
     <button class="ghost" type="submit" name="action" value="install_fail2ban" style="width:100%;">安装 Fail2ban</button>
+  </form>
+
+  <form method="post" action="{{ url_for('ssh_settings') }}" style="margin-top: 10px;">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <input type="hidden" name="ssh_port" value="{{ ssh_port }}" />
+    <button class="ghost" type="submit" name="action" value="diagnose_ssh" style="width:100%;">诊断 SSH 连通性</button>
   </form>
 {% endblock %}
