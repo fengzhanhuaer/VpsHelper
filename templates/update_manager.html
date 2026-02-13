@@ -27,7 +27,7 @@
   <form method="post" action="{{ url_for('system_update') }}" style="display:grid; gap:8px;">
     <input type="hidden" name="token" value="{{ token }}" />
     <button class="ghost" type="submit" name="action" value="check">刷新最新版本</button>
-    <button class="btn" type="submit" name="action" value="update">自动从 GitHub 更新</button>
+    <button class="btn" type="submit" name="action" value="update">自动更新</button>
     <button class="ghost" type="submit" name="action" value="restart">重启服务</button>
   </form>
 {% endblock %}

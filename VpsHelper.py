@@ -308,7 +308,11 @@ def system_update():
                 message = f"更新失败：{branch or '无法识别当前分支。'}"
             else:
                 ok_pull, pull_out = run_git_command(["pull", "--ff-only", "origin", branch])
-                message = f"更新成功：{pull_out}" if ok_pull else f"更新失败：{pull_out}"
+                if ok_pull:
+                    message = f"更新成功：{pull_out}。服务将在 1 秒后自动重启，请稍后刷新页面。"
+                    restart_current_process_delayed(1.0)
+                else:
+                    message = f"更新失败：{pull_out}"
         elif action == "restart":
             message = "服务将在 1 秒后自动重启，请稍后刷新页面。"
             restart_current_process_delayed(1.0)
