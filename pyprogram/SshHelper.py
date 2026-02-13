@@ -62,6 +62,18 @@ def _run_command(args: list[str]) -> tuple[bool, str]:
     return False, detail or f"exit code {result.returncode}"
 
 
+def _ensure_sshd_runtime_dir() -> tuple[bool, str]:
+    runtime_dir = Path("/run/sshd")
+    try:
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(runtime_dir, 0o755)
+        return True, "/run/sshd 已就绪"
+    except PermissionError:
+        return False, "权限不足，无法创建 /run/sshd"
+    except Exception as exc:
+        return False, f"创建 /run/sshd 失败：{exc}"
+
+
 def _persist_iptables_rules() -> tuple[bool, str]:
     if shutil.which("netfilter-persistent"):
         ok_save, msg_save = _run_command(["netfilter-persistent", "save"])
@@ -233,6 +245,10 @@ def _apply_firewall_port_change(new_port: int, old_port: int) -> tuple[bool, str
 
 
 def _restart_ssh_service() -> tuple[bool, str]:
+    ok_runtime, msg_runtime = _ensure_sshd_runtime_dir()
+    if not ok_runtime:
+        return False, msg_runtime
+
     commands = [
         ["systemctl", "restart", "sshd"],
         ["systemctl", "restart", "ssh"],
@@ -261,6 +277,10 @@ def _restart_ssh_service() -> tuple[bool, str]:
 
 
 def _test_sshd_config(config_path: Path) -> tuple[bool, str]:
+    ok_runtime, msg_runtime = _ensure_sshd_runtime_dir()
+    if not ok_runtime:
+        return False, msg_runtime
+
     commands = [
         ["sshd", "-t", "-f", str(config_path)],
         ["/usr/sbin/sshd", "-t", "-f", str(config_path)],
@@ -317,6 +337,10 @@ def _collect_port_sources(main_config: Path) -> list[str]:
 
 
 def _get_effective_sshd_settings(config_path: Path) -> tuple[bool, dict[str, str], str]:
+    ok_runtime, msg_runtime = _ensure_sshd_runtime_dir()
+    if not ok_runtime:
+        return False, {}, msg_runtime
+
     commands = [
         ["sshd", "-T", "-f", str(config_path)],
         ["/usr/sbin/sshd", "-T", "-f", str(config_path)],
@@ -495,6 +519,9 @@ def diagnose_ssh_status(target_port: int | None = None) -> str:
     lines.append("=== SSH 诊断结果 ===")
     lines.append(f"配置文件: {config_path}")
     lines.append(f"目标端口: {target_port if target_port else '未指定'}")
+
+    ok_runtime, runtime_message = _ensure_sshd_runtime_dir()
+    lines.append(f"运行时目录: {runtime_message}")
 
     effective_ok, effective_settings, effective_message = _get_effective_sshd_settings(config_path)
     if effective_ok:
