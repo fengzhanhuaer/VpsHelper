@@ -63,19 +63,31 @@ fi
 
 cd "${INSTALL_DIR}"
 
-if [[ ! -d ".venv" ]]; then
-    echo "创建虚拟环境..."
-    if ! python3 -m venv .venv; then
-        echo "首次创建 venv 失败，尝试自动安装 venv 组件后重试..."
-        if install_python_venv_if_needed && python3 -m venv .venv; then
-            echo "venv 组件安装成功，已完成虚拟环境创建。"
-        else
-            echo "创建 venv 失败。请手动安装后重试："
-            echo "  Debian/Ubuntu: apt-get install -y python3-venv"
-            echo "  或按版本安装: apt-get install -y python3.x-venv"
-            exit 1
-        fi
+create_venv() {
+    if python3 -m venv .venv; then
+        return 0
     fi
+
+    echo "首次创建 venv 失败，尝试自动安装 venv 组件后重试..."
+    if install_python_venv_if_needed && python3 -m venv .venv; then
+        echo "venv 组件安装成功，已完成虚拟环境创建。"
+        return 0
+    fi
+
+    echo "创建 venv 失败。请手动安装后重试："
+    echo "  Debian/Ubuntu: apt-get install -y python3-venv"
+    echo "  或按版本安装: apt-get install -y python3.x-venv"
+    return 1
+}
+
+if [[ -d ".venv" && ! -f ".venv/bin/activate" ]]; then
+    echo "检测到损坏的虚拟环境，正在重建..."
+    rm -rf .venv
+fi
+
+if [[ ! -f ".venv/bin/activate" ]]; then
+    echo "创建虚拟环境..."
+    create_venv || exit 1
 fi
 
 source .venv/bin/activate
@@ -108,6 +120,14 @@ chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}"
 systemctl daemon-reload
 systemctl enable --now "${SERVICE_NAME}.service"
 systemctl status "${SERVICE_NAME}.service" --no-pager
+
+echo ""
+echo "最近 50 行服务日志 (${SERVICE_NAME})："
+if command -v journalctl >/dev/null 2>&1; then
+    journalctl -u "${SERVICE_NAME}.service" -n 50 --no-pager || true
+else
+    echo "当前系统无 journalctl，可使用 systemctl status ${SERVICE_NAME}.service 查看日志。"
+fi
 
 echo ""
 echo "安装完成，服务已启动: ${SERVICE_NAME}"

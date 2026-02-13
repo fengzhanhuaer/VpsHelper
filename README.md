@@ -37,6 +37,7 @@ chmod +x VpsHelper.sh
 curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash
 ```
 说明：脚本会在 Debian/Ubuntu 上自动尝试安装 `python3-venv`，并重试创建虚拟环境。
+说明：安装完成后会自动输出该服务最近 50 行日志，便于确认启动状态。
 无 curl 时可用：
 ```bash
 wget -qO- https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash
