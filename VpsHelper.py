@@ -214,7 +214,7 @@ def logout():
 
 
 if __name__ == "__main__":
-    is_dev = os.environ.get("TGHELPER_DEV") == "1"
+    is_dev = os.environ.get("TGHELPER_DEV", "1") == "1"
     if not is_dev or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         with app.app_context():
             init_db()

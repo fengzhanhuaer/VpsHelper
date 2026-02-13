@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
     <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
   </div>
   <h1>数据库管理</h1>

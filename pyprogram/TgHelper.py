@@ -510,7 +510,7 @@ def load_api_config():
     APP.config["PROXY_PASSWORD"] = data.get("proxy_password")
     APP.config["CF_API_TOKEN"] = data.get("cf_api_token")
     APP.config["CF_ACCOUNT_ID"] = data.get("cf_account_id")
-    APP.config["CF_D1_DATABASE_NAME"] = data.get("cf_d1_database_name")
+    APP.config["CF_D1_DATABASE_NAME"] = data.get("cf_d1_database_name") or APP.config.get("APP_NAME", "VpsHelper")
     APP.config["CF_D1_DATABASE_ID"] = data.get("cf_d1_database_id")
     APP.config["CF_USE_D1"] = data.get("cf_use_d1") == "1"
     APP.config["DB_AUTO_BACKUP_ENABLED"] = data.get("db_auto_backup_enabled") == "1"
@@ -991,7 +991,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             action = request.form.get("action", "save")
             api_token = request.form.get("cf_api_token", "").strip()
             account_id = APP.config.get("CF_ACCOUNT_ID") or ""
-            db_name = "TgHelper"
+            db_name = APP.config.get("APP_NAME", "VpsHelper")
             db_id = APP.config.get("CF_D1_DATABASE_ID") or ""
             use_d1 = APP.config.get("CF_USE_D1") or False
 
@@ -1005,7 +1005,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
                         ok_find, _, found_db_id = cloudflare_find_d1_by_name(api_token, account_id, db_name)
                         if ok_find and found_db_id:
                             db_id = found_db_id
-                            message = "已找到云端数据库 TgHelper。"
+                            message = f"已找到云端数据库 {db_name}。"
                             use_d1 = True
                         else:
                             ok_create, msg, created_id = cloudflare_create_d1(api_token, account_id, db_name)
@@ -1024,7 +1024,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
                         account_id = resolved_account_id
                         ok_find, _, found_db_id = cloudflare_find_d1_by_name(api_token, account_id, db_name)
                         if not ok_find or not found_db_id:
-                            message = "未找到云端数据库 TgHelper，请先创建。"
+                            message = f"未找到云端数据库 {db_name}，请先创建。"
                         else:
                             db_id = found_db_id
                             ok_bak, msg_bak = backup_local_to_d1(api_token, account_id, db_id, db)
@@ -1041,7 +1041,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
                         account_id = resolved_account_id
                         ok_find, _, found_db_id = cloudflare_find_d1_by_name(api_token, account_id, db_name)
                         if not ok_find or not found_db_id:
-                            message = "未找到云端数据库 TgHelper，请先创建。"
+                            message = f"未找到云端数据库 {db_name}，请先创建。"
                         else:
                             db_id = found_db_id
                             ok_pull, msg_pull = pull_d1_to_local(api_token, account_id, db_id, db)
@@ -1082,7 +1082,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             token=token,
             message=message,
             cf_api_token=APP.config.get("CF_API_TOKEN") or "",
-            cf_d1_database_name="TgHelper",
+            cf_d1_database_name=APP.config.get("APP_NAME", "VpsHelper"),
             cf_d1_database_id=APP.config.get("CF_D1_DATABASE_ID") or "",
             cf_use_d1=APP.config.get("CF_USE_D1") or False,
             db_auto_backup_enabled=APP.config.get("DB_AUTO_BACKUP_ENABLED") or False,

@@ -11,6 +11,22 @@
         "/^Push-Location \"d:\\\\100\\.Working\\\\GithubWork\\\\VpsHelper\"; d:/100\\.Working/GithubWork/VpsHelper/\\.venv/Scripts/python\\.exe -c \"import sqlite3; conn=sqlite3\\.connect\\('userdata/VpsHelper\\.db'\\); cur=conn\\.execute\\(\\\\\"select name from sqlite_master where type='table' and name in \\('users','sessions','tg_accounts','tg_dialogs','tg_sign_tasks','tg_auto_send_tasks','tg_login_flows','app_settings'\\) order by name\\\\\"\\); print\\(\\[r\\[0\\] for r in cur\\.fetchall\\(\\)\\]\\); conn\\.close\\(\\)\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^Push-Location \"d:\\\\100\\.Working\\\\GithubWork\\\\VpsHelper\"; \\$env:TGHELPER_DEV=\"1\"; d:/100\\.Working/GithubWork/VpsHelper/\\.venv/Scripts/python\\.exe VpsHelper\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^\\$conn = Get-NetTCPConnection -LocalPort 15018 -State Listen -ErrorAction SilentlyContinue; if \\(\\$conn\\) \\{ \\$conn \\| Select-Object LocalAddress,LocalPort,OwningProcess; Get-CimInstance Win32_Process -Filter \"ProcessId=\\$\\(\\$conn\\.OwningProcess\\)\" \\| Select-Object ProcessId,CommandLine \\} else \\{ Write-Output \"No listener on 15018\" \\}$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^netstat -ano \\| findstr :15018$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^Get-CimInstance Win32_Process -Filter \"ProcessId=9520\" \\| Select-Object ProcessId,Name,CommandLine \\| Format-List$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

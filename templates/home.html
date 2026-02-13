@@ -6,6 +6,7 @@
   <h1>欢迎，{{ username }}</h1>
   <p>VpsHelper - 选择您需要的功能模块</p>
   <div style="margin-top: 12px; display: grid; gap: 10px;">
+    <a class="btn" href="{{ url_for('database_settings', token=token) }}">数据库管理</a>
     <a class="btn" href="{{ url_for('tg_helper', token=token) }}">Tg助手</a>
     <a class="btn" href="{{ url_for('firewall', token=token) }}">防火墙</a>
   </div>

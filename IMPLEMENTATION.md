@@ -10,6 +10,7 @@ VpsHelper 是一个基于 Flask 的 VPS 管理工具集，采用 2 级页面结�
 - **模板**: `templates/home.html`
 - **功能**: 显示所有可用的功能模块入口
 - **当前模块**:
+  - 数据库管理 (`/settings/database`)
   - Tg助手 (`/tg_helper`)
   - 防火墙 (`/firewall`)
 
@@ -22,7 +23,6 @@ VpsHelper 是一个基于 Flask 的 VPS 管理工具集，采用 2 级页面结�
 - **子功能**:
   - 设置 API (`/settings/api`)
   - 设置代理 (`/settings/proxy`)
-  - 数据库管理 (`/settings/database`)
   - 管理帐号 (`/accounts`)
   - 自动发送 (`/auto/send`)
   - 自动回复 (`/auto/reply`)
@@ -42,7 +42,8 @@ VpsHelper 是一个基于 Flask 的 VPS 管理工具集，采用 2 级页面结�
 ```
 
 ### 面包屑导航
-- **三级页面**: 显示"返回Tg助手"按钮，返回到对应的功能模块页面
+- **数据库管理页面**: 显示"返回主菜单"按钮，返回到一级菜单
+- **Tg三级页面**: 显示"返回Tg助手"按钮，返回到对应的功能模块页面
 - **二级页面**: 显示"返回主菜单"按钮，返回到主菜单
 - **一级页面**: 显示"退出登录"按钮
 
