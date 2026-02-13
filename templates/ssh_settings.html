@@ -40,6 +40,11 @@
       >{{ ssh_public_key }}</textarea>
     </div>
 
-    <button class="btn" type="submit">保存</button>
+    <button class="btn" type="submit" name="action" value="save">保存</button>
+  </form>
+
+  <form method="post" action="{{ url_for('ssh_settings') }}" style="margin-top: 10px;">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <button class="ghost" type="submit" name="action" value="install_fail2ban" style="width:100%;">安装 Fail2ban</button>
   </form>
 {% endblock %}

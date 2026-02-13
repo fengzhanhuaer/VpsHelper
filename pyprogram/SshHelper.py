@@ -62,6 +62,84 @@ def _run_command(args: list[str]) -> tuple[bool, str]:
     return False, detail or f"exit code {result.returncode}"
 
 
+def _persist_iptables_rules() -> tuple[bool, str]:
+    if shutil.which("netfilter-persistent"):
+        ok_save, msg_save = _run_command(["netfilter-persistent", "save"])
+        if ok_save:
+            return True, "iptables 规则已通过 netfilter-persistent 持久化"
+
+    ok_service, msg_service = _run_command(["service", "iptables", "save"])
+    if ok_service:
+        return True, "iptables 规则已通过 service iptables save 持久化"
+
+    if shutil.which("iptables-save"):
+        save_targets = [
+            Path("/etc/iptables/rules.v4"),
+            Path("/etc/sysconfig/iptables"),
+            Path("/etc/iptables/iptables.rules"),
+        ]
+        for target in save_targets:
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with target.open("w", encoding="utf-8") as file:
+                    result = subprocess.run(["iptables-save"], stdout=file, stderr=subprocess.PIPE, text=True, check=False)
+                if result.returncode == 0:
+                    return True, f"iptables 规则已保存到 {target}"
+            except Exception:
+                continue
+
+    details = []
+    if "msg_save" in locals() and msg_save:
+        details.append(f"netfilter-persistent: {msg_save}")
+    if msg_service:
+        details.append(f"service iptables save: {msg_service}")
+    if not details:
+        details.append("未找到可用持久化方式")
+    return False, "；".join(details)
+
+
+def _detect_ssh_socket_unit() -> str | None:
+    if not shutil.which("systemctl"):
+        return None
+
+    for unit in ("ssh.socket", "sshd.socket"):
+        ok_cat, _ = _run_command(["systemctl", "cat", unit])
+        if not ok_cat:
+            continue
+
+        ok_active, out_active = _run_command(["systemctl", "is-active", unit])
+        ok_enabled, out_enabled = _run_command(["systemctl", "is-enabled", unit])
+
+        is_active = ok_active and (out_active.strip() == "active")
+        enabled_state = out_enabled.strip() if ok_enabled else ""
+        is_enabled = enabled_state in {"enabled", "static", "indirect"}
+        if is_active or is_enabled:
+            return unit
+    return None
+
+
+def _set_ssh_socket_port(socket_unit: str, port: int) -> tuple[bool, str]:
+    dropin_dir = Path(f"/etc/systemd/system/{socket_unit}.d")
+    dropin_file = dropin_dir / "vpshelper.conf"
+
+    content = "[Socket]\nListenStream=\nListenStream={port}\n".format(port=port)
+    try:
+        dropin_dir.mkdir(parents=True, exist_ok=True)
+        dropin_file.write_text(content, encoding="utf-8")
+    except Exception as exc:
+        return False, f"写入 {dropin_file} 失败：{exc}"
+
+    ok_reload, msg_reload = _run_command(["systemctl", "daemon-reload"])
+    if not ok_reload:
+        return False, f"systemd 重载失败：{msg_reload}"
+
+    ok_restart, msg_restart = _run_command(["systemctl", "restart", socket_unit])
+    if not ok_restart:
+        return False, f"重启 {socket_unit} 失败：{msg_restart}"
+
+    return True, f"已更新 {socket_unit} 监听端口为 {port}。"
+
+
 def _apply_firewall_port_change(new_port: int, old_port: int) -> tuple[bool, str]:
     notes = []
 
@@ -105,12 +183,10 @@ def _apply_firewall_port_change(new_port: int, old_port: int) -> tuple[bool, str
                     return False, f"iptables 关闭旧端口失败：{msg_add_old_drop}"
             notes.append(f"iptables 已关闭 {old_port}/tcp")
 
-        if shutil.which("netfilter-persistent"):
-            ok_save, msg_save = _run_command(["netfilter-persistent", "save"])
-            if ok_save:
-                notes.append("iptables 规则已持久化")
-            else:
-                notes.append(f"iptables 持久化失败：{msg_save}")
+        ok_persist, persist_message = _persist_iptables_rules()
+        if not ok_persist:
+            return False, f"iptables 持久化失败：{persist_message}"
+        notes.append(persist_message)
 
         return True, "；".join(notes)
 
@@ -319,6 +395,58 @@ def _is_ssh_port_listening(port: int) -> tuple[bool, str]:
     return False, f"未检测到 SSH 监听端口 {port}。{(' ' + last_error) if last_error else ''}"
 
 
+def _enable_and_start_fail2ban() -> tuple[bool, str]:
+    if shutil.which("systemctl"):
+        ok_enable, msg_enable = _run_command(["systemctl", "enable", "--now", "fail2ban"])
+        if ok_enable:
+            return True, "Fail2ban 已安装并启动。"
+        return False, f"Fail2ban 安装后启动失败：{msg_enable}"
+
+    ok_start, msg_start = _run_command(["service", "fail2ban", "start"])
+    if ok_start:
+        return True, "Fail2ban 已安装并启动。"
+    return False, f"Fail2ban 安装后启动失败：{msg_start}"
+
+
+def install_fail2ban() -> tuple[bool, str]:
+    if os.name == "nt":
+        return False, "当前系统是 Windows，无法安装 Linux Fail2ban。"
+
+    if shutil.which("fail2ban-client"):
+        ok_start, msg_start = _enable_and_start_fail2ban()
+        if ok_start:
+            return True, "Fail2ban 已安装。"
+        return False, msg_start
+
+    if shutil.which("apt-get"):
+        ok_update, msg_update = _run_command(["apt-get", "update"])
+        if not ok_update:
+            return False, f"apt-get update 失败：{msg_update}"
+        ok_install, msg_install = _run_command(["apt-get", "install", "-y", "fail2ban"])
+        if not ok_install:
+            return False, f"apt 安装失败：{msg_install}"
+    elif shutil.which("dnf"):
+        ok_install, msg_install = _run_command(["dnf", "install", "-y", "fail2ban"])
+        if not ok_install:
+            return False, f"dnf 安装失败：{msg_install}"
+    elif shutil.which("yum"):
+        ok_install, msg_install = _run_command(["yum", "install", "-y", "fail2ban"])
+        if not ok_install:
+            return False, f"yum 安装失败：{msg_install}"
+    elif shutil.which("zypper"):
+        ok_install, msg_install = _run_command(["zypper", "--non-interactive", "install", "fail2ban"])
+        if not ok_install:
+            return False, f"zypper 安装失败：{msg_install}"
+    elif shutil.which("apk"):
+        ok_install, msg_install = _run_command(["apk", "add", "fail2ban"])
+        if not ok_install:
+            return False, f"apk 安装失败：{msg_install}"
+    else:
+        return False, "未检测到支持的包管理器（apt/dnf/yum/zypper/apk）。"
+
+    return _enable_and_start_fail2ban()
+
+
 def apply_ssh_system_settings(
     ssh_port: int,
     allow_password_login: bool,
@@ -335,6 +463,7 @@ def apply_ssh_system_settings(
     try:
         content = config_path.read_text(encoding="utf-8")
         old_port = _extract_ssh_port(content)
+        socket_unit = _detect_ssh_socket_unit()
         updated = _set_config_option(content, "Port", str(ssh_port))
         updated = _set_config_option(updated, "PasswordAuthentication", "yes" if allow_password_login else "no")
         updated = _set_config_option(updated, "PubkeyAuthentication", "yes" if allow_key_login else "no")
@@ -368,6 +497,14 @@ def apply_ssh_system_settings(
                 f"可能被 Include 配置覆盖。端口来源：{source_text}；{rollback_message}"
             )
 
+        socket_note = ""
+        if socket_unit:
+            ok_socket, msg_socket = _set_ssh_socket_port(socket_unit, ssh_port)
+            if not ok_socket:
+                rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
+                return False, f"SSH socket 端口更新失败：{msg_socket}；{rollback_message}"
+            socket_note = msg_socket
+
         if ssh_public_key.strip():
             ssh_dir = Path.home() / ".ssh"
             ssh_dir.mkdir(parents=True, exist_ok=True)
@@ -387,6 +524,8 @@ def apply_ssh_system_settings(
         restarted, restart_message = _restart_ssh_service()
         if not restarted:
             rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
+            if socket_unit:
+                _set_ssh_socket_port(socket_unit, old_port)
             if rolled_back:
                 _restart_ssh_service()
             return False, f"{restart_message}；{rollback_message}"
@@ -394,6 +533,8 @@ def apply_ssh_system_settings(
         listening, listening_message = _is_ssh_port_listening(ssh_port)
         if not listening:
             rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
+            if socket_unit:
+                _set_ssh_socket_port(socket_unit, old_port)
             if rolled_back:
                 _restart_ssh_service()
             return False, f"{listening_message}；{rollback_message}"
@@ -402,7 +543,8 @@ def apply_ssh_system_settings(
         if not firewall_ok:
             return False, f"SSH 已监听新端口，但防火墙处理失败：{firewall_message}"
 
-        return True, f"SSH 配置已应用到系统。{listening_message}；{firewall_message}"
+        extra = f"；{socket_note}" if socket_note else ""
+        return True, f"SSH 配置已应用到系统。{listening_message}{extra}；{firewall_message}"
     except PermissionError:
         return False, "权限不足，无法修改 SSH 配置。请使用 root 权限运行。"
     except Exception as exc:
@@ -423,44 +565,50 @@ def register_routes(require_login, get_db) -> None:
         message = None
 
         if request.method == "POST":
+            action = request.form.get("action", "save")
+            if action == "install_fail2ban":
+                installed, install_message = install_fail2ban()
+                message = install_message if installed else f"安装失败：{install_message}"
+
             ssh_port = request.form.get("ssh_port", "").strip()
             ssh_public_key = request.form.get("ssh_public_key", "").strip()
             allow_password_login = request.form.get("allow_password_login") == "on"
             allow_key_login = request.form.get("allow_key_login") == "on"
 
-            if not ssh_port.isdigit():
-                message = "SSH 端口必须是数字。"
-            else:
-                port = int(ssh_port)
-                if port < 1 or port > 65535:
-                    message = "SSH 端口范围必须在 1-65535。"
+            if action != "install_fail2ban":
+                if not ssh_port.isdigit():
+                    message = "SSH 端口必须是数字。"
                 else:
-                    applied, apply_message = apply_ssh_system_settings(
-                        ssh_port=port,
-                        allow_password_login=allow_password_login,
-                        allow_key_login=allow_key_login,
-                        ssh_public_key=ssh_public_key,
-                    )
-
-                    db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_port', ?)", (str(port),))
-                    db.execute(
-                        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_allow_password_login', ?)",
-                        ("1" if allow_password_login else "0",),
-                    )
-                    db.execute(
-                        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_allow_key_login', ?)",
-                        ("1" if allow_key_login else "0",),
-                    )
-                    db.execute(
-                        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_public_key', ?)",
-                        (ssh_public_key,),
-                    )
-                    db.commit()
-
-                    if applied:
-                        message = "SSH 设置已保存，并已自动应用到系统。"
+                    port = int(ssh_port)
+                    if port < 1 or port > 65535:
+                        message = "SSH 端口范围必须在 1-65535。"
                     else:
-                        message = f"SSH 设置已保存，但系统应用失败：{apply_message}"
+                        applied, apply_message = apply_ssh_system_settings(
+                            ssh_port=port,
+                            allow_password_login=allow_password_login,
+                            allow_key_login=allow_key_login,
+                            ssh_public_key=ssh_public_key,
+                        )
+
+                        db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_port', ?)", (str(port),))
+                        db.execute(
+                            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_allow_password_login', ?)",
+                            ("1" if allow_password_login else "0",),
+                        )
+                        db.execute(
+                            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_allow_key_login', ?)",
+                            ("1" if allow_key_login else "0",),
+                        )
+                        db.execute(
+                            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_public_key', ?)",
+                            (ssh_public_key,),
+                        )
+                        db.commit()
+
+                        if applied:
+                            message = "SSH 设置已保存，并已自动应用到系统。"
+                        else:
+                            message = f"SSH 设置已保存，但系统应用失败：{apply_message}"
 
         rows = db.execute(
             "SELECT key, value FROM app_settings WHERE key IN ('ssh_port', 'ssh_allow_password_login', 'ssh_allow_key_login', 'ssh_public_key')"
