@@ -31,6 +31,20 @@ chmod +x VpsHelper.sh
 ./VpsHelper.sh
 ```
 
+### Linux 一键安装为服务
+复制一条命令即可下载安装并自动安装/启动服务：
+```bash
+curl -fsSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install.sh | sudo bash
+```
+无 curl 时可用：
+```bash
+wget -qO- https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install.sh | sudo bash
+```
+指定安装目录（可选）：
+```bash
+curl -fsSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install.sh | sudo bash -s -- https://github.com/fengzhanhuaer/VpsHelper /opt/vpshelper
+```
+
 ### 手动安装依赖
 ```bash
 python -m venv .venv
@@ -63,6 +77,7 @@ python VpsHelper.py
 - `requirements.txt`: Python 依赖
 - `VpsHelper.bat`: Windows 启动脚本
 - `VpsHelper.sh`: Linux 启动脚本
+- `install.sh`: Linux 一键下载更新、安装 systemd 服务并启动（单脚本）
 
 ## 备注
 

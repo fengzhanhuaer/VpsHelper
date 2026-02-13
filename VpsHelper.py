@@ -380,4 +380,4 @@ if __name__ == "__main__":
         if not SCHEDULER.running:
             SCHEDULER.start()
 
-    app.run(host="0.0.0.0", port=15018, debug=is_dev, use_reloader=is_dev)
+    app.run(host="127.0.0.1", port=15018, debug=is_dev, use_reloader=is_dev)
