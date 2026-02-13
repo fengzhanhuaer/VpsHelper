@@ -50,6 +50,10 @@
     <input type="hidden" name="token" value="{{ token }}" />
     <div style="display:flex; gap:8px; align-items:center;">
       <input name="port" placeholder="输入要开放的端口，例如 8080" />
+      <select name="protocol" style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px;">
+        <option value="tcp">tcp</option>
+        <option value="udp">udp</option>
+      </select>
       <button class="btn" type="submit" name="action" value="open_port" style="width:auto;">开放端口</button>
     </div>
   </form>
@@ -61,6 +65,7 @@
       <thead>
         <tr>
           <th style="width: 140px;">开放端口</th>
+          <th style="width: 120px;">端口类型</th>
           <th style="width: 260px;">绑定 IP</th>
           <th>进程名称</th>
         </tr>
@@ -69,6 +74,7 @@
         {% for row in port_rows %}
           <tr>
             <td>{{ row.port }}</td>
+            <td>{{ row.protocol }}</td>
             <td>{{ row.bind_ips | join('，') }}</td>
             <td>{{ row.process_names | join('，') }}</td>
           </tr>
@@ -85,6 +91,7 @@
       <thead>
         <tr>
           <th style="width: 140px;">监听端口</th>
+          <th style="width: 120px;">端口类型</th>
           <th style="width: 260px;">绑定 IP</th>
           <th>进程名称</th>
         </tr>
@@ -93,6 +100,7 @@
         {% for row in listening_rows %}
           <tr>
             <td>{{ row.port }}</td>
+            <td>{{ row.protocol }}</td>
             <td>{{ row.bind_ip }}</td>
             <td>{{ row.process_names | join('，') }}</td>
           </tr>
