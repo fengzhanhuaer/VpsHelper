@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>SSH设置</h1>
+  <p>配置 SSH 端口与登录方式。</p>
+
+  {% if message %}
+    <div class="error">{{ message }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('ssh_settings') }}">
+    <input type="hidden" name="token" value="{{ token }}" />
+
+    <div class="field">
+      <label for="ssh_port">SSH端口</label>
+      <input id="ssh_port" name="ssh_port" value="{{ ssh_port }}" required />
+    </div>
+
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input id="allow_password_login" name="allow_password_login" type="checkbox" {% if allow_password_login %}checked{% endif %} style="width:auto;" />
+      <label for="allow_password_login" style="margin:0;">允许密码登录</label>
+    </div>
+
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input id="allow_key_login" name="allow_key_login" type="checkbox" {% if allow_key_login %}checked{% endif %} style="width:auto;" />
+      <label for="allow_key_login" style="margin:0;">允许密钥登录</label>
+    </div>
+
+    <div class="field">
+      <label for="ssh_public_key">SSH公钥</label>
+      <textarea
+        id="ssh_public_key"
+        name="ssh_public_key"
+        rows="4"
+        placeholder="例如：ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host"
+        style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; font-size:14px; font-family:inherit;"
+      >{{ ssh_public_key }}</textarea>
+    </div>
+
+    <button class="btn" type="submit">保存</button>
+  </form>
+{% endblock %}

@@ -286,6 +286,62 @@ def home():
     return render_template("home.html", username=username, token=token)
 
 
+@app.route("/settings/ssh", methods=["GET", "POST"])
+def ssh_settings():
+    token = request.args.get("token") or request.form.get("token")
+    username = require_login()
+    if not username:
+        return redirect(url_for("login"))
+
+    db = get_db()
+    message = None
+
+    if request.method == "POST":
+        ssh_port = request.form.get("ssh_port", "").strip()
+        ssh_public_key = request.form.get("ssh_public_key", "").strip()
+        allow_password_login = "1" if request.form.get("allow_password_login") == "on" else "0"
+        allow_key_login = "1" if request.form.get("allow_key_login") == "on" else "0"
+
+        if not ssh_port.isdigit():
+            message = "SSH 端口必须是数字。"
+        else:
+            port = int(ssh_port)
+            if port < 1 or port > 65535:
+                message = "SSH 端口范围必须在 1-65535。"
+            else:
+                db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_port', ?)", (str(port),))
+                db.execute(
+                    "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_allow_password_login', ?)",
+                    (allow_password_login,),
+                )
+                db.execute(
+                    "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_allow_key_login', ?)",
+                    (allow_key_login,),
+                )
+                db.execute(
+                    "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('ssh_public_key', ?)",
+                    (ssh_public_key,),
+                )
+                db.commit()
+                message = "SSH 设置已保存。"
+
+    rows = db.execute(
+        "SELECT key, value FROM app_settings WHERE key IN ('ssh_port', 'ssh_allow_password_login', 'ssh_allow_key_login', 'ssh_public_key')"
+    ).fetchall()
+    data = {row["key"]: row["value"] for row in rows}
+
+    return render_template(
+        "ssh_settings.html",
+        username=username,
+        token=token,
+        message=message,
+        ssh_port=data.get("ssh_port") or "22",
+        ssh_public_key=data.get("ssh_public_key") or "",
+        allow_password_login=(data.get("ssh_allow_password_login", "1") == "1"),
+        allow_key_login=(data.get("ssh_allow_key_login", "1") == "1"),
+    )
+
+
 @app.route("/system/update", methods=["GET", "POST"])
 def system_update():
     token = request.args.get("token") or request.form.get("token")

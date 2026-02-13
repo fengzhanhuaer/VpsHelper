@@ -273,6 +273,9 @@ def init_tg_db() -> None:
 
 def get_configured_proxy():
     _require_setup()
+    if not APP.config.get("PROXY_ENABLED"):
+        return None
+
     host = APP.config.get("PROXY_HOST")
     port = APP.config.get("PROXY_PORT")
     if not host or not port:
@@ -499,11 +502,16 @@ def load_api_config():
     _require_setup()
     db = get_tg_db()
     rows = db.execute(
-        "SELECT key, value FROM app_settings WHERE key IN ('telegram_api_id', 'telegram_api_hash', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'cf_api_token', 'cf_account_id', 'cf_d1_database_name', 'cf_d1_database_id', 'cf_use_d1', 'db_auto_backup_enabled', 'db_auto_backup_time', 'db_auto_backup_last_date', 'db_auto_backup_last_result')"
+        "SELECT key, value FROM app_settings WHERE key IN ('telegram_api_id', 'telegram_api_hash', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'cf_api_token', 'cf_account_id', 'cf_d1_database_name', 'cf_d1_database_id', 'cf_use_d1', 'db_auto_backup_enabled', 'db_auto_backup_time', 'db_auto_backup_last_date', 'db_auto_backup_last_result')"
     ).fetchall()
     data = {row["key"]: row["value"] for row in rows}
     APP.config["TELEGRAM_API_ID"] = APP.config.get("TELEGRAM_API_ID") or data.get("telegram_api_id")
     APP.config["TELEGRAM_API_HASH"] = APP.config.get("TELEGRAM_API_HASH") or data.get("telegram_api_hash")
+    APP.config["PROXY_ENABLED"] = (
+        data.get("proxy_enabled") == "1"
+        if data.get("proxy_enabled") is not None
+        else bool(data.get("proxy_host") and data.get("proxy_port"))
+    )
     APP.config["PROXY_HOST"] = data.get("proxy_host")
     APP.config["PROXY_PORT"] = data.get("proxy_port")
     APP.config["PROXY_USERNAME"] = data.get("proxy_username")
@@ -845,6 +853,35 @@ def configure_scheduler_jobs(scheduler) -> None:
 def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
     _require_setup()
 
+    def _format_countdown_text(next_run_at: str | None) -> tuple[str, str]:
+        if not next_run_at:
+            return "--", "未知"
+
+        try:
+            next_dt = datetime.fromisoformat(next_run_at)
+        except ValueError:
+            return next_run_at, "未知"
+
+        display = next_dt.strftime("%Y-%m-%d %H:%M:%S")
+        delta_seconds = int((next_dt - datetime.now()).total_seconds())
+        if delta_seconds <= 0:
+            return display, "即将执行"
+
+        days, rem = divmod(delta_seconds, 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes, seconds = divmod(rem, 60)
+
+        parts = []
+        if days > 0:
+            parts.append(f"{days}天")
+        if hours > 0:
+            parts.append(f"{hours}小时")
+        if minutes > 0:
+            parts.append(f"{minutes}分钟")
+        if not parts:
+            parts.append(f"{seconds}秒")
+        return display, "后执行（" + " ".join(parts) + "）"
+
     @APP.route("/tg_helper")
     def tg_helper():
         token = request.args.get("token")
@@ -946,17 +983,27 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if request.method == "POST":
             action = request.form.get("action")
             if action == "test":
-                ok, message = test_proxy_connection()
+                if not APP.config.get("PROXY_ENABLED"):
+                    message = "当前未启用代理。"
+                else:
+                    ok, message = test_proxy_connection()
             else:
+                proxy_enabled = request.form.get("proxy_enabled") == "on"
                 proxy_host = request.form.get("proxy_host", "").strip()
                 proxy_port = request.form.get("proxy_port", "").strip()
                 proxy_username = request.form.get("proxy_username", "").strip()
                 proxy_password = request.form.get("proxy_password", "").strip()
 
-                if (proxy_host and not proxy_port) or (proxy_port and not proxy_host):
+                if proxy_enabled and (not proxy_host or not proxy_port):
+                    message = "启用代理时，代理地址与端口需同时填写。"
+                elif (proxy_host and not proxy_port) or (proxy_port and not proxy_host):
                     message = "代理地址与端口需同时填写，或同时留空。"
                 else:
                     db = get_tg_db()
+                    db.execute(
+                        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('proxy_enabled', ?)",
+                        ("1" if proxy_enabled else "0",),
+                    )
                     if proxy_host and proxy_port:
                         db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('proxy_host', ?)", (proxy_host,))
                         db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('proxy_port', ?)", (proxy_port,))
@@ -971,6 +1018,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         return render_template(
             "proxy_settings.html",
             token=token,
+            proxy_enabled=APP.config.get("PROXY_ENABLED") or False,
             proxy_host=APP.config.get("PROXY_HOST") or "",
             proxy_port=APP.config.get("PROXY_PORT") or "",
             proxy_username=APP.config.get("PROXY_USERNAME") or "",
@@ -1161,7 +1209,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             tasks = db.execute(
                 """
                 SELECT t.id, t.dialog_id, t.message, t.interval_seconds, t.jitter_seconds, t.schedule_type, t.time_of_day,
-                       t.enabled, t.last_run_at, t.last_result, t.last_reply,
+                       t.enabled, t.next_run_at, t.last_run_at, t.last_result, t.last_reply,
                        COALESCE(d.title, d.username, t.dialog_id) AS dialog_name
                 FROM tg_auto_send_tasks t
                 LEFT JOIN tg_dialogs d ON d.account_id = t.account_id AND d.dialog_id = t.dialog_id
@@ -1171,12 +1219,43 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
                 (username, selected_account_id),
             ).fetchall()
 
+        tasks_view = []
+        for task in tasks:
+            next_run_display, next_run_countdown = _format_countdown_text(task["next_run_at"])
+            item = dict(task)
+            item["next_run_display"] = next_run_display
+            item["next_run_countdown"] = next_run_countdown
+            tasks_view.append(item)
+
+        queue_rows = db.execute(
+            """
+            SELECT t.id, t.account_id, t.dialog_id, t.next_run_at,
+                   COALESCE(a.account_name, CAST(t.account_id AS TEXT)) AS account_name,
+                   COALESCE(d.title, d.username, t.dialog_id) AS dialog_name
+            FROM tg_auto_send_tasks t
+            LEFT JOIN tg_accounts a ON a.id = t.account_id
+            LEFT JOIN tg_dialogs d ON d.account_id = t.account_id AND d.dialog_id = t.dialog_id
+            WHERE t.owner = ? AND t.enabled = 1
+            ORDER BY t.next_run_at ASC
+            """,
+            (username,),
+        ).fetchall()
+
+        queue_tasks = []
+        for row in queue_rows:
+            next_run_display, next_run_countdown = _format_countdown_text(row["next_run_at"])
+            item = dict(row)
+            item["next_run_display"] = next_run_display
+            item["next_run_countdown"] = next_run_countdown
+            queue_tasks.append(item)
+
         return render_template(
             "auto_send_manage.html",
             token=token,
             accounts=accounts_list,
             selected_account_id=selected_account_id,
-            tasks=tasks,
+            tasks=tasks_view,
+            queue_tasks=queue_tasks,
             error=request.args.get("error"),
             message=request.args.get("message"),
         )

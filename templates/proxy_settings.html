@@ -13,6 +13,10 @@
 
   <form method="post" action="{{ url_for('proxy_settings') }}">
     <input type="hidden" name="token" value="{{ token }}" />
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input id="proxy_enabled" name="proxy_enabled" type="checkbox" {% if proxy_enabled %}checked{% endif %} style="width:auto;" />
+      <label for="proxy_enabled" style="margin:0;">启用代理</label>
+    </div>
     <div class="field">
       <label for="proxy_host">代理地址</label>
       <input id="proxy_host" name="proxy_host" value="{{ proxy_host }}" placeholder="127.0.0.1" />
