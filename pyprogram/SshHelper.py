@@ -1,7 +1,9 @@
 import os
 import re
+import socket
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from flask import redirect, render_template, request, url_for
@@ -169,24 +171,42 @@ def _test_sshd_config(config_path: Path) -> tuple[bool, str]:
     return False, f"SSH 配置语法检查失败：{last_error or '未找到 sshd 命令。'}"
 
 
-def _rollback_sshd_config(config_path: Path, backup_path: Path) -> tuple[bool, str]:
-    if not backup_path.exists():
-        return False, "未找到备份文件，无法回滚。"
+def _read_port_lines(config_path: Path) -> list[str]:
+    lines = []
+    if not config_path.exists():
+        return lines
 
     try:
-        shutil.copy2(backup_path, config_path)
-        return True, "已回滚到修改前配置。"
-    except Exception as exc:
-        return False, f"回滚失败：{exc}"
+        content = config_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return lines
+
+    for raw in content.splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if re.match(r"(?i)^Port\s+\d+", stripped):
+            lines.append(f"{config_path}: {stripped}")
+    return lines
 
 
-def _is_ssh_port_listening(port: int) -> tuple[bool, str]:
+def _collect_port_sources(main_config: Path) -> list[str]:
+    sources = []
+    sources.extend(_read_port_lines(main_config))
+
+    include_dir = Path("/etc/ssh/sshd_config.d")
+    if include_dir.exists() and include_dir.is_dir():
+        for conf in sorted(include_dir.glob("*.conf")):
+            sources.extend(_read_port_lines(conf))
+    return sources
+
+
+def _get_effective_sshd_settings(config_path: Path) -> tuple[bool, dict[str, str], str]:
     commands = [
-        ["ss", "-lnt"],
-        ["netstat", "-lnt"],
+        ["sshd", "-T", "-f", str(config_path)],
+        ["/usr/sbin/sshd", "-T", "-f", str(config_path)],
     ]
 
-    target = f":{port}"
     last_error = ""
     for cmd in commands:
         try:
@@ -203,10 +223,98 @@ def _is_ssh_port_listening(port: int) -> tuple[bool, str]:
                 last_error = detail
             continue
 
-        output = result.stdout or ""
-        for line in output.splitlines():
-            if target in line:
-                return True, f"已监听端口 {port}。"
+        settings = {}
+        for line in (result.stdout or "").splitlines():
+            if " " not in line:
+                continue
+            key, value = line.split(" ", 1)
+            settings[key.strip().lower()] = value.strip()
+        return True, settings, "ok"
+
+    return False, {}, last_error or "未找到 sshd 命令。"
+
+
+def _rollback_sshd_config(config_path: Path, backup_path: Path) -> tuple[bool, str]:
+    if not backup_path.exists():
+        return False, "未找到备份文件，无法回滚。"
+
+    try:
+        shutil.copy2(backup_path, config_path)
+        return True, "已回滚到修改前配置。"
+    except Exception as exc:
+        return False, f"回滚失败：{exc}"
+
+
+def _is_ssh_port_listening(port: int) -> tuple[bool, str]:
+    def _check_by_socket() -> bool:
+        for host in ("127.0.0.1", "::1"):
+            try:
+                with socket.create_connection((host, port), timeout=0.8):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _check_by_proc_net() -> bool:
+        target_hex = f"{port:04X}"
+        for proc_path in ("/proc/net/tcp", "/proc/net/tcp6"):
+            if not Path(proc_path).exists():
+                continue
+            try:
+                content = Path(proc_path).read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            for line in content.splitlines()[1:]:
+                parts = line.split()
+                if len(parts) < 4:
+                    continue
+                local = parts[1]
+                state = parts[3]
+                if ":" not in local:
+                    continue
+                local_port = local.split(":")[-1].upper()
+                if local_port == target_hex and state == "0A":
+                    return True
+        return False
+
+    def _check_by_cmd() -> tuple[bool, str]:
+        commands = [
+            ["ss", "-lnt"],
+            ["netstat", "-lnt"],
+        ]
+
+        target = f":{port}"
+        last_error = ""
+        for cmd in commands:
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            except FileNotFoundError:
+                continue
+            except Exception as exc:
+                last_error = str(exc)
+                continue
+
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout or "").strip()
+                if detail:
+                    last_error = detail
+                continue
+
+            output = result.stdout or ""
+            for line in output.splitlines():
+                if target in line:
+                    return True, ""
+
+        return False, last_error
+
+    last_error = ""
+    for _ in range(8):
+        cmd_ok, cmd_error = _check_by_cmd()
+        if cmd_ok or _check_by_proc_net() or _check_by_socket():
+            return True, f"已监听端口 {port}。"
+        if cmd_error:
+            last_error = cmd_error
+        time.sleep(1)
 
     return False, f"未检测到 SSH 监听端口 {port}。{(' ' + last_error) if last_error else ''}"
 
@@ -239,6 +347,26 @@ def apply_ssh_system_settings(
         if not checked:
             rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
             return False, f"{check_message}，{rollback_message if rolled_back else rollback_message}"
+
+        effective_ok, effective_settings, effective_message = _get_effective_sshd_settings(config_path)
+        if not effective_ok:
+            rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
+            return False, f"读取 SSH 生效配置失败：{effective_message}；{rollback_message}"
+
+        effective_port_text = effective_settings.get("port", "")
+        try:
+            effective_port = int(effective_port_text)
+        except ValueError:
+            effective_port = 0
+
+        if effective_port != ssh_port:
+            sources = _collect_port_sources(config_path)
+            source_text = "；".join(sources) if sources else "未发现显式 Port 配置行"
+            rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
+            return False, (
+                f"sshd 生效端口为 {effective_port or '未知'}，不是目标端口 {ssh_port}，"
+                f"可能被 Include 配置覆盖。端口来源：{source_text}；{rollback_message}"
+            )
 
         if ssh_public_key.strip():
             ssh_dir = Path.home() / ".ssh"
