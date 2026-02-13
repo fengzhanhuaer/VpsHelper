@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+
+  <h1>GitHub 更新管理</h1>
+  <p>可查看当前版本、远端最新版本，并执行自动更新与重启。</p>
+
+  {% if message %}
+    <div class="error">{{ message }}</div>
+  {% endif %}
+  {% if status.note %}
+    <div class="error">{{ status.note }}</div>
+  {% endif %}
+
+  <div style="display:grid; gap:8px; margin-bottom: 14px;">
+    <div><strong>当前分支：</strong>{{ status.branch }}</div>
+    <div><strong>当前版本：</strong>{{ status.current_version }}</div>
+    <div><strong>当前提交：</strong>{{ status.current_commit }}</div>
+    <div><strong>最新版本：</strong>{{ status.latest_version }}</div>
+    <div><strong>最新提交：</strong>{{ status.latest_commit }}</div>
+    <div><strong>落后提交数：</strong>{{ status.behind_count }}</div>
+  </div>
+
+  <form method="post" action="{{ url_for('system_update') }}" style="display:grid; gap:8px;">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <button class="ghost" type="submit" name="action" value="check">刷新最新版本</button>
+    <button class="btn" type="submit" name="action" value="update">自动从 GitHub 更新</button>
+    <button class="ghost" type="submit" name="action" value="restart">重启服务</button>
+  </form>
+{% endblock %}

@@ -1,5 +1,9 @@
 import os
 import sqlite3
+import subprocess
+import sys
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from secrets import token_urlsafe
@@ -19,6 +23,93 @@ app.config["APP_NAME"] = "VpsHelper"
 TgHelper.setup(app, BASE_DIR)
 
 SCHEDULER = BackgroundScheduler(timezone="Asia/Shanghai")
+
+
+def run_git_command(args: list[str]) -> tuple[bool, str]:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return False, "未检测到 git 命令，请先安装 Git。"
+    except Exception as exc:
+        return False, f"执行 Git 命令失败：{exc}"
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        return False, detail or "Git 命令执行失败。"
+
+    return True, (result.stdout or "").strip()
+
+
+def get_update_status() -> dict:
+    status = {
+        "repo_ok": False,
+        "branch": "-",
+        "current_version": "-",
+        "current_commit": "-",
+        "latest_version": "-",
+        "latest_commit": "-",
+        "behind_count": "-",
+        "remote": "origin",
+        "note": "",
+    }
+
+    ok, out = run_git_command(["rev-parse", "--is-inside-work-tree"])
+    if not ok or out.lower() != "true":
+        status["note"] = "当前目录不是 Git 仓库。"
+        return status
+    status["repo_ok"] = True
+
+    ok_branch, branch = run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+    if ok_branch and branch:
+        status["branch"] = branch
+
+    ok_cur_ver, cur_ver = run_git_command(["describe", "--tags", "--always"])
+    if ok_cur_ver and cur_ver:
+        status["current_version"] = cur_ver
+
+    ok_cur_sha, cur_sha = run_git_command(["rev-parse", "HEAD"])
+    if ok_cur_sha and cur_sha:
+        status["current_commit"] = cur_sha[:7]
+
+    ok_fetch, fetch_msg = run_git_command(["fetch", "origin"])
+    if not ok_fetch:
+        status["note"] = f"获取远端信息失败：{fetch_msg}"
+        return status
+
+    branch = status["branch"]
+    if branch and branch != "-":
+        ok_latest_sha, latest_sha = run_git_command(["rev-parse", f"origin/{branch}"])
+        if ok_latest_sha and latest_sha:
+            status["latest_commit"] = latest_sha[:7]
+            ok_latest_ver, latest_ver = run_git_command(["describe", "--tags", "--always", latest_sha.strip()])
+            status["latest_version"] = latest_ver if ok_latest_ver and latest_ver else latest_sha[:7]
+            ok_behind, behind = run_git_command(["rev-list", "--count", f"HEAD..origin/{branch}"])
+            if ok_behind and behind.isdigit():
+                status["behind_count"] = behind
+            return status
+
+    ok_remote_head, remote_head = run_git_command(["ls-remote", "origin", "HEAD"])
+    if ok_remote_head and remote_head:
+        remote_sha = remote_head.split()[0]
+        status["latest_commit"] = remote_sha[:7]
+        ok_latest_ver, latest_ver = run_git_command(["describe", "--tags", "--always", remote_sha])
+        status["latest_version"] = latest_ver if ok_latest_ver and latest_ver else remote_sha[:7]
+
+    return status
+
+
+def restart_current_process_delayed(delay_seconds: float = 1.0) -> None:
+    def _restart():
+        time.sleep(delay_seconds)
+        os.execv(sys.executable, [sys.executable, *sys.argv])
+
+    threading.Thread(target=_restart, daemon=True).start()
 
 
 def get_db():
@@ -193,6 +284,39 @@ def home():
     if not username:
         return redirect(url_for("login"))
     return render_template("home.html", username=username, token=token)
+
+
+@app.route("/system/update", methods=["GET", "POST"])
+def system_update():
+    token = request.args.get("token") or request.form.get("token")
+    username = require_login()
+    if not username:
+        return redirect(url_for("login"))
+
+    message = None
+    if request.method == "POST":
+        action = request.form.get("action", "check")
+        if action == "update":
+            ok_branch, branch = run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+            if not ok_branch or not branch:
+                message = f"更新失败：{branch or '无法识别当前分支。'}"
+            else:
+                ok_pull, pull_out = run_git_command(["pull", "--ff-only", "origin", branch])
+                message = f"更新成功：{pull_out}" if ok_pull else f"更新失败：{pull_out}"
+        elif action == "restart":
+            message = "服务将在 1 秒后自动重启，请稍后刷新页面。"
+            restart_current_process_delayed(1.0)
+        else:
+            message = "已刷新最新版本信息。"
+
+    status = get_update_status()
+    return render_template(
+        "update_manager.html",
+        token=token,
+        username=username,
+        message=message,
+        status=status,
+    )
 
 
 @app.route("/firewall")

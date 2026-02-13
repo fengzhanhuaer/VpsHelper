@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-  <div class="top-actions">
+  <div class="top-actions" style="justify-content: flex-end; gap: 8px;">
+    <a class="ghost" href="{{ url_for('system_update', token=token) }}">GitHub更新</a>
     <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
   </div>
   <h1>欢迎，{{ username }}</h1>
