@@ -27,7 +27,10 @@
     </div>
     <div class="field">
       <label for="proxy_password">代理密码（可选）</label>
-      <input id="proxy_password" name="proxy_password" type="password" value="{{ proxy_password }}" />
+      <div class="password-wrap">
+        <input id="proxy_password" name="proxy_password" type="password" value="{{ proxy_password }}" />
+        <button class="toggle-password" type="button" data-toggle-password="proxy_password">显示</button>
+      </div>
     </div>
     <div style="display: flex; gap: 8px;">
       <button class="btn" type="submit" name="action" value="save">保存</button>

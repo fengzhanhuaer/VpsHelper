@@ -86,11 +86,45 @@
       font-size: 13px;
       text-decoration: none;
     }
+    .password-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .password-wrap input {
+      flex: 1;
+    }
+    .toggle-password {
+      border: 1px solid #dbeafe;
+      background: transparent;
+      color: var(--primary);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
   <div class="card">
     {% block content %}{% endblock %}
   </div>
+  <script>
+    document.addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-toggle-password]");
+      if (!btn) {
+        return;
+      }
+      const targetId = btn.getAttribute("data-toggle-password");
+      const input = document.getElementById(targetId);
+      if (!input) {
+        return;
+      }
+      const toText = input.type === "password";
+      input.type = toText ? "text" : "password";
+      btn.textContent = toText ? "隐藏" : "显示";
+    });
+  </script>
 </body>
 </html>

@@ -319,6 +319,39 @@ def system_update():
     )
 
 
+@app.route("/change_password", methods=["GET", "POST"])
+def change_password():
+    token = request.args.get("token") or request.form.get("token")
+    username = require_login()
+    if not username:
+        return redirect(url_for("login"))
+
+    message = None
+    if request.method == "POST":
+        old_password = request.form.get("old_password", "").strip()
+        new_password = request.form.get("new_password", "").strip()
+        confirm_password = request.form.get("confirm_password", "").strip()
+
+        if not old_password or not new_password or not confirm_password:
+            message = "请完整填写旧密码、新密码和确认密码。"
+        elif new_password != confirm_password:
+            message = "两次输入的新密码不一致。"
+        else:
+            db = get_db()
+            user = db.execute("SELECT password_hash FROM users WHERE username = ?", (username,)).fetchone()
+            if not user or not check_password_hash(user["password_hash"], old_password):
+                message = "旧密码错误。"
+            else:
+                db.execute(
+                    "UPDATE users SET password_hash = ? WHERE username = ?",
+                    (generate_password_hash(new_password), username),
+                )
+                db.commit()
+                message = "密码已修改。"
+
+    return render_template("change_password.html", token=token, username=username, message=message)
+
+
 @app.route("/firewall")
 def firewall():
     token = request.args.get("token")

@@ -15,11 +15,17 @@
     </div>
     <div class="field">
       <label for="password">密码</label>
-      <input id="password" name="password" type="password" required />
+      <div class="password-wrap">
+        <input id="password" name="password" type="password" required />
+        <button class="toggle-password" type="button" data-toggle-password="password">显示</button>
+      </div>
     </div>
     <div class="field">
       <label for="confirm">确认密码</label>
-      <input id="confirm" name="confirm" type="password" required />
+      <div class="password-wrap">
+        <input id="confirm" name="confirm" type="password" required />
+        <button class="toggle-password" type="button" data-toggle-password="confirm">显示</button>
+      </div>
     </div>
     <button class="btn" type="submit">注册并登录</button>
   </form>
