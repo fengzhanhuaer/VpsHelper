@@ -687,9 +687,10 @@ def apply_ssh_system_settings(
         if socket_unit:
             ok_socket, msg_socket = _set_ssh_socket_port(socket_unit, ssh_port)
             if not ok_socket:
-                rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
-                return False, f"SSH socket 端口更新失败：{msg_socket}；{rollback_message}"
-            socket_note = msg_socket
+                socket_note = f"SSH socket 端口更新失败，已降级为服务模式继续：{msg_socket}"
+                _run_command(["systemctl", "disable", "--now", socket_unit])
+            else:
+                socket_note = msg_socket
 
         if ssh_public_key.strip():
             ssh_dir = Path.home() / ".ssh"
