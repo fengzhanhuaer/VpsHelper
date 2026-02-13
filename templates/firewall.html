@@ -27,21 +27,42 @@
     <a class="ghost" href="{{ url_for('logout', token=token) }}" style="margin-left: auto;">退出登录</a>
   </div>
   <h1>防火墙</h1>
-  <p>查看当前防火墙类型、开放端口及端口绑定 IP。</p>
+  <p>查看防火墙类型、开放端口、监听 IP 与进程，并可执行启用与端口开放操作。</p>
+
+  {% if message %}
+    <div class="error">{{ message }}</div>
+  {% endif %}
 
   <div style="margin-top: 12px; margin-bottom: 12px;">
     <div><strong>防火墙类型：</strong>{{ firewall_type }}</div>
+    <div><strong>当前状态：</strong>{{ firewall_status }}</div>
     {% if note %}
       <div style="margin-top: 6px; color: var(--muted);">{{ note }}</div>
     {% endif %}
   </div>
+
+  <form method="post" action="{{ url_for('firewall') }}" style="display:grid; gap:8px; margin-bottom: 12px;">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <button class="ghost" type="submit" name="action" value="enable_firewall">启用防火墙</button>
+  </form>
+
+  <form method="post" action="{{ url_for('firewall') }}" style="display:grid; gap:8px; margin-bottom: 14px;">
+    <input type="hidden" name="token" value="{{ token }}" />
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input name="port" placeholder="输入要开放的端口，例如 8080" />
+      <button class="btn" type="submit" name="action" value="open_port" style="width:auto;">开放端口</button>
+    </div>
+  </form>
+
+  <h3 style="margin: 0 0 8px; font-size: 16px;">防火墙已开放端口</h3>
 
   {% if port_rows %}
     <table>
       <thead>
         <tr>
           <th style="width: 140px;">开放端口</th>
-          <th>绑定 IP</th>
+          <th style="width: 260px;">绑定 IP</th>
+          <th>进程名称</th>
         </tr>
       </thead>
       <tbody>
@@ -49,11 +70,36 @@
           <tr>
             <td>{{ row.port }}</td>
             <td>{{ row.bind_ips | join('，') }}</td>
+            <td>{{ row.process_names | join('，') }}</td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   {% else %}
-    <p style="color: var(--muted); margin-top: 12px;">未检测到开放端口。</p>
+    <p style="color: var(--muted); margin-top: 12px;">未检测到防火墙开放端口。</p>
+  {% endif %}
+
+  <h3 style="margin: 16px 0 8px; font-size: 16px;">已打开端口（监听中）</h3>
+  {% if listening_rows %}
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 140px;">监听端口</th>
+          <th style="width: 260px;">绑定 IP</th>
+          <th>进程名称</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in listening_rows %}
+          <tr>
+            <td>{{ row.port }}</td>
+            <td>{{ row.bind_ip }}</td>
+            <td>{{ row.process_names | join('，') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color: var(--muted); margin-top: 12px;">未检测到监听端口。</p>
   {% endif %}
 {% endblock %}
