@@ -129,8 +129,9 @@ def new_module():
 
 ## 数据库
 - 用户数据目录: `./userdata/`
-- 主程序数据库文件: `./userdata/VpsHelper.db`（users/sessions）
-- Tg助手数据库文件: `./userdata/TgHelper.db`（tg_accounts、tg_dialogs、tg_sign_tasks、tg_auto_send_tasks、tg_login_flows、app_settings）
+- 统一数据库文件: `./userdata/VpsHelper.db`（单库多表）
+- 主程序表: `users`、`sessions`
+- Tg助手表: `tg_accounts`、`tg_dialogs`、`tg_sign_tasks`、`tg_auto_send_tasks`、`tg_login_flows`、`app_settings`
 - Cloudflare D1 数据库名: `TgHelper`
 - 端口: 15018
 

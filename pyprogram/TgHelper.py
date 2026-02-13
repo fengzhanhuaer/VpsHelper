@@ -17,6 +17,7 @@ from telethon.sessions import StringSession
 APP = None
 USERDATA_DIR: Path | None = None
 TG_DB_PATH: Path | None = None
+LEGACY_TG_DB_PATH: Path | None = None
 
 TG_TABLES = [
     "tg_accounts",
@@ -34,13 +35,14 @@ UTC_PLUS_8 = timezone(timedelta(hours=8))
 
 
 def setup(app, base_dir: Path) -> None:
-    global APP, USERDATA_DIR, TG_DB_PATH
+    global APP, USERDATA_DIR, TG_DB_PATH, LEGACY_TG_DB_PATH
     APP = app
     APP.config["TELEGRAM_API_ID"] = os.environ.get("TELEGRAM_API_ID")
     APP.config["TELEGRAM_API_HASH"] = os.environ.get("TELEGRAM_API_HASH")
     USERDATA_DIR = base_dir / "userdata"
     USERDATA_DIR.mkdir(parents=True, exist_ok=True)
-    TG_DB_PATH = USERDATA_DIR / "TgHelper.db"
+    TG_DB_PATH = USERDATA_DIR / "VpsHelper.db"
+    LEGACY_TG_DB_PATH = USERDATA_DIR / "TgHelper.db"
 
 
 def _require_setup() -> None:
@@ -70,10 +72,62 @@ def append_utc8_timestamp(message: str) -> str:
 
 def get_tg_db():
     _require_setup()
+    if "db" in g:
+        return g.db
     if "tg_db" not in g:
         g.tg_db = sqlite3.connect(TG_DB_PATH)
         g.tg_db.row_factory = sqlite3.Row
     return g.tg_db
+
+
+def migrate_legacy_tg_db(target_db: sqlite3.Connection) -> None:
+    if LEGACY_TG_DB_PATH is None or TG_DB_PATH is None:
+        return
+    if LEGACY_TG_DB_PATH == TG_DB_PATH:
+        return
+    if not LEGACY_TG_DB_PATH.exists():
+        return
+
+    source_db = sqlite3.connect(LEGACY_TG_DB_PATH)
+    source_db.row_factory = sqlite3.Row
+    try:
+        ensure_auto_send_table(source_db)
+        existing_tables = {
+            row["name"]
+            for row in source_db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+
+        for table in TG_TABLES:
+            if table not in existing_tables:
+                continue
+
+            source_columns = [
+                col["name"]
+                for col in source_db.execute(f"PRAGMA table_info({table})").fetchall()
+            ]
+            if not source_columns:
+                continue
+
+            target_columns = {
+                col["name"]
+                for col in target_db.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            columns = [name for name in source_columns if name in target_columns]
+            if not columns:
+                continue
+
+            column_sql = ", ".join(columns)
+            placeholders = ", ".join(["?"] * len(columns))
+            rows = source_db.execute(f"SELECT {column_sql} FROM {table}").fetchall()
+            if not rows:
+                continue
+
+            target_db.executemany(
+                f"INSERT OR IGNORE INTO {table} ({column_sql}) VALUES ({placeholders})",
+                [tuple(row[column] for column in columns) for row in rows],
+            )
+    finally:
+        source_db.close()
 
 
 def ensure_auto_send_table(db: sqlite3.Connection) -> None:
@@ -205,6 +259,15 @@ def init_tg_db() -> None:
         )
         """
     )
+
+    migration_flag = db.execute(
+        "SELECT value FROM app_settings WHERE key = 'tg_legacy_db_migrated'"
+    ).fetchone()
+    if not migration_flag:
+        migrate_legacy_tg_db(db)
+        db.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('tg_legacy_db_migrated', '1')"
+        )
     db.commit()
 
 

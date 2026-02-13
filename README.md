@@ -67,7 +67,8 @@ python VpsHelper.py
 ## 备注
 
 - 用户数据统一存放在安装目录 `./userdata/`
-- 主程序本地数据库文件名为 `./userdata/VpsHelper.db`（登录账号与会话）
-- Tg助手本地数据库文件名为 `./userdata/TgHelper.db`（TG账号、任务、配置）
+- 本地数据库文件名统一为 `./userdata/VpsHelper.db`（单库多表）
+- 主程序表：`users`、`sessions`
+- Tg助手表：`tg_accounts`、`tg_dialogs`、`tg_sign_tasks`、`tg_auto_send_tasks`、`tg_login_flows`、`app_settings`
 - 端口默认 15018
 - 自动任务时间展示为 UTC+8

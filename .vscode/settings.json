@@ -1,0 +1,16 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^Push-Location \"d:\\\\100\\.Working\\\\GithubWork\\\\VpsHelper\"; d:/100\\.Working/GithubWork/VpsHelper/\\.venv/Scripts/python\\.exe VpsHelper\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^Push-Location \"d:\\\\100\\.Working\\\\GithubWork\\\\VpsHelper\"; d:/100\\.Working/GithubWork/VpsHelper/\\.venv/Scripts/python\\.exe -m pip install -r requirements\\.txt$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^Push-Location \"d:\\\\100\\.Working\\\\GithubWork\\\\VpsHelper\"; d:/100\\.Working/GithubWork/VpsHelper/\\.venv/Scripts/python\\.exe -c \"import sqlite3; conn=sqlite3\\.connect\\('userdata/VpsHelper\\.db'\\); cur=conn\\.execute\\(\\\\\"select name from sqlite_master where type='table' and name in \\('users','sessions','tg_accounts','tg_dialogs','tg_sign_tasks','tg_auto_send_tasks','tg_login_flows','app_settings'\\) order by name\\\\\"\\); print\\(\\[r\\[0\\] for r in cur\\.fetchall\\(\\)\\]\\); conn\\.close\\(\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
