@@ -34,15 +34,15 @@ chmod +x VpsHelper.sh
 ### Linux 一键安装为服务
 复制一条命令即可下载安装并自动安装/启动服务：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install.sh | sudo bash
+curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash
 ```
 无 curl 时可用：
 ```bash
-wget -qO- https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install.sh | sudo bash
+wget -qO- https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash
 ```
 指定安装目录（可选）：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install.sh | sudo bash -s -- https://github.com/fengzhanhuaer/VpsHelper /opt/vpshelper
+curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash -s -- https://github.com/fengzhanhuaer/VpsHelper /opt/vpshelper
 ```
 
 ### 手动安装依赖

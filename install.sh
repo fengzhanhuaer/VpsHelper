@@ -7,7 +7,7 @@ INSTALL_DIR="${2:-${INSTALL_DIR:-}}"
 SERVICE_NAME="${SERVICE_NAME:-vpshelper}"
 
 if [[ "${EUID}" -ne 0 ]]; then
-    echo "请使用 root 执行，例如：curl -fsSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install.sh | sudo bash"
+    echo "请使用 root 执行，例如：curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash"
     exit 1
 fi
 
