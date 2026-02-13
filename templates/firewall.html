@@ -1,12 +1,59 @@
 {% extends "base.html" %}
 {% block content %}
+  <style>
+    .card {
+      max-width: 980px;
+      width: min(980px, calc(100vw - 48px));
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      padding: 8px 6px;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+    }
+  </style>
+
   <div class="top-actions">
     <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
     <a class="ghost" href="{{ url_for('logout', token=token) }}" style="margin-left: auto;">退出登录</a>
   </div>
   <h1>防火墙</h1>
-  <p>防火墙管理功能 - 开发中</p>
-  <div style="margin-top: 12px;">
-    <p style="color: var(--muted);">此功能正在开发中，敬请期待。</p>
+  <p>查看当前防火墙类型、开放端口及端口绑定 IP。</p>
+
+  <div style="margin-top: 12px; margin-bottom: 12px;">
+    <div><strong>防火墙类型：</strong>{{ firewall_type }}</div>
+    {% if note %}
+      <div style="margin-top: 6px; color: var(--muted);">{{ note }}</div>
+    {% endif %}
   </div>
+
+  {% if port_rows %}
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 140px;">开放端口</th>
+          <th>绑定 IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in port_rows %}
+          <tr>
+            <td>{{ row.port }}</td>
+            <td>{{ row.bind_ips | join('，') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color: var(--muted); margin-top: 12px;">未检测到开放端口。</p>
+  {% endif %}
 {% endblock %}
