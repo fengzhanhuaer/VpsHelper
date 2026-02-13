@@ -10,7 +10,7 @@ from secrets import token_urlsafe
 from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
-from pyprogram import SshHelper, TgHelper
+from pyprogram import FirewallHelper, ShellHelper, SshHelper, TgHelper
 
 BASE_DIR = Path(__file__).resolve().parent
 USERDATA_DIR = BASE_DIR / "userdata"
@@ -22,6 +22,8 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
 app.config["APP_NAME"] = "VpsHelper"
 TgHelper.setup(app, BASE_DIR)
 SshHelper.setup(app, BASE_DIR)
+ShellHelper.setup(app, BASE_DIR)
+FirewallHelper.setup(app, BASE_DIR)
 
 SCHEDULER = BackgroundScheduler(timezone="Asia/Shanghai")
 
@@ -203,6 +205,8 @@ def configure_scheduler_jobs():
 
 TgHelper.register_routes(require_login, configure_scheduler_jobs)
 SshHelper.register_routes(require_login, get_db)
+ShellHelper.register_routes(require_login)
+FirewallHelper.register_routes(require_login)
 
 
 @app.before_request
@@ -352,15 +356,6 @@ def change_password():
                 message = "密码已修改。"
 
     return render_template("change_password.html", token=token, username=username, message=message)
-
-
-@app.route("/firewall")
-def firewall():
-    token = request.args.get("token")
-    username = require_login()
-    if not username:
-        return redirect(url_for("login"))
-    return render_template("firewall.html", username=username, token=token)
 
 
 @app.route("/logout")

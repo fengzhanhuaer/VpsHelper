@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+  <style>
+    .card {
+      max-width: 980px;
+      width: min(980px, calc(100vw - 48px));
+    }
+    .terminal {
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 10px;
+      padding: 12px;
+      min-height: 280px;
+      max-height: 420px;
+      overflow: auto;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>Shell 交互</h1>
+  <p>当前目录：<span id="cwd-text">{{ cwd }}</span></p>
+
+  <div id="terminal" class="terminal">欢迎使用 Shell 交互。输入命令后点击执行。</div>
+
+  <form id="shell-form" style="margin-top: 10px; display:flex; gap:8px;">
+    <input type="hidden" id="token" value="{{ token }}" />
+    <input id="command" placeholder="输入命令，例如 ls -al" autocomplete="off" required />
+    <button class="ghost" type="submit" style="white-space:nowrap;">执行</button>
+  </form>
+
+  <script>
+    const form = document.getElementById("shell-form");
+    const commandInput = document.getElementById("command");
+    const terminal = document.getElementById("terminal");
+    const cwdText = document.getElementById("cwd-text");
+    const token = document.getElementById("token").value;
+
+    function appendLine(text) {
+      terminal.textContent += "\n" + text;
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const cmd = commandInput.value.trim();
+      if (!cmd) {
+        return;
+      }
+
+      appendLine("\n$ " + cmd);
+      commandInput.value = "";
+
+      const body = new URLSearchParams();
+      body.set("token", token);
+      body.set("command", cmd);
+
+      try {
+        const response = await fetch("{{ url_for('shell_exec') }}", {
+          method: "POST",
+          headers: {"Content-Type": "application/x-www-form-urlencoded"},
+          body: body.toString(),
+        });
+        const data = await response.json();
+        cwdText.textContent = data.cwd || cwdText.textContent;
+        appendLine(data.output || "(无输出)");
+      } catch (error) {
+        appendLine("请求失败：" + error);
+      }
+    });
+  </script>
+{% endblock %}
