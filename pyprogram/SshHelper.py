@@ -30,6 +30,91 @@ def _set_config_option(content: str, key: str, value: str) -> str:
     return content + replacement + "\n"
 
 
+def _extract_ssh_port(content: str) -> int:
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = re.match(r"(?i)^Port\s+(\d+)$", stripped)
+        if match:
+            try:
+                port = int(match.group(1))
+                if 1 <= port <= 65535:
+                    return port
+            except ValueError:
+                pass
+    return 22
+
+
+def _run_command(args: list[str]) -> tuple[bool, str]:
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return False, "command not found"
+    except Exception as exc:
+        return False, str(exc)
+
+    if result.returncode == 0:
+        return True, (result.stdout or "").strip()
+    detail = (result.stderr or result.stdout or "").strip()
+    return False, detail or f"exit code {result.returncode}"
+
+
+def _apply_firewall_port_change(new_port: int, old_port: int) -> tuple[bool, str]:
+    notes = []
+
+    if shutil.which("ufw"):
+        ok_status, status_text = _run_command(["ufw", "status"])
+        if ok_status and "inactive" not in (status_text or "").lower():
+            ok_allow, msg_allow = _run_command(["ufw", "allow", f"{new_port}/tcp"])
+            if not ok_allow:
+                return False, f"UFW 放行新端口失败：{msg_allow}"
+            notes.append(f"UFW 已放行 {new_port}/tcp")
+
+            if old_port != new_port:
+                ok_deny, msg_deny = _run_command(["ufw", "deny", f"{old_port}/tcp"])
+                if not ok_deny:
+                    return False, f"UFW 关闭旧端口失败：{msg_deny}"
+                notes.append(f"UFW 已关闭 {old_port}/tcp")
+
+            return True, "；".join(notes)
+
+    if shutil.which("iptables"):
+        ok_check_new, _ = _run_command(["iptables", "-C", "INPUT", "-p", "tcp", "--dport", str(new_port), "-j", "ACCEPT"])
+        if not ok_check_new:
+            ok_add_new, msg_add_new = _run_command(["iptables", "-I", "INPUT", "-p", "tcp", "--dport", str(new_port), "-j", "ACCEPT"])
+            if not ok_add_new:
+                return False, f"iptables 放行新端口失败：{msg_add_new}"
+        notes.append(f"iptables 已放行 {new_port}/tcp")
+
+        if old_port != new_port:
+            while True:
+                ok_has_old_accept, _ = _run_command(["iptables", "-C", "INPUT", "-p", "tcp", "--dport", str(old_port), "-j", "ACCEPT"])
+                if not ok_has_old_accept:
+                    break
+                ok_del_old_accept, msg_del_old_accept = _run_command(["iptables", "-D", "INPUT", "-p", "tcp", "--dport", str(old_port), "-j", "ACCEPT"])
+                if not ok_del_old_accept:
+                    return False, f"iptables 删除旧端口放行规则失败：{msg_del_old_accept}"
+
+            ok_has_old_drop, _ = _run_command(["iptables", "-C", "INPUT", "-p", "tcp", "--dport", str(old_port), "-j", "DROP"])
+            if not ok_has_old_drop:
+                ok_add_old_drop, msg_add_old_drop = _run_command(["iptables", "-I", "INPUT", "-p", "tcp", "--dport", str(old_port), "-j", "DROP"])
+                if not ok_add_old_drop:
+                    return False, f"iptables 关闭旧端口失败：{msg_add_old_drop}"
+            notes.append(f"iptables 已关闭 {old_port}/tcp")
+
+        if shutil.which("netfilter-persistent"):
+            ok_save, msg_save = _run_command(["netfilter-persistent", "save"])
+            if ok_save:
+                notes.append("iptables 规则已持久化")
+            else:
+                notes.append(f"iptables 持久化失败：{msg_save}")
+
+        return True, "；".join(notes)
+
+    return False, "未检测到可用防火墙（ufw 或 iptables）。"
+
+
 def _restart_ssh_service() -> tuple[bool, str]:
     commands = [
         ["systemctl", "restart", "sshd"],
@@ -84,6 +169,48 @@ def _test_sshd_config(config_path: Path) -> tuple[bool, str]:
     return False, f"SSH 配置语法检查失败：{last_error or '未找到 sshd 命令。'}"
 
 
+def _rollback_sshd_config(config_path: Path, backup_path: Path) -> tuple[bool, str]:
+    if not backup_path.exists():
+        return False, "未找到备份文件，无法回滚。"
+
+    try:
+        shutil.copy2(backup_path, config_path)
+        return True, "已回滚到修改前配置。"
+    except Exception as exc:
+        return False, f"回滚失败：{exc}"
+
+
+def _is_ssh_port_listening(port: int) -> tuple[bool, str]:
+    commands = [
+        ["ss", "-lnt"],
+        ["netstat", "-lnt"],
+    ]
+
+    target = f":{port}"
+    last_error = ""
+    for cmd in commands:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            continue
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            if detail:
+                last_error = detail
+            continue
+
+        output = result.stdout or ""
+        for line in output.splitlines():
+            if target in line:
+                return True, f"已监听端口 {port}。"
+
+    return False, f"未检测到 SSH 监听端口 {port}。{(' ' + last_error) if last_error else ''}"
+
+
 def apply_ssh_system_settings(
     ssh_port: int,
     allow_password_login: bool,
@@ -99,6 +226,7 @@ def apply_ssh_system_settings(
 
     try:
         content = config_path.read_text(encoding="utf-8")
+        old_port = _extract_ssh_port(content)
         updated = _set_config_option(content, "Port", str(ssh_port))
         updated = _set_config_option(updated, "PasswordAuthentication", "yes" if allow_password_login else "no")
         updated = _set_config_option(updated, "PubkeyAuthentication", "yes" if allow_key_login else "no")
@@ -109,8 +237,8 @@ def apply_ssh_system_settings(
 
         checked, check_message = _test_sshd_config(config_path)
         if not checked:
-            shutil.copy2(backup_path, config_path)
-            return False, f"{check_message}，已自动回滚配置。"
+            rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
+            return False, f"{check_message}，{rollback_message if rolled_back else rollback_message}"
 
         if ssh_public_key.strip():
             ssh_dir = Path.home() / ".ssh"
@@ -130,9 +258,23 @@ def apply_ssh_system_settings(
 
         restarted, restart_message = _restart_ssh_service()
         if not restarted:
-            return False, restart_message
+            rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
+            if rolled_back:
+                _restart_ssh_service()
+            return False, f"{restart_message}；{rollback_message}"
 
-        return True, "SSH 配置已应用到系统。"
+        listening, listening_message = _is_ssh_port_listening(ssh_port)
+        if not listening:
+            rolled_back, rollback_message = _rollback_sshd_config(config_path, backup_path)
+            if rolled_back:
+                _restart_ssh_service()
+            return False, f"{listening_message}；{rollback_message}"
+
+        firewall_ok, firewall_message = _apply_firewall_port_change(ssh_port, old_port)
+        if not firewall_ok:
+            return False, f"SSH 已监听新端口，但防火墙处理失败：{firewall_message}"
+
+        return True, f"SSH 配置已应用到系统。{listening_message}；{firewall_message}"
     except PermissionError:
         return False, "权限不足，无法修改 SSH 配置。请使用 root 权限运行。"
     except Exception as exc:
