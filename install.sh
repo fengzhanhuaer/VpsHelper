@@ -32,6 +32,25 @@ ensure_command() {
 ensure_command git "请先用系统包管理器安装 git"
 ensure_command python3 "请先用系统包管理器安装 python3"
 
+install_python_venv_if_needed() {
+    if command -v apt-get >/dev/null 2>&1; then
+        echo "检测到 apt，尝试安装 python3-venv..."
+        apt-get update -y >/dev/null 2>&1 || true
+        if apt-get install -y python3-venv; then
+            return 0
+        fi
+
+        local pyver
+        pyver="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+        if [[ -n "${pyver}" ]]; then
+            apt-get install -y "python${pyver}-venv" && return 0
+        fi
+        return 1
+    fi
+
+    return 1
+}
+
 if [[ -d "${INSTALL_DIR}/.git" ]]; then
     echo "更新仓库: ${INSTALL_DIR}"
     git -C "${INSTALL_DIR}" fetch --prune
@@ -47,8 +66,15 @@ cd "${INSTALL_DIR}"
 if [[ ! -d ".venv" ]]; then
     echo "创建虚拟环境..."
     if ! python3 -m venv .venv; then
-        echo "创建 venv 失败。Debian/Ubuntu 可先执行: apt-get install -y python3-venv"
-        exit 1
+        echo "首次创建 venv 失败，尝试自动安装 venv 组件后重试..."
+        if install_python_venv_if_needed && python3 -m venv .venv; then
+            echo "venv 组件安装成功，已完成虚拟环境创建。"
+        else
+            echo "创建 venv 失败。请手动安装后重试："
+            echo "  Debian/Ubuntu: apt-get install -y python3-venv"
+            echo "  或按版本安装: apt-get install -y python3.x-venv"
+            exit 1
+        fi
     fi
 fi
 
