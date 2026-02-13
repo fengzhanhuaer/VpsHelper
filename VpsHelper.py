@@ -10,7 +10,7 @@ from secrets import token_urlsafe
 from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
-from pyprogram import FirewallHelper, ShellHelper, SshHelper, TgHelper
+from pyprogram import FirewallHelper, ShellHelper, SshHelper, StatusHelper, TgHelper
 
 BASE_DIR = Path(__file__).resolve().parent
 USERDATA_DIR = BASE_DIR / "userdata"
@@ -24,6 +24,7 @@ TgHelper.setup(app, BASE_DIR)
 SshHelper.setup(app, BASE_DIR)
 ShellHelper.setup(app, BASE_DIR)
 FirewallHelper.setup(app, BASE_DIR)
+StatusHelper.setup(app, BASE_DIR)
 
 SCHEDULER = BackgroundScheduler(timezone="Asia/Shanghai")
 
@@ -207,6 +208,7 @@ TgHelper.register_routes(require_login, configure_scheduler_jobs)
 SshHelper.register_routes(require_login, get_db)
 ShellHelper.register_routes(require_login, get_db)
 FirewallHelper.register_routes(require_login)
+StatusHelper.register_routes(require_login)
 
 
 @app.before_request

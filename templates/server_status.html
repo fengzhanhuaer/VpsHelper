@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+  <style>
+    .card {
+      max-width: 980px;
+      width: min(980px, calc(100vw - 48px));
+    }
+    .status-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+    .status-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px;
+      background: #fff;
+    }
+    .status-item h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+    .big {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 2px 0 6px;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+
+  <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
+    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+  </div>
+  <h1>服务器状态</h1>
+  <p>自动刷新显示 RAM、CPU、硬盘使用情况。</p>
+
+  <div class="status-grid">
+    <div class="status-item">
+      <h3>RAM 使用率</h3>
+      <div class="big" id="ram-usage">{{ status.ram.usage_percent }}%</div>
+      <div class="muted" id="ram-detail">已用 {{ status.ram.used }} / 总计 {{ status.ram.total }}</div>
+    </div>
+
+    <div class="status-item">
+      <h3>CPU 使用率</h3>
+      <div class="big" id="cpu-usage">{{ status.cpu.usage_percent }}%</div>
+      <div class="muted">基于 /proc/stat 差分计算</div>
+    </div>
+
+    <div class="status-item">
+      <h3>硬盘使用率</h3>
+      <div class="big" id="disk-usage">{{ status.disk.usage_percent }}%</div>
+      <div class="muted" id="disk-detail">已用 {{ status.disk.used }} / 总计 {{ status.disk.total }}</div>
+    </div>
+  </div>
+
+  <div class="muted" id="last-updated" style="margin-top: 10px;">最后刷新：--</div>
+
+  <script>
+    const token = "{{ token }}";
+
+    function fmtBytes(bytes) {
+      const value = Number(bytes || 0);
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let idx = 0;
+      let num = value;
+      while (num >= 1024 && idx < units.length - 1) {
+        num /= 1024;
+        idx += 1;
+      }
+      return num.toFixed(idx === 0 ? 0 : 2) + " " + units[idx];
+    }
+
+    function updateStatus(data) {
+      document.getElementById("ram-usage").textContent = (data.ram.usage_percent || 0) + "%";
+      document.getElementById("ram-detail").textContent = "已用 " + fmtBytes(data.ram.used) + " / 总计 " + fmtBytes(data.ram.total);
+
+      document.getElementById("cpu-usage").textContent = (data.cpu.usage_percent || 0) + "%";
+
+      document.getElementById("disk-usage").textContent = (data.disk.usage_percent || 0) + "%";
+      document.getElementById("disk-detail").textContent = "已用 " + fmtBytes(data.disk.used) + " / 总计 " + fmtBytes(data.disk.total);
+
+      document.getElementById("last-updated").textContent = "最后刷新：" + new Date().toLocaleString();
+    }
+
+    async function fetchStatus() {
+      try {
+        const response = await fetch("{{ url_for('server_status_data') }}?token=" + encodeURIComponent(token));
+        const result = await response.json();
+        if (result.ok) {
+          updateStatus(result.data);
+        }
+      } catch (_error) {
+      }
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 3000);
+  </script>
+{% endblock %}

@@ -10,6 +10,7 @@
   <div style="margin-top: 12px; display: grid; gap: 10px;">
     <a class="btn" href="{{ url_for('database_settings', token=token) }}">数据库管理</a>
     <a class="btn" href="{{ url_for('tg_helper', token=token) }}">Tg助手</a>
+    <a class="btn" href="{{ url_for('server_status', token=token) }}">服务器状态</a>
     <a class="btn" href="{{ url_for('ssh_settings', token=token) }}">SSH设置</a>
     <a class="btn" href="{{ url_for('shell_console', token=token) }}">Shell交互</a>
     <a class="btn" href="{{ url_for('firewall', token=token) }}">防火墙</a>
