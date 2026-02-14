@@ -31,7 +31,7 @@ StatusHelper.setup(app, BASE_DIR)
 SCHEDULER = BackgroundScheduler(timezone=TimeHelper.get_apscheduler_timezone_name())
 
 
-def run_git_command(args: list[str]) -> tuple[bool, str]:
+def run_git_command(args: list[str], timeout_seconds: float | None = None) -> tuple[bool, str]:
     try:
         result = subprocess.run(
             ["git", *args],
@@ -39,9 +39,12 @@ def run_git_command(args: list[str]) -> tuple[bool, str]:
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout_seconds,
         )
     except FileNotFoundError:
         return False, "未检测到 git 命令，请先安装 Git。"
+    except subprocess.TimeoutExpired:
+        return False, f"Git 命令超时（{timeout_seconds or '-'}秒）：git {' '.join(args)}"
     except Exception as exc:
         return False, f"执行 Git 命令失败：{exc}"
 
@@ -52,7 +55,7 @@ def run_git_command(args: list[str]) -> tuple[bool, str]:
     return True, (result.stdout or "").strip()
 
 
-def get_update_status() -> dict:
+def get_update_status(fetch_remote: bool = False) -> dict:
     status = {
         "repo_ok": False,
         "branch": "-",
@@ -83,12 +86,27 @@ def get_update_status() -> dict:
     if ok_cur_sha and cur_sha:
         status["current_commit"] = cur_sha[:7]
 
-    ok_fetch, fetch_msg = run_git_command(["fetch", "origin"])
-    if not ok_fetch:
-        status["note"] = f"获取远端信息失败：{fetch_msg}"
+    branch = status["branch"]
+    if not fetch_remote:
+        status["note"] = "未请求远端信息，点击“刷新最新版本”获取最新版本。"
+        if branch and branch != "-":
+            ok_latest_sha, latest_sha = run_git_command(["rev-parse", f"origin/{branch}"])
+            if ok_latest_sha and latest_sha:
+                status["latest_commit"] = latest_sha[:7]
+                ok_latest_ver, latest_ver = run_git_command(["describe", "--tags", "--always", latest_sha.strip()])
+                status["latest_version"] = latest_ver if ok_latest_ver and latest_ver else latest_sha[:7]
+                ok_behind, behind = run_git_command(["rev-list", "--count", f"HEAD..origin/{branch}"])
+                if ok_behind and behind.isdigit():
+                    status["behind_count"] = behind
+                    status["note"] = ""
         return status
 
-    branch = status["branch"]
+    if fetch_remote:
+        ok_fetch, fetch_msg = run_git_command(["fetch", "origin"], timeout_seconds=12)
+        if not ok_fetch:
+            status["note"] = f"获取远端信息失败：{fetch_msg}"
+            return status
+
     if branch and branch != "-":
         ok_latest_sha, latest_sha = run_git_command(["rev-parse", f"origin/{branch}"])
         if ok_latest_sha and latest_sha:
@@ -100,7 +118,7 @@ def get_update_status() -> dict:
                 status["behind_count"] = behind
             return status
 
-    ok_remote_head, remote_head = run_git_command(["ls-remote", "origin", "HEAD"])
+    ok_remote_head, remote_head = run_git_command(["ls-remote", "origin", "HEAD"], timeout_seconds=12)
     if ok_remote_head and remote_head:
         remote_sha = remote_head.split()[0]
         status["latest_commit"] = remote_sha[:7]
@@ -304,6 +322,7 @@ def system_update():
         return redirect(url_for("login"))
 
     message = None
+    fetch_remote = False
     if request.method == "POST":
         action = request.form.get("action", "check")
         if action == "update":
@@ -311,7 +330,7 @@ def system_update():
             if not ok_branch or not branch:
                 message = f"更新失败：{branch or '无法识别当前分支。'}"
             else:
-                ok_pull, pull_out = run_git_command(["pull", "--ff-only", "origin", branch])
+                ok_pull, pull_out = run_git_command(["pull", "--ff-only", "origin", branch], timeout_seconds=60)
                 if ok_pull:
                     message = f"更新成功：{pull_out}。服务将在 1 秒后自动重启，请稍后刷新页面。"
                     restart_current_process_delayed(1.0)
@@ -322,8 +341,9 @@ def system_update():
             restart_current_process_delayed(1.0)
         else:
             message = "已刷新最新版本信息。"
+            fetch_remote = True
 
-    status = get_update_status()
+    status = get_update_status(fetch_remote=fetch_remote)
     return render_template(
         "update_manager.html",
         token=token,
