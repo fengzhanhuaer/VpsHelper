@@ -894,7 +894,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             parts.append(f"{minutes}分钟")
         if not parts:
             parts.append(f"{seconds}秒")
-        return display, "后执行（" + " ".join(parts) + "）"
+        return display, "约 " + " ".join(parts) + "后执行"
 
     @APP.route("/tg_helper")
     def tg_helper():
