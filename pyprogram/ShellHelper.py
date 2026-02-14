@@ -75,7 +75,6 @@ def register_routes(require_login, get_db) -> None:
 
     @APP.route("/shell")
     def shell_console():
-        token = request.args.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
@@ -102,7 +101,6 @@ def register_routes(require_login, get_db) -> None:
         return render_template(
             "shell_console.html",
             username=username,
-            token=token,
             cwd=cwd,
             history_commands=history_commands,
             shortcuts=shortcuts,

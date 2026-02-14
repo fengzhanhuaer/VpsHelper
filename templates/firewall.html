@@ -23,8 +23,8 @@
   </style>
 
   <div class="top-actions">
-    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}" style="margin-left: auto;">退出登录</a>
+    <a class="ghost" href="{{ url_for('home') }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout') }}" style="margin-left: auto;">退出登录</a>
   </div>
   <h1>防火墙</h1>
   <p>查看防火墙类型、开放端口、监听 IP 与进程，并可执行启用与端口开放操作。</p>
@@ -42,12 +42,10 @@
   </div>
 
   <form method="post" action="{{ url_for('firewall') }}" style="display:grid; gap:8px; margin-bottom: 12px;">
-    <input type="hidden" name="token" value="{{ token }}" />
     <button class="ghost" type="submit" name="action" value="enable_firewall">启用防火墙</button>
   </form>
 
   <form method="post" action="{{ url_for('firewall') }}" style="display:grid; gap:8px; margin-bottom: 14px;">
-    <input type="hidden" name="token" value="{{ token }}" />
     <div style="display:flex; gap:8px; align-items:center;">
       <input name="port" placeholder="输入要开放的端口，例如 8080" />
       <select name="protocol" style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px;">

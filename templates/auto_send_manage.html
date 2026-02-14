@@ -17,9 +17,9 @@
   </style>
 
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('auto_send', token=token) }}">返回自动发送</a>
-    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('auto_send') }}">返回自动发送</a>
+    <a class="ghost" href="{{ url_for('tg_helper') }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
   <h1>管理任务</h1>
   <p>查看任务、手动触发、删除任务。</p>
@@ -33,7 +33,6 @@
 
   {% if accounts %}
     <form method="get" action="{{ url_for('auto_send_manage') }}" style="margin-bottom: 12px;">
-      <input type="hidden" name="token" value="{{ token }}" />
       <div class="field">
         <label for="account_select">选择账号</label>
         <select id="account_select" name="account_id" style="width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px;">
@@ -67,7 +66,6 @@
           <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;">
             <div class="task-text" style="font-weight: 600;">会话 {{ task['dialog_name'] }} ({{ task['dialog_id'] }})</div>
             <form method="post" action="{{ url_for('auto_send_update', task_id=task['id']) }}" style="margin: 8px 0 6px 0;">
-              <input type="hidden" name="token" value="{{ token }}" />
               <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
               <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 6px;">发送内容</label>
               <textarea name="message" rows="4" style="width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 13px; resize: vertical;">{{ task['message'] }}</textarea>
@@ -99,12 +97,10 @@
             </div>
             <div style="display:flex; gap:8px;">
               <form method="post" action="{{ url_for('auto_send_run', task_id=task['id']) }}">
-                <input type="hidden" name="token" value="{{ token }}" />
                 <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
                 <button class="ghost" type="submit">手动触发</button>
               </form>
               <form method="post" action="{{ url_for('auto_send_delete', task_id=task['id']) }}">
-                <input type="hidden" name="token" value="{{ token }}" />
                 <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
                 <button class="ghost" type="submit">删除</button>
               </form>

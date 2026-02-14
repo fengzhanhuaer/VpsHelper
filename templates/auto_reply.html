@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('tg_helper') }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
   <h1>自动回复</h1>
   <p>该页面已保留入口，后续再扩展内容。</p>

@@ -48,8 +48,8 @@
   </style>
 
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('home') }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
   <h1>Shell 交互</h1>
   <p>当前目录：<span id="cwd-text">{{ cwd }}</span></p>
@@ -57,7 +57,6 @@
   <div id="terminal" class="terminal">欢迎使用 Shell 交互。输入命令后点击执行。</div>
 
   <form id="shell-form" style="margin-top: 10px; display:grid; gap:8px;">
-    <input type="hidden" id="token" value="{{ token }}" />
     <textarea id="command" class="command-area" placeholder="输入命令，可多行。Ctrl+Enter 执行" required></textarea>
     <div style="display:flex; gap:8px; align-items:center;">
       <button class="ghost" type="submit" style="white-space:nowrap;">执行</button>
@@ -93,7 +92,6 @@
     const commandInput = document.getElementById("command");
     const terminal = document.getElementById("terminal");
     const cwdText = document.getElementById("cwd-text");
-    const token = document.getElementById("token").value;
     const shortcutsAddUrl = "{{ url_for('shell_shortcuts_add') }}";
     const shortcutsDeleteUrlBase = "{{ url_for('shell_shortcuts_delete', shortcut_id=0) }}";
     const shortcutsClearUrl = "{{ url_for('shell_shortcuts_clear') }}";
@@ -163,7 +161,6 @@
         delBtn.addEventListener("click", async () => {
           try {
             const body = new URLSearchParams();
-            body.set("token", token);
             const res = await fetch(shortcutsDeleteUrlBase.replace(/0$/, String(item.id)), {
               method: "POST",
               headers: {"Content-Type": "application/x-www-form-urlencoded"},
@@ -202,7 +199,6 @@
       commandInput.value = "";
 
       const body = new URLSearchParams();
-      body.set("token", token);
       body.set("command", cmd);
 
       try {
@@ -262,7 +258,6 @@
 
       (async () => {
         const body = new URLSearchParams();
-        body.set("token", token);
         body.set("name", name);
         body.set("command", command);
         try {
@@ -289,7 +284,6 @@
     clearShortcutsBtn.addEventListener("click", () => {
       (async () => {
         const body = new URLSearchParams();
-        body.set("token", token);
         try {
           const res = await fetch(shortcutsClearUrl, {
             method: "POST",

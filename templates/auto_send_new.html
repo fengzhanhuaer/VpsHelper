@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('auto_send', token=token) }}">返回自动发送</a>
-    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('auto_send') }}">返回自动发送</a>
+    <a class="ghost" href="{{ url_for('tg_helper') }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
   <h1>新建任务</h1>
   <p>创建每日固定时间自动发送任务。</p>
@@ -14,7 +14,6 @@
 
   {% if accounts %}
     <form method="get" action="{{ url_for('auto_send_new') }}" style="margin-bottom: 12px;">
-      <input type="hidden" name="token" value="{{ token }}" />
       <div class="field">
         <label for="account_select">选择账号</label>
         <select id="account_select" name="account_id" style="width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px;">
@@ -27,13 +26,11 @@
     </form>
 
     <form method="post" action="{{ url_for('auto_send_refresh_dialogs') }}" style="margin-bottom: 12px;">
-      <input type="hidden" name="token" value="{{ token }}" />
       <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
       <button class="ghost" type="submit">更新会话ID</button>
     </form>
 
     <form method="post" action="{{ url_for('auto_send_save') }}">
-      <input type="hidden" name="token" value="{{ token }}" />
       <input type="hidden" name="account_id" value="{{ selected_account_id }}" />
       <input type="hidden" name="schedule_type" value="daily" />
       <div class="field">

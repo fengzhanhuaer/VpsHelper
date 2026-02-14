@@ -165,13 +165,12 @@ def register_routes(require_login) -> None:
 
     @APP.route("/server/status")
     def server_status():
-        token = request.args.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
 
         status = _collect_status_data()
-        return render_template("server_status.html", token=token, username=username, status=status)
+        return render_template("server_status.html", username=username, status=status)
 
     @APP.route("/server/status/data")
     def server_status_data():

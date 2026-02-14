@@ -743,7 +743,6 @@ def register_routes(require_login, get_db) -> None:
 
     @APP.route("/settings/ssh", methods=["GET", "POST"])
     def ssh_settings():
-        token = request.args.get("token") or request.form.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
@@ -810,7 +809,6 @@ def register_routes(require_login, get_db) -> None:
         return render_template(
             "ssh_settings.html",
             username=username,
-            token=token,
             message=message,
             ssh_port=data.get("ssh_port") or "22",
             ssh_public_key=data.get("ssh_public_key") or "",

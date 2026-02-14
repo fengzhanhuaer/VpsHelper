@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('tg_helper', token=token) }}">返回Tg助手</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('tg_helper') }}">返回Tg助手</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
   <h1>Telegram API 设置</h1>
   <p>请填写 Telegram 官方的 API ID 与 API Hash。</p>
@@ -12,7 +12,6 @@
   {% endif %}
 
   <form method="post" action="{{ url_for('api_settings') }}">
-    <input type="hidden" name="token" value="{{ token }}" />
     <div class="field">
       <label for="api_id">API ID</label>
       <input id="api_id" name="api_id" value="{{ api_id }}" required />

@@ -898,11 +898,10 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
     @APP.route("/tg_helper")
     def tg_helper():
-        token = request.args.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
-        return render_template("tg_helper.html", username=username, token=token)
+        return render_template("tg_helper.html", username=username)
 
     @APP.route("/accounts/delete/<int:account_id>", methods=["POST"])
     def delete_account(account_id: int):
@@ -910,15 +909,13 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         db = get_tg_db()
         db.execute("DELETE FROM tg_accounts WHERE id = ? AND owner = ?", (account_id, username))
         db.commit()
-        return redirect(url_for("accounts", token=token) if token else url_for("accounts"))
+        return redirect(url_for("accounts"))
 
     @APP.route("/accounts")
     def accounts():
-        token = request.args.get("token")
         error = request.args.get("error")
         selected_account_id = request.args.get("account_id")
         username = require_login()
@@ -949,7 +946,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         return render_template(
             "accounts.html",
             username=username,
-            token=token,
             accounts=accounts_list,
             error=error,
             selected_account_id=selected_account_id,
@@ -959,7 +955,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
     @APP.route("/settings/api", methods=["GET", "POST"])
     def api_settings():
-        token = request.args.get("token") or request.form.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
@@ -980,7 +975,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
         return render_template(
             "api_settings.html",
-            token=token,
             api_id=APP.config.get("TELEGRAM_API_ID") or "",
             api_hash=APP.config.get("TELEGRAM_API_HASH") or "",
             message=message,
@@ -988,7 +982,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
     @APP.route("/settings/proxy", methods=["GET", "POST"])
     def proxy_settings():
-        token = request.args.get("token") or request.form.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
@@ -1031,7 +1024,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
         return render_template(
             "proxy_settings.html",
-            token=token,
             proxy_enabled=APP.config.get("PROXY_ENABLED") or False,
             proxy_host=APP.config.get("PROXY_HOST") or "",
             proxy_port=APP.config.get("PROXY_PORT") or "",
@@ -1042,7 +1034,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
     @APP.route("/settings/database", methods=["GET", "POST"])
     def database_settings():
-        token = request.args.get("token") or request.form.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
@@ -1141,7 +1132,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
         return render_template(
             "database_settings.html",
-            token=token,
             message=message,
             cf_api_token=APP.config.get("CF_API_TOKEN") or "",
             cf_d1_database_name=APP.config.get("APP_NAME", "VpsHelper"),
@@ -1154,23 +1144,20 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
     @APP.route("/auto/send")
     def auto_send():
-        token = request.args.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
-        return render_template("auto_send.html", token=token)
+        return render_template("auto_send.html")
 
     @APP.route("/auto/reply")
     def auto_reply():
-        token = request.args.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
-        return render_template("auto_reply.html", token=token)
+        return render_template("auto_reply.html")
 
     @APP.route("/auto/send/new")
     def auto_send_new():
-        token = request.args.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
@@ -1194,7 +1181,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
         return render_template(
             "auto_send_new.html",
-            token=token,
             accounts=accounts_list,
             selected_account_id=selected_account_id,
             dialogs=dialogs,
@@ -1203,7 +1189,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
     @APP.route("/auto/send/manage")
     def auto_send_manage():
-        token = request.args.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
@@ -1265,7 +1250,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
         return render_template(
             "auto_send_manage.html",
-            token=token,
             accounts=accounts_list,
             selected_account_id=selected_account_id,
             tasks=tasks_view,
@@ -1280,10 +1264,9 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         account_id = request.form.get("account_id")
         if not account_id:
-            return redirect(url_for("auto_send_new", token=token, error="请选择账号。") if token else url_for("auto_send_new", error="请选择账号。"))
+            return redirect(url_for("auto_send_new", error="请选择账号。"))
 
         db = get_tg_db()
         account = db.execute(
@@ -1291,14 +1274,10 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             (account_id, username),
         ).fetchone()
         if not account:
-            return redirect(url_for("auto_send_new", token=token, error="账号不存在。") if token else url_for("auto_send_new", error="账号不存在。"))
+            return redirect(url_for("auto_send_new", error="账号不存在。"))
 
         refresh_dialogs_for_account(account["id"], account["session_text"])
-        return redirect(
-            url_for("auto_send_new", token=token, account_id=account_id)
-            if token
-            else url_for("auto_send_new", account_id=account_id)
-        )
+        return redirect(url_for("auto_send_new", account_id=account_id))
 
     @APP.route("/auto/send/save", methods=["POST"])
     def auto_send_save():
@@ -1306,7 +1285,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         account_id = request.form.get("account_id")
         dialog_id = request.form.get("dialog_id")
         message_text = request.form.get("message", "").strip()
@@ -1316,17 +1294,17 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         enabled = request.form.get("enabled") == "on"
 
         if not account_id or not dialog_id or not message_text:
-            return redirect(url_for("auto_send_new", token=token, error="请选择账号与会话，并填写内容。") if token else url_for("auto_send_new", error="请选择账号与会话，并填写内容。"))
+            return redirect(url_for("auto_send_new", error="请选择账号与会话，并填写内容。"))
 
         try:
             jitter_value = int(jitter_seconds) if jitter_seconds else 0
             if jitter_value < 0:
                 raise ValueError
         except ValueError:
-            return redirect(url_for("auto_send_new", token=token, error="随机延时填写不正确。") if token else url_for("auto_send_new", error="随机延时填写不正确。"))
+            return redirect(url_for("auto_send_new", error="随机延时填写不正确。"))
 
         if not time_of_day or ":" not in time_of_day:
-            return redirect(url_for("auto_send_new", token=token, error="请填写每天的时间点，例如 09:30。") if token else url_for("auto_send_new", error="请填写每天的时间点，例如 09:30。"))
+            return redirect(url_for("auto_send_new", error="请填写每天的时间点，例如 09:30。"))
         interval_value = 86400
 
         next_run = schedule_next_run(interval_value, jitter_value, schedule_type, time_of_day)
@@ -1354,11 +1332,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         )
         db.commit()
 
-        return redirect(
-            url_for("auto_send_manage", token=token, account_id=account_id, message="已保存。")
-            if token
-            else url_for("auto_send_manage", account_id=account_id, message="已保存。")
-        )
+        return redirect(url_for("auto_send_manage", account_id=account_id, message="已保存。"))
 
     @APP.route("/auto/send/delete/<int:task_id>", methods=["POST"])
     def auto_send_delete(task_id: int):
@@ -1366,16 +1340,11 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         account_id = request.form.get("account_id")
         db = get_tg_db()
         db.execute("DELETE FROM tg_auto_send_tasks WHERE id = ? AND owner = ?", (task_id, username))
         db.commit()
-        return redirect(
-            url_for("auto_send_manage", token=token, account_id=account_id)
-            if token
-            else url_for("auto_send_manage", account_id=account_id)
-        )
+        return redirect(url_for("auto_send_manage", account_id=account_id))
 
     @APP.route("/auto/send/update/<int:task_id>", methods=["POST"])
     def auto_send_update(task_id: int):
@@ -1383,23 +1352,18 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         account_id = request.form.get("account_id")
         message_text = request.form.get("message", "").strip()
         time_of_day = request.form.get("time_of_day", "").strip()
         jitter_seconds = request.form.get("jitter_seconds", "0").strip()
         if not message_text:
             return redirect(
-                url_for("auto_send_manage", token=token, account_id=account_id, error="发送内容不能为空。")
-                if token
-                else url_for("auto_send_manage", account_id=account_id, error="发送内容不能为空。")
+                url_for("auto_send_manage", account_id=account_id, error="发送内容不能为空。")
             )
 
         if not time_of_day or ":" not in time_of_day:
             return redirect(
-                url_for("auto_send_manage", token=token, account_id=account_id, error="时间格式不正确，应为 HH:MM。")
-                if token
-                else url_for("auto_send_manage", account_id=account_id, error="时间格式不正确，应为 HH:MM。")
+                url_for("auto_send_manage", account_id=account_id, error="时间格式不正确，应为 HH:MM。")
             )
 
         try:
@@ -1413,9 +1377,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
                 raise ValueError
         except ValueError:
             return redirect(
-                url_for("auto_send_manage", token=token, account_id=account_id, error="时间或随机延时填写不正确。")
-                if token
-                else url_for("auto_send_manage", account_id=account_id, error="时间或随机延时填写不正确。")
+                url_for("auto_send_manage", account_id=account_id, error="时间或随机延时填写不正确。")
             )
 
         interval_value = 86400
@@ -1427,11 +1389,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             (message_text, time_of_day, jitter_value, interval_value, "daily", next_run, utc8_now_iso(), task_id, username),
         )
         db.commit()
-        return redirect(
-            url_for("auto_send_manage", token=token, account_id=account_id, message="任务内容与计划已更新。")
-            if token
-            else url_for("auto_send_manage", account_id=account_id, message="任务内容与计划已更新。")
-        )
+        return redirect(url_for("auto_send_manage", account_id=account_id, message="任务内容与计划已更新。"))
 
     @APP.route("/auto/send/run/<int:task_id>", methods=["POST"])
     def auto_send_run(task_id: int):
@@ -1439,7 +1397,6 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         account_id = request.form.get("account_id")
         db = get_tg_db()
         task = db.execute(
@@ -1453,7 +1410,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         ).fetchone()
 
         if not task:
-            return redirect(url_for("auto_send_manage", token=token, error="任务不存在。") if token else url_for("auto_send_manage", error="任务不存在。"))
+            return redirect(url_for("auto_send_manage", error="任务不存在。"))
 
         try:
             reply = run_async(send_and_fetch_reply(task["session_text"], task["dialog_id"], task["message"]))
@@ -1472,11 +1429,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             db.commit()
             msg = "发送失败。"
 
-        return redirect(
-            url_for("auto_send_manage", token=token, account_id=account_id, message=msg)
-            if token
-            else url_for("auto_send_manage", account_id=account_id, message=msg)
-        )
+        return redirect(url_for("auto_send_manage", account_id=account_id, message=msg))
 
     @APP.route("/tg/login/start", methods=["POST"])
     def tg_login_start():
@@ -1484,15 +1437,14 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         phone = request.form.get("phone", "").strip()
         account_name = request.form.get("account_name", "").strip()
         if not phone:
-            return redirect(url_for("accounts", token=token, error="请输入手机号。") if token else url_for("accounts", error="请输入手机号。"))
+            return redirect(url_for("accounts", error="请输入手机号。"))
 
         ok, error, session_text, phone_code_hash = run_async(send_tg_login_code(phone))
         if not ok:
-            return redirect(url_for("accounts", token=token, error=error) if token else url_for("accounts", error=error))
+            return redirect(url_for("accounts", error=error))
 
         db = get_tg_db()
         cur = db.execute(
@@ -1501,17 +1453,16 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         )
         db.commit()
         flow_id = cur.lastrowid
-        return redirect(url_for("tg_login_verify", flow_id=flow_id, token=token) if token else url_for("tg_login_verify", flow_id=flow_id))
+        return redirect(url_for("tg_login_verify", flow_id=flow_id))
 
     @APP.route("/tg/login/verify", methods=["GET", "POST"])
     def tg_login_verify():
-        token = request.args.get("token") or request.form.get("token")
         flow_id = request.args.get("flow_id") or request.form.get("flow_id")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
         if not flow_id:
-            return redirect(url_for("accounts", token=token, error="缺少登录流程信息。") if token else url_for("accounts", error="缺少登录流程信息。"))
+            return redirect(url_for("accounts", error="缺少登录流程信息。"))
 
         db = get_tg_db()
         flow = db.execute(
@@ -1519,12 +1470,11 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             (flow_id, username),
         ).fetchone()
         if not flow:
-            return redirect(url_for("accounts", token=token, error="登录流程已过期。") if token else url_for("accounts", error="登录流程已过期。"))
+            return redirect(url_for("accounts", error="登录流程已过期。"))
 
         if request.method == "GET":
             return render_template(
                 "tg_login_verify.html",
-                token=token,
                 flow_id=flow_id,
                 phone=flow["phone"],
                 error=request.args.get("error"),
@@ -1533,11 +1483,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         code = request.form.get("code", "").strip()
         password = request.form.get("password", "").strip() or None
         if not code:
-            return redirect(
-                url_for("tg_login_verify", flow_id=flow_id, token=token, error="请输入验证码。")
-                if token
-                else url_for("tg_login_verify", flow_id=flow_id, error="请输入验证码。")
-            )
+            return redirect(url_for("tg_login_verify", flow_id=flow_id, error="请输入验证码。"))
 
         ok, error, display_name, final_session = run_async(
             complete_tg_login(
@@ -1549,11 +1495,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             )
         )
         if not ok:
-            return redirect(
-                url_for("tg_login_verify", flow_id=flow_id, token=token, error=error)
-                if token
-                else url_for("tg_login_verify", flow_id=flow_id, error=error)
-            )
+            return redirect(url_for("tg_login_verify", flow_id=flow_id, error=error))
 
         account_name = flow["account_name"] or display_name or flow["phone"]
         final_session_text = final_session or flow["session_text"]
@@ -1566,7 +1508,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         db.commit()
         if account_id:
             refresh_dialogs_for_account(account_id, final_session_text)
-        return redirect(url_for("accounts", token=token) if token else url_for("accounts"))
+        return redirect(url_for("accounts"))
 
     @APP.route("/tg/dialogs/refresh", methods=["POST"])
     def tg_refresh_dialogs():
@@ -1574,10 +1516,9 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         account_id = request.form.get("account_id")
         if not account_id:
-            return redirect(url_for("accounts", token=token, error="请选择账号。") if token else url_for("accounts", error="请选择账号。"))
+            return redirect(url_for("accounts", error="请选择账号。"))
 
         db = get_tg_db()
         account = db.execute(
@@ -1585,14 +1526,10 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             (account_id, username),
         ).fetchone()
         if not account:
-            return redirect(url_for("accounts", token=token, error="账号不存在。") if token else url_for("accounts", error="账号不存在。"))
+            return redirect(url_for("accounts", error="账号不存在。"))
 
         refresh_dialogs_for_account(account["id"], account["session_text"])
-        return redirect(
-            url_for("accounts", token=token, account_id=account_id)
-            if token
-            else url_for("accounts", account_id=account_id)
-        )
+        return redirect(url_for("accounts", account_id=account_id))
 
     @APP.route("/tg/sign/save", methods=["POST"])
     def tg_save_sign_task():
@@ -1600,12 +1537,11 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         if not username:
             return redirect(url_for("login"))
 
-        token = request.form.get("token")
         account_id = request.form.get("account_id")
         dialog_id = request.form.get("dialog_id")
         message = request.form.get("message", "").strip()
         if not account_id or not dialog_id:
-            return redirect(url_for("accounts", token=token, error="请选择账号和会话。") if token else url_for("accounts", error="请选择账号和会话。"))
+            return redirect(url_for("accounts", error="请选择账号和会话。"))
 
         db = get_tg_db()
         db.execute(
@@ -1618,8 +1554,4 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             (username, account_id, dialog_id, message, utc8_now_iso()),
         )
         db.commit()
-        return redirect(
-            url_for("accounts", token=token, account_id=account_id)
-            if token
-            else url_for("accounts", account_id=account_id)
-        )
+        return redirect(url_for("accounts", account_id=account_id))

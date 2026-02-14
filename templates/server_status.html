@@ -33,8 +33,8 @@
   </style>
 
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('home') }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
   <h1>服务器状态</h1>
   <p>自动刷新显示 RAM、CPU、硬盘使用情况。</p>
@@ -80,8 +80,6 @@
   <div class="muted" id="last-updated" style="margin-top: 10px;">最后刷新：--</div>
 
   <script>
-    const token = "{{ token }}";
-
     function fmtBytes(bytes) {
       const value = Number(bytes || 0);
       const units = ["B", "KB", "MB", "GB", "TB"];
@@ -114,7 +112,7 @@
 
     async function fetchStatus() {
       try {
-        const response = await fetch("{{ url_for('server_status_data') }}?token=" + encodeURIComponent(token));
+        const response = await fetch("{{ url_for('server_status_data') }}");
         const result = await response.json();
         if (result.ok) {
           updateStatus(result.data);

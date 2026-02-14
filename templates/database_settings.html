@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('home') }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
   <h1>数据库管理</h1>
   <p>默认使用本地 sqlite。可创建云端私有 D1，并手动备份/拉取。</p>
@@ -12,7 +12,6 @@
   {% endif %}
 
   <form method="post" action="{{ url_for('database_settings') }}">
-    <input type="hidden" name="token" value="{{ token }}" />
     <div class="field">
       <label for="cf_api_token">Cloudflare API Token</label>
       <input id="cf_api_token" name="cf_api_token" value="{{ cf_api_token }}" />
@@ -34,7 +33,6 @@
   </form>
 
   <form method="post" action="{{ url_for('database_settings') }}" style="margin-top:14px;">
-    <input type="hidden" name="token" value="{{ token }}" />
     <div class="field">
       <label for="db_auto_backup_enabled">启用每天自动备份</label>
       <input id="db_auto_backup_enabled" name="db_auto_backup_enabled" type="checkbox" {% if db_auto_backup_enabled %}checked{% endif %} />

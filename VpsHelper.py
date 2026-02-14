@@ -6,7 +6,6 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from secrets import token_urlsafe
 from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -21,6 +20,10 @@ TimeHelper.ensure_default_timezone()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
+app.config.setdefault("SESSION_COOKIE_HTTPONLY", True)
+app.config.setdefault("SESSION_COOKIE_SAMESITE", "Lax")
+if os.environ.get("SESSION_COOKIE_SECURE") in ("1", "true", "True"):
+    app.config["SESSION_COOKIE_SECURE"] = True
 app.config["APP_NAME"] = "VpsHelper"
 TgHelper.setup(app, BASE_DIR)
 SshHelper.setup(app, BASE_DIR)
@@ -164,15 +167,6 @@ def init_db():
         )
         """
     )
-    db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS sessions (
-            token TEXT PRIMARY KEY,
-            username TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )
-        """
-    )
     db.commit()
     TgHelper.init_tg_db()
 
@@ -184,39 +178,9 @@ def has_users() -> bool:
     return row["cnt"] > 0
 
 
-def create_session_token(username: str) -> str:
-    token = token_urlsafe(32)
-    db = get_db()
-    db.execute(
-        "INSERT INTO sessions (token, username, created_at) VALUES (?, ?, ?)",
-        (token, username, TimeHelper.now_iso()),
-    )
-    db.commit()
-    return token
-
-
-def get_username_by_token(token: str) -> str | None:
-    db = get_db()
-    cur = db.execute("SELECT username FROM sessions WHERE token = ?", (token,))
-    row = cur.fetchone()
-    return row["username"] if row else None
-
-
-def delete_session_token(token: str) -> None:
-    db = get_db()
-    db.execute("DELETE FROM sessions WHERE token = ?", (token,))
-    db.commit()
-
-
 def require_login():
     if "user" in session:
         return session["user"]
-    token = request.args.get("token") or request.form.get("token")
-    if token:
-        username = get_username_by_token(token)
-        if username:
-            session["user"] = username
-            return username
     return None
 
 
@@ -275,8 +239,7 @@ def register():
                 )
                 db.commit()
                 session["user"] = username
-                token = create_session_token(username)
-                return redirect(url_for("home", token=token))
+                return redirect(url_for("home"))
             except sqlite3.IntegrityError:
                 error = "用户名已存在。"
 
@@ -298,8 +261,7 @@ def login():
         user = cur.fetchone()
         if user and check_password_hash(user["password_hash"], password):
             session["user"] = username
-            token = create_session_token(username)
-            return redirect(url_for("home", token=token))
+            return redirect(url_for("home"))
         error = "用户名或密码错误。"
 
     return render_template("login.html", error=error)
@@ -307,16 +269,14 @@ def login():
 
 @app.route("/home")
 def home():
-    token = request.args.get("token")
     username = require_login()
     if not username:
         return redirect(url_for("login"))
-    return render_template("home.html", username=username, token=token)
+    return render_template("home.html", username=username)
 
 
 @app.route("/system/update", methods=["GET", "POST"])
 def system_update():
-    token = request.args.get("token") or request.form.get("token")
     username = require_login()
     if not username:
         return redirect(url_for("login"))
@@ -346,7 +306,6 @@ def system_update():
     status = get_update_status(fetch_remote=fetch_remote)
     return render_template(
         "update_manager.html",
-        token=token,
         username=username,
         message=message,
         status=status,
@@ -355,7 +314,6 @@ def system_update():
 
 @app.route("/change_password", methods=["GET", "POST"])
 def change_password():
-    token = request.args.get("token") or request.form.get("token")
     username = require_login()
     if not username:
         return redirect(url_for("login"))
@@ -383,14 +341,11 @@ def change_password():
                 db.commit()
                 message = "密码已修改。"
 
-    return render_template("change_password.html", token=token, username=username, message=message)
+    return render_template("change_password.html", username=username, message=message)
 
 
 @app.route("/logout")
 def logout():
-    token = request.args.get("token")
-    if token:
-        delete_session_token(token)
     session.clear()
     return redirect(url_for("login"))
 

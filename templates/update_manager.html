@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
   <div class="top-actions" style="justify-content: flex-start; gap: 8px;">
-    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('home') }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
 
   <h1>程序更新</h1>
@@ -27,7 +27,6 @@
   </div>
 
   <form method="post" action="{{ url_for('system_update') }}" style="display:grid; gap:8px;">
-    <input type="hidden" name="token" value="{{ token }}" />
     <button class="ghost" type="submit" name="action" value="check">刷新最新版本</button>
     <button class="btn" type="submit" name="action" value="update">自动更新</button>
     <button class="ghost" type="submit" name="action" value="restart">重启服务</button>

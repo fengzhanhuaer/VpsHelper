@@ -94,11 +94,10 @@ def accounts():
 ```python
 @app.route("/new_module")
 def new_module():
-    token = request.args.get("token")
     username = require_login()
     if not username:
         return redirect(url_for("login"))
-    return render_template("new_module.html", username=username, token=token)
+  return render_template("new_module.html", username=username)
 ```
 
 2. **创建模板 templates/new_module.html**:
@@ -106,8 +105,8 @@ def new_module():
 {% extends "base.html" %}
 {% block content %}
   <div class="top-actions">
-    <a class="ghost" href="{{ url_for('home', token=token) }}">返回主菜单</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}" style="margin-left: auto;">退出登录</a>
+    <a class="ghost" href="{{ url_for('home') }}">返回主菜单</a>
+    <a class="ghost" href="{{ url_for('logout') }}" style="margin-left: auto;">退出登录</a>
   </div>
   <h1>新模块名称</h1>
   <p>模块描述</p>
@@ -119,7 +118,7 @@ def new_module():
 
 3. **在 templates/home.html 中添加入口**:
 ```html
-<a class="btn" href="{{ url_for('new_module', token=token) }}">新模块</a>
+<a class="btn" href="{{ url_for('new_module') }}">新模块</a>
 ```
 
 ### 添加模块子功能
@@ -131,7 +130,7 @@ def new_module():
 ## 数据库
 - 用户数据目录: `./userdata/`
 - 统一数据库文件: `./userdata/VpsHelper.db`（单库多表）
-- 主程序表: `users`、`sessions`
+- 主程序表: `users`
 - Tg助手表: `tg_accounts`、`tg_dialogs`、`tg_sign_tasks`、`tg_auto_send_tasks`、`tg_login_flows`、`app_settings`
 - Cloudflare D1 数据库名: `TgHelper`
 - 端口: 15018

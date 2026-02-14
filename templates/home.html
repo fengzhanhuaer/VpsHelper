@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
   <div class="top-actions" style="justify-content: flex-end; gap: 8px;">
-    <a class="ghost" href="{{ url_for('change_password', token=token) }}">修改密码</a>
-    <a class="ghost" href="{{ url_for('system_update', token=token) }}">程序更新</a>
-    <a class="ghost" href="{{ url_for('logout', token=token) }}">退出登录</a>
+    <a class="ghost" href="{{ url_for('change_password') }}">修改密码</a>
+    <a class="ghost" href="{{ url_for('system_update') }}">程序更新</a>
+    <a class="ghost" href="{{ url_for('logout') }}">退出登录</a>
   </div>
   <h1>欢迎，{{ username }}</h1>
   <p>VpsHelper - 选择您需要的功能模块</p>
   <div style="margin-top: 12px; display: grid; gap: 10px;">
-    <a class="btn" href="{{ url_for('database_settings', token=token) }}">数据库管理</a>
-    <a class="btn" href="{{ url_for('tg_helper', token=token) }}">Tg助手</a>
-    <a class="btn" href="{{ url_for('server_status', token=token) }}">服务器状态</a>
-    <a class="btn" href="{{ url_for('ssh_settings', token=token) }}">SSH设置</a>
-    <a class="btn" href="{{ url_for('shell_console', token=token) }}">Shell交互</a>
-    <a class="btn" href="{{ url_for('firewall', token=token) }}">防火墙</a>
+    <a class="btn" href="{{ url_for('database_settings') }}">数据库管理</a>
+    <a class="btn" href="{{ url_for('tg_helper') }}">Tg助手</a>
+    <a class="btn" href="{{ url_for('server_status') }}">服务器状态</a>
+    <a class="btn" href="{{ url_for('ssh_settings') }}">SSH设置</a>
+    <a class="btn" href="{{ url_for('shell_console') }}">Shell交互</a>
+    <a class="btn" href="{{ url_for('firewall') }}">防火墙</a>
   </div>
 {% endblock %}

@@ -339,7 +339,6 @@ def register_routes(require_login) -> None:
 
     @APP.route("/firewall", methods=["GET", "POST"])
     def firewall():
-        token = request.args.get("token") or request.form.get("token")
         username = require_login()
         if not username:
             return redirect(url_for("login"))
@@ -385,7 +384,6 @@ def register_routes(require_login) -> None:
         return render_template(
             "firewall.html",
             username=username,
-            token=token,
             message=message,
             firewall_type=firewall_type,
             firewall_status=firewall_status,
