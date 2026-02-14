@@ -32,6 +32,7 @@ AUTO_SEND_JOB_ID = "auto_send_tick"
 AUTO_BACKUP_JOB_ID = "auto_backup_daily"
 
 UTC_PLUS_8 = timezone(timedelta(hours=8))
+UTC8_LABEL = "UTC+8"
 
 
 def setup(app, base_dir: Path) -> None:
@@ -55,6 +56,7 @@ def utc8_now() -> datetime:
 
 
 def utc8_now_naive() -> datetime:
+    """Return current UTC+8 time but without tzinfo (for SQLite ISO text storage)."""
     return utc8_now().replace(tzinfo=None)
 
 
@@ -63,7 +65,7 @@ def utc8_now_iso() -> str:
 
 
 def utc8_now_text() -> str:
-    return utc8_now().strftime("%Y-%m-%d %H:%M:%S UTC+8")
+    return utc8_now().strftime(f"%Y-%m-%d %H:%M:%S {UTC8_LABEL}")
 
 
 def format_datetime_utc8(dt_value: datetime | None) -> str:
@@ -71,7 +73,7 @@ def format_datetime_utc8(dt_value: datetime | None) -> str:
         return utc8_now_text()
     if dt_value.tzinfo is None:
         dt_value = dt_value.replace(tzinfo=timezone.utc)
-    return dt_value.astimezone(UTC_PLUS_8).strftime("%Y-%m-%d %H:%M:%S UTC+8")
+    return dt_value.astimezone(UTC_PLUS_8).strftime(f"%Y-%m-%d %H:%M:%S {UTC8_LABEL}")
 
 
 def append_utc8_timestamp(message: str) -> str:
@@ -883,7 +885,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
         if next_dt.tzinfo is not None:
             next_dt = next_dt.astimezone(UTC_PLUS_8).replace(tzinfo=None)
-        display = next_dt.strftime("%Y-%m-%d %H:%M:%S UTC+8")
+        display = next_dt.strftime(f"%Y-%m-%d %H:%M:%S {UTC8_LABEL}")
         delta_seconds = int((next_dt - utc8_now_naive()).total_seconds())
         if delta_seconds <= 0:
             return display, "即将执行"
