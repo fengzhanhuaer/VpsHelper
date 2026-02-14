@@ -94,6 +94,15 @@ source .venv/bin/activate
 pip install -q --upgrade pip
 pip install -q -r requirements.txt
 
+FLASK_SECRET_KEY_VALUE="${FLASK_SECRET_KEY:-}"
+if [[ -z "${FLASK_SECRET_KEY_VALUE}" ]]; then
+    FLASK_SECRET_KEY_VALUE="$(python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(48))
+PY
+)"
+fi
+
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 cat > "${SERVICE_FILE}" <<EOF
@@ -108,6 +117,7 @@ WorkingDirectory=${INSTALL_DIR}
 Environment=PYTHONUNBUFFERED=1
 Environment=TGHELPER_DEV=1
 Environment=TZ=Asia/Shanghai
+Environment=FLASK_SECRET_KEY=${FLASK_SECRET_KEY_VALUE}
 ExecStart=${INSTALL_DIR}/.venv/bin/python ${INSTALL_DIR}/VpsHelper.py
 Restart=on-failure
 RestartSec=3
