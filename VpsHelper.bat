@@ -14,5 +14,6 @@ if not exist .venv (
 call .venv\Scripts\activate.bat
 pip install -q -r requirements.txt
 set TGHELPER_DEV=1
+if "%TZ%"=="" set TZ=Asia/Shanghai
 python VpsHelper.py
 pause

@@ -88,4 +88,4 @@ python VpsHelper.py
 - 主程序表：`users`、`sessions`
 - Tg助手表：`tg_accounts`、`tg_dialogs`、`tg_sign_tasks`、`tg_auto_send_tasks`、`tg_login_flows`、`app_settings`
 - 端口默认 15018
-- 自动任务时间展示为 UTC+8
+- 默认时区为 UTC+8（Asia/Shanghai）；如需覆盖可设置环境变量 `TZ` 或 `VPSHELPER_TZ`

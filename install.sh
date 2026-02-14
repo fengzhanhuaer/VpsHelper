@@ -107,6 +107,7 @@ User=${RUN_USER}
 WorkingDirectory=${INSTALL_DIR}
 Environment=PYTHONUNBUFFERED=1
 Environment=TGHELPER_DEV=1
+Environment=TZ=Asia/Shanghai
 ExecStart=${INSTALL_DIR}/.venv/bin/python ${INSTALL_DIR}/VpsHelper.py
 Restart=on-failure
 RestartSec=3

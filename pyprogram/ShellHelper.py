@@ -6,6 +6,8 @@ from pathlib import Path
 
 from flask import jsonify, redirect, render_template, request, session, url_for
 
+from pyprogram import TimeHelper
+
 APP = None
 USERDATA_DIR: Path | None = None
 HISTORY_LIMIT = 2048
@@ -121,7 +123,7 @@ def register_routes(require_login, get_db) -> None:
         _ensure_shell_tables(db)
         db.execute(
             "INSERT INTO shell_shortcuts (owner, name, command, created_at) VALUES (?, ?, ?, ?)",
-            (username, name, command, datetime.utcnow().isoformat()),
+            (username, name, command, TimeHelper.now_iso()),
         )
         db.commit()
 

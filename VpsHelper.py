@@ -10,12 +10,14 @@ from secrets import token_urlsafe
 from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
-from pyprogram import FirewallHelper, ShellHelper, SshHelper, StatusHelper, TgHelper
+from pyprogram import FirewallHelper, ShellHelper, SshHelper, StatusHelper, TgHelper, TimeHelper
 
 BASE_DIR = Path(__file__).resolve().parent
 USERDATA_DIR = BASE_DIR / "userdata"
 USERDATA_DIR.mkdir(parents=True, exist_ok=True)
 MAIN_DB_PATH = USERDATA_DIR / "VpsHelper.db"
+
+TimeHelper.ensure_default_timezone()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
@@ -26,7 +28,7 @@ ShellHelper.setup(app, BASE_DIR)
 FirewallHelper.setup(app, BASE_DIR)
 StatusHelper.setup(app, BASE_DIR)
 
-SCHEDULER = BackgroundScheduler(timezone="Asia/Shanghai")
+SCHEDULER = BackgroundScheduler(timezone=TimeHelper.get_apscheduler_timezone_name())
 
 
 def run_git_command(args: list[str]) -> tuple[bool, str]:
@@ -169,7 +171,7 @@ def create_session_token(username: str) -> str:
     db = get_db()
     db.execute(
         "INSERT INTO sessions (token, username, created_at) VALUES (?, ?, ?)",
-        (token, username, datetime.utcnow().isoformat()),
+        (token, username, TimeHelper.now_iso()),
     )
     db.commit()
     return token

@@ -41,6 +41,24 @@
 
   <div class="status-grid">
     <div class="status-item">
+      <h3>当前时区</h3>
+      <div class="big" id="server-tz">{{ status.time.timezone }}</div>
+      <div class="muted">默认未设置时为 Asia/Shanghai</div>
+    </div>
+
+    <div class="status-item">
+      <h3>服务器时间</h3>
+      <div class="big" id="server-now">{{ status.time.now }}</div>
+      <div class="muted">每 3 秒刷新</div>
+    </div>
+
+    <div class="status-item">
+      <h3>已运行时间</h3>
+      <div class="big" id="server-uptime">{{ status.time.uptime }}</div>
+      <div class="muted">系统 uptime（不可用则退回进程运行时长）</div>
+    </div>
+
+    <div class="status-item">
       <h3>RAM 使用率</h3>
       <div class="big" id="ram-usage">{{ status.ram.usage_percent }}%</div>
       <div class="muted" id="ram-detail">已用 {{ status.ram.used }} / 总计 {{ status.ram.total }}</div>
@@ -77,6 +95,12 @@
     }
 
     function updateStatus(data) {
+      if (data.time) {
+        document.getElementById("server-tz").textContent = data.time.timezone || "--";
+        document.getElementById("server-now").textContent = data.time.now || "--";
+        document.getElementById("server-uptime").textContent = data.time.uptime || "--";
+      }
+
       document.getElementById("ram-usage").textContent = (data.ram.usage_percent || 0) + "%";
       document.getElementById("ram-detail").textContent = "已用 " + fmtBytes(data.ram.used) + " / 总计 " + fmtBytes(data.ram.total);
 
@@ -85,7 +109,7 @@
       document.getElementById("disk-usage").textContent = (data.disk.usage_percent || 0) + "%";
       document.getElementById("disk-detail").textContent = "已用 " + fmtBytes(data.disk.used) + " / 总计 " + fmtBytes(data.disk.total);
 
-      document.getElementById("last-updated").textContent = "最后刷新：" + new Date().toLocaleString();
+      document.getElementById("last-updated").textContent = "最后刷新：" + new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
     }
 
     async function fetchStatus() {

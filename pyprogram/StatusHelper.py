@@ -1,11 +1,16 @@
+import os
 import shutil
+import time
 from pathlib import Path
 
 from flask import jsonify, redirect, render_template, request, url_for
 
+from pyprogram import TimeHelper
+
 APP = None
 _LAST_CPU_TOTAL = None
 _LAST_CPU_IDLE = None
+_PROCESS_START_EPOCH = time.time()
 
 
 def setup(app, _base_dir: Path) -> None:
@@ -104,8 +109,49 @@ def _read_disk_stats() -> dict:
     }
 
 
+def _read_uptime_seconds() -> float | None:
+    proc_path = Path("/proc/uptime")
+    if proc_path.exists():
+        try:
+            raw = proc_path.read_text(encoding="utf-8").strip().split()[0]
+            return float(raw)
+        except Exception:
+            return None
+    return None
+
+
+def _format_duration(seconds: float) -> str:
+    total = max(int(seconds), 0)
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days}天")
+    if hours:
+        parts.append(f"{hours}小时")
+    if minutes:
+        parts.append(f"{minutes}分钟")
+    if not parts:
+        parts.append(f"{secs}秒")
+    return " ".join(parts)
+
+
 def _collect_status_data() -> dict:
+    tz_name = os.environ.get("VPSHELPER_TZ") or os.environ.get("TZ") or TimeHelper.DEFAULT_TZ_NAME
+    now_value = TimeHelper.now()
+    uptime_seconds = _read_uptime_seconds()
+    if uptime_seconds is None:
+        uptime_seconds = time.time() - _PROCESS_START_EPOCH
+    uptime_text = _format_duration(uptime_seconds)
+
     return {
+        "time": {
+            "timezone": tz_name,
+            "now": now_value.strftime("%Y-%m-%d %H:%M:%S"),
+            "uptime": uptime_text,
+        },
         "ram": _read_mem_stats(),
         "cpu": {
             "usage_percent": _read_cpu_usage_percent(),

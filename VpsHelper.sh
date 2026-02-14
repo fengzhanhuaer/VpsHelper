@@ -19,4 +19,7 @@ fi
 source .venv/bin/activate
 pip install -q -r requirements.txt
 export TGHELPER_DEV=1
+if [ -z "${TZ:-}" ]; then
+    export TZ=Asia/Shanghai
+fi
 python3 VpsHelper.py
