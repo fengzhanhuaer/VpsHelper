@@ -32,6 +32,7 @@ AUTO_SEND_JOB_ID = "auto_send_tick"
 AUTO_BACKUP_JOB_ID = "auto_backup_daily"
 
 UTC_PLUS_8 = timezone(timedelta(hours=8))
+UTC8_LABEL = "UTC+8"
 
 
 def setup(app, base_dir: Path) -> None:
@@ -54,8 +55,17 @@ def utc8_now() -> datetime:
     return datetime.now(timezone.utc).astimezone(UTC_PLUS_8)
 
 
+def utc8_now_naive() -> datetime:
+    """Return current UTC+8 time but without tzinfo (for SQLite ISO text storage)."""
+    return utc8_now().replace(tzinfo=None)
+
+
+def utc8_now_iso() -> str:
+    return utc8_now_naive().isoformat()
+
+
 def utc8_now_text() -> str:
-    return utc8_now().strftime("%Y-%m-%d %H:%M:%S UTC+8")
+    return utc8_now().strftime(f"%Y-%m-%d %H:%M:%S {UTC8_LABEL}")
 
 
 def format_datetime_utc8(dt_value: datetime | None) -> str:
@@ -63,7 +73,7 @@ def format_datetime_utc8(dt_value: datetime | None) -> str:
         return utc8_now_text()
     if dt_value.tzinfo is None:
         dt_value = dt_value.replace(tzinfo=timezone.utc)
-    return dt_value.astimezone(UTC_PLUS_8).strftime("%Y-%m-%d %H:%M:%S UTC+8")
+    return dt_value.astimezone(UTC_PLUS_8).strftime(f"%Y-%m-%d %H:%M:%S {UTC8_LABEL}")
 
 
 def append_utc8_timestamp(message: str) -> str:
@@ -719,7 +729,7 @@ def process_daily_cloud_backup(conn: sqlite3.Connection) -> None:
     if not api_token or not account_id or not db_id:
         conn.execute(
             "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('db_auto_backup_last_result', ?)",
-            (f"{datetime.now().isoformat()} 自动备份失败：Cloudflare 配置不完整",),
+            (f"{utc8_now_text()} 自动备份失败：Cloudflare 配置不完整",),
         )
         conn.commit()
         return
@@ -728,14 +738,14 @@ def process_daily_cloud_backup(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('db_auto_backup_last_date', ?)", (today,))
     conn.execute(
         "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('db_auto_backup_last_result', ?)",
-        (f"{datetime.now().isoformat()} {message}",),
+        (f"{utc8_now_text()} {message}",),
     )
     conn.commit()
 
 
 def schedule_next_run(interval_seconds: int, jitter_seconds: int, schedule_type: str, time_of_day: str | None) -> str:
     jitter = random.randint(0, max(jitter_seconds, 0))
-    now = datetime.now()
+    now = utc8_now_naive()
 
     if schedule_type == "daily" and time_of_day:
         try:
@@ -755,7 +765,7 @@ def process_auto_send_due_tasks() -> None:
     conn = sqlite3.connect(TG_DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
-        now = datetime.now().isoformat()
+        now = utc8_now_iso()
         tasks = conn.execute(
             """
             SELECT t.id, t.owner, t.account_id, t.dialog_id, t.message, t.interval_seconds, t.jitter_seconds,
@@ -780,10 +790,10 @@ def process_auto_send_due_tasks() -> None:
                     "UPDATE tg_auto_send_tasks SET next_run_at = ?, last_run_at = ?, last_result = ?, last_reply = ?, updated_at = ? WHERE id = ?",
                     (
                         next_run,
-                        datetime.now().isoformat(),
+                        utc8_now_iso(),
                         f"sent [{utc8_now_text()}]",
                         reply,
-                        datetime.now().isoformat(),
+                        utc8_now_iso(),
                         task["id"],
                     ),
                 )
@@ -800,9 +810,9 @@ def process_auto_send_due_tasks() -> None:
                     "UPDATE tg_auto_send_tasks SET next_run_at = ?, last_run_at = ?, last_result = ?, updated_at = ? WHERE id = ?",
                     (
                         next_run,
-                        datetime.now().isoformat(),
+                        utc8_now_iso(),
                         f"failed [{utc8_now_text()}]: {detail}",
-                        datetime.now().isoformat(),
+                        utc8_now_iso(),
                         task["id"],
                     ),
                 )
@@ -831,8 +841,14 @@ def run_auto_backup_job():
 def configure_scheduler_jobs(scheduler) -> None:
     from apscheduler.triggers.cron import CronTrigger
 
+    tz = getattr(scheduler, "timezone", None)
     if scheduler.get_job(AUTO_SEND_JOB_ID) is None:
-        scheduler.add_job(run_auto_send_job, CronTrigger(second="*/5"), id=AUTO_SEND_JOB_ID, replace_existing=True)
+        scheduler.add_job(
+            run_auto_send_job,
+            CronTrigger(second="*/5", timezone=tz),
+            id=AUTO_SEND_JOB_ID,
+            replace_existing=True,
+        )
 
     backup_time = APP.config.get("DB_AUTO_BACKUP_TIME") or "03:30"
     hour = 3
@@ -847,7 +863,12 @@ def configure_scheduler_jobs(scheduler) -> None:
 
     if scheduler.get_job(AUTO_BACKUP_JOB_ID):
         scheduler.remove_job(AUTO_BACKUP_JOB_ID)
-    scheduler.add_job(run_auto_backup_job, CronTrigger(hour=hour, minute=minute), id=AUTO_BACKUP_JOB_ID, replace_existing=True)
+    scheduler.add_job(
+        run_auto_backup_job,
+        CronTrigger(hour=hour, minute=minute, timezone=tz),
+        id=AUTO_BACKUP_JOB_ID,
+        replace_existing=True,
+    )
 
 
 def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
@@ -862,8 +883,10 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         except ValueError:
             return next_run_at, "未知"
 
-        display = next_dt.strftime("%Y-%m-%d %H:%M:%S")
-        delta_seconds = int((next_dt - datetime.now()).total_seconds())
+        if next_dt.tzinfo is not None:
+            next_dt = next_dt.astimezone(UTC_PLUS_8).replace(tzinfo=None)
+        display = next_dt.strftime(f"%Y-%m-%d %H:%M:%S {UTC8_LABEL}")
+        delta_seconds = int((next_dt - utc8_now_naive()).total_seconds())
         if delta_seconds <= 0:
             return display, "即将执行"
 
@@ -1317,7 +1340,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
 
         next_run = schedule_next_run(interval_value, jitter_value, schedule_type, time_of_day)
         db = get_tg_db()
-        now_str = datetime.now().isoformat()
+        now_str = utc8_now_iso()
         db.execute(
             """
             INSERT INTO tg_auto_send_tasks (owner, account_id, dialog_id, message, interval_seconds, jitter_seconds, schedule_type, time_of_day, enabled, next_run_at, created_at, updated_at)
@@ -1410,7 +1433,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
         db = get_tg_db()
         db.execute(
             "UPDATE tg_auto_send_tasks SET message = ?, time_of_day = ?, jitter_seconds = ?, interval_seconds = ?, schedule_type = ?, next_run_at = ?, updated_at = ? WHERE id = ? AND owner = ?",
-            (message_text, time_of_day, jitter_value, interval_value, "daily", next_run, datetime.now().isoformat(), task_id, username),
+            (message_text, time_of_day, jitter_value, interval_value, "daily", next_run, utc8_now_iso(), task_id, username),
         )
         db.commit()
         return redirect(
@@ -1445,7 +1468,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             reply = run_async(send_and_fetch_reply(task["session_text"], task["dialog_id"], task["message"]))
             db.execute(
                 "UPDATE tg_auto_send_tasks SET last_run_at = ?, last_result = ?, last_reply = ?, updated_at = ? WHERE id = ?",
-                (datetime.now().isoformat(), f"sent [{utc8_now_text()}]", reply, datetime.now().isoformat(), task_id),
+                (utc8_now_iso(), f"sent [{utc8_now_text()}]", reply, utc8_now_iso(), task_id),
             )
             db.commit()
             msg = "已发送。"
@@ -1453,7 +1476,7 @@ def register_routes(require_login, configure_scheduler_jobs_cb) -> None:
             detail = f"{exc.__class__.__name__}: {exc}" if str(exc) else exc.__class__.__name__
             db.execute(
                 "UPDATE tg_auto_send_tasks SET last_run_at = ?, last_result = ?, updated_at = ? WHERE id = ?",
-                (datetime.now().isoformat(), f"failed [{utc8_now_text()}]: {detail}", datetime.now().isoformat(), task_id),
+                (utc8_now_iso(), f"failed [{utc8_now_text()}]: {detail}", utc8_now_iso(), task_id),
             )
             db.commit()
             msg = "发送失败。"
