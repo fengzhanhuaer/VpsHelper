@@ -445,7 +445,7 @@ async def send_and_fetch_reply(session_text: str, dialog_id: str, message: str) 
     try:
         await client.connect()
         target = await resolve_dialog_target(client, dialog_id)
-        sent = await client.send_message(target, append_utc8_timestamp(message))
+        sent = await client.send_message(target, message)
         await asyncio.sleep(2)
         min_id = sent.id if sent else 0
         messages = await client.get_messages(target, limit=10, min_id=min_id)
