@@ -445,11 +445,12 @@ async def send_and_fetch_reply(session_text: str, dialog_id: str, message: str) 
     try:
         await client.connect()
         target = await resolve_dialog_target(client, dialog_id)
-        await client.send_message(target, append_utc8_timestamp(message))
+        sent = await client.send_message(target, append_utc8_timestamp(message))
         await asyncio.sleep(2)
-        messages = await client.get_messages(target, limit=5)
+        min_id = sent.id if sent else 0
+        messages = await client.get_messages(target, limit=10, min_id=min_id)
         for msg in messages:
-            if not msg.out:
+            if not msg.out and (not sent or (msg.date and sent.date and msg.date >= sent.date)):
                 reply_text = msg.message or ""
                 return f"[{format_datetime_utc8(msg.date)}] {reply_text}" if reply_text else f"[{format_datetime_utc8(msg.date)}]"
         return None
