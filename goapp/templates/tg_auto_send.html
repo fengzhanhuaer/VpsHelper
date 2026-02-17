@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root { color-scheme: light; --bg:#f5f2ee; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; }
+        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
+        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
+        main { padding:24px 32px 48px; max-width:1100px; margin:0 auto; }
+        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
+        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
+        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
+        table { width:100%; border-collapse: collapse; }
+        th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eee; vertical-align: top; }
+        .muted { color:#5e4f42; font-size:12px; }
+        code { background:#f6f6f6; padding:2px 6px; border-radius:8px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap:10px;">
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>自动发送任务</h1>
+            <p class="muted">目标目前建议填写 <code>@username</code>（channel/user）。后台会按 next_run_at 触发发送，并写入 last_result。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
+                <a class="btn" href="/tg/auto/send/new">新建任务</a>
+                <a class="ghost" href="/tg/accounts">账号管理</a>
+                <a class="ghost" href="/tg/proxy">代理设置</a>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>账号ID</th>
+                        <th>目标</th>
+                        <th>计划</th>
+                        <th>状态</th>
+                        <th>上次</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {{ range .Tasks }}
+                    <tr>
+                        <td>{{ .ID }}</td>
+                        <td>{{ .AccountID }}</td>
+                        <td>{{ .DialogID }}</td>
+                        <td>
+                            <div class="muted">type={{ .ScheduleType }} interval={{ .IntervalSeconds }}s jitter={{ .JitterSeconds }}s</div>
+                            {{ if .TimeOfDay }}<div class="muted">time={{ .TimeOfDay }}</div>{{ end }}
+                            <div class="muted">next={{ .NextRunAt }}</div>
+                        </td>
+                        <td>{{ if .Enabled }}启用{{ else }}停用{{ end }}</td>
+                        <td>
+                            <div class="muted">{{ .LastRunAt }}</div>
+                            <div class="muted">{{ .LastResult }}</div>
+                        </td>
+                        <td>
+                            <form method="post" action="/tg/auto/send" style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <input type="hidden" name="id" value="{{ .ID }}" />
+                                {{ if .Enabled }}
+                                <button class="ghost" type="submit" name="action" value="disable">停用</button>
+                                {{ else }}
+                                <button class="ghost" type="submit" name="action" value="enable">启用</button>
+                                {{ end }}
+                                <button class="ghost" type="submit" name="action" value="run">立即执行</button>
+                                <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除该任务吗？');">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                {{ else }}
+                    <tr><td colspan="7" class="muted">暂无任务</td></tr>
+                {{ end }}
+                </tbody>
+            </table>
+        </section>
+    </main>
+</body>
+</html>

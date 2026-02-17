@@ -1,5 +1,12 @@
 # 需求草案
 
+## 迁移说明（Go 版）
+
+当前仓库正在从 Python/Flask 迁移至 Go/Gin 全栈实现（见 goapp/）。迁移目标：
+- 所有现有 Web 功能与任务能力在 Go 版对齐
+- SQLite 数据库结构尽量保持兼容（userdata/VpsHelper.db）
+- 运行与更新逻辑逐步切换到 Go 版（/system/update）
+
 ## 背景与目标
 - 个人用户管理约 50 台 VPS。
 - 核心目标：转发能力（隧道/链式），监视与升级作为保障手段。

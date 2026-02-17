@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root { color-scheme: light; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; --muted:#5e4f42; }
+        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
+        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
+        main { padding:24px 32px 48px; max-width:980px; margin:0 auto; }
+        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
+        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
+        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .field { display:grid; gap:6px; margin-bottom:12px; }
+        .field input { padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
+        .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin-bottom:12px; white-space: pre-wrap; }
+        .muted { color: var(--muted); font-size:12px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap:10px;">
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>数据库管理</h1>
+            <p class="muted">默认使用本地 sqlite。可创建云端私有 D1，并手动备份/拉取。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+
+            <form method="post" action="/settings/database">
+                <div class="field">
+                    <label for="cf_api_token">Cloudflare API Token</label>
+                    <input id="cf_api_token" name="cf_api_token" value="{{ .CFToken }}" />
+                </div>
+                <div class="field">
+                    <label>D1 数据库名称（固定）</label>
+                    <input value="{{ .DBName }}" readonly />
+                </div>
+                <div class="field">
+                    <label>D1 数据库 ID</label>
+                    <input value="{{ .DBID }}" readonly />
+                </div>
+                <div style="display:grid; gap:8px;">
+                    <button class="btn" type="submit" name="action" value="save">保存 Token</button>
+                    <button class="ghost" type="submit" name="action" value="create">自动创建/绑定 TgHelper 数据库</button>
+                    <button class="ghost" type="submit" name="action" value="backup">备份本地数据库到云端</button>
+                    <button class="ghost" type="submit" name="action" value="pull">将云端数据库拉取到本地</button>
+                </div>
+            </form>
+
+            <form method="post" action="/settings/database" style="margin-top:14px;">
+                <div class="field" style="display:flex; align-items:center; gap:8px;">
+                    <input id="db_auto_backup_enabled" name="db_auto_backup_enabled" type="checkbox" {{ if .AutoBackupEnabled }}checked{{ end }} style="width:auto;" />
+                    <label for="db_auto_backup_enabled" style="margin:0;">启用每天自动备份</label>
+                </div>
+                <div class="field">
+                    <label for="db_auto_backup_time">每日备份时间（HH:MM）</label>
+                    <input id="db_auto_backup_time" name="db_auto_backup_time" value="{{ .AutoBackupTime }}" placeholder="03:30" />
+                </div>
+                <button class="ghost" type="submit" name="action" value="auto_backup">保存自动备份设置</button>
+            </form>
+
+            {{ if .LastAutoBackupResult }}
+            <p class="muted" style="margin-top:12px;">最近自动备份：{{ .LastAutoBackupResult }}</p>
+            {{ end }}
+        </section>
+    </main>
+</body>
+</html>

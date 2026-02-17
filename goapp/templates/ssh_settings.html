@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root { color-scheme: light; --bg:#f5f2ee; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; }
+        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
+        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
+        main { padding:24px 32px 48px; max-width:980px; margin:0 auto; }
+        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
+        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
+        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space: pre-wrap; }
+        .field { display:grid; gap:6px; margin-bottom:12px; }
+        .field input, .field textarea { padding:10px 12px; border-radius:10px; border:1px solid #ddd; font: inherit; }
+        .muted { color:#5e4f42; font-size:12px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap:10px;">
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>SSH 设置</h1>
+            <p class="muted">配置 SSH 端口与登录方式。保存后会尝试自动应用到系统（需要 root 权限）。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+
+            <form method="post" action="/settings/ssh">
+                <div class="field">
+                    <label for="ssh_port">SSH 端口</label>
+                    <input id="ssh_port" name="ssh_port" value="{{ .SSHPort }}" required />
+                </div>
+
+                <div class="field" style="display:flex; align-items:center; gap:8px;">
+                    <input id="allow_password_login" name="allow_password_login" type="checkbox" {{ if .AllowPasswordLogin }}checked{{ end }} style="width:auto;" />
+                    <label for="allow_password_login" style="margin:0;">允许密码登录</label>
+                </div>
+
+                <div class="field" style="display:flex; align-items:center; gap:8px;">
+                    <input id="allow_key_login" name="allow_key_login" type="checkbox" {{ if .AllowKeyLogin }}checked{{ end }} style="width:auto;" />
+                    <label for="allow_key_login" style="margin:0;">允许密钥登录</label>
+                </div>
+
+                <div class="field">
+                    <label for="ssh_public_key">SSH 公钥</label>
+                    <textarea id="ssh_public_key" name="ssh_public_key" rows="4" placeholder="例如：ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host">{{ .SSHPublicKey }}</textarea>
+                    <div class="muted">会尝试写入当前运行用户的 ~/.ssh/authorized_keys。</div>
+                </div>
+
+                <button class="btn" type="submit" name="action" value="save">保存</button>
+            </form>
+
+            <form method="post" action="/settings/ssh" style="margin-top:10px;">
+                <button class="ghost" type="submit" name="action" value="install_fail2ban" style="width:100%;">安装 Fail2ban</button>
+            </form>
+
+            <form method="post" action="/settings/ssh" style="margin-top:10px;">
+                <input type="hidden" name="ssh_port" value="{{ .SSHPort }}" />
+                <button class="ghost" type="submit" name="action" value="diagnose_ssh" style="width:100%;">诊断 SSH 连通性</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

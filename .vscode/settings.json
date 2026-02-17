@@ -27,6 +27,14 @@
         "/^Get-CimInstance Win32_Process -Filter \"ProcessId=9520\" \\| Select-Object ProcessId,Name,CommandLine \\| Format-List$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd goapp; go test \\./\\.\\.\\.$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^winget --version$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

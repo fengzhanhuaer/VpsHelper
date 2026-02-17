@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root { color-scheme: light; --bg:#f5f2ee; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; }
+        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
+        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
+        main { padding:24px 32px 48px; max-width:1100px; margin:0 auto; }
+        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
+        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
+        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
+        .field { display:grid; gap:6px; margin-bottom:12px; }
+        .field select { padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
+        .muted { color:#5e4f42; font-size:12px; }
+        table { width:100%; border-collapse: collapse; }
+        th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eee; vertical-align: top; }
+        code { background:#f6f6f6; padding:2px 6px; border-radius:8px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap:10px;">
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>Dialogs 列表</h1>
+            <p class="muted">这里只展示有 <code>@username</code> 的目标（便于任务发送）。点击“刷新”会用所选账号拉取并覆盖保存到本地数据库。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+
+            <form method="get" action="/tg/dialogs" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                <div class="field" style="min-width:320px;">
+                    <label for="account_id">选择账号</label>
+                    <select id="account_id" name="account_id">
+                        {{ range .Accounts }}
+                          <option value="{{ .ID }}" {{ if eq $.AccountID .ID }}selected{{ end }}>{{ .ID }} - {{ .AccountName }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <button class="ghost" type="submit">切换</button>
+            </form>
+
+            <form method="post" action="/tg/dialogs" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+                <input type="hidden" name="account_id" value="{{ .AccountID }}" />
+                <button class="btn" type="submit" name="action" value="refresh">刷新 dialogs</button>
+            </form>
+
+            <table style="margin-top:12px;">
+                <thead>
+                    <tr>
+                        <th>标题</th>
+                        <th>username</th>
+                        <th>用于任务的目标值</th>
+                        <th>更新时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {{ range .Dialogs }}
+                    <tr>
+                        <td>{{ .Title }}</td>
+                        <td>{{ .Username }}</td>
+                        <td><code>@{{ .Username }}</code></td>
+                        <td class="muted">{{ .UpdatedAt }}</td>
+                    </tr>
+                {{ else }}
+                    <tr><td colspan="4" class="muted">暂无数据（先刷新）</td></tr>
+                {{ end }}
+                </tbody>
+            </table>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,26 +1,68 @@
 # VpsHelper
 
-VpsHelper 是一个基于 Flask 的 VPS 管理工具集，包含多个功能模块：
+当前仓库已开始迁移到 Go（Gin）全栈版本，新的实现位于 goapp/。
 
-- **Tg助手**: 基于 Telethon 的 Telegram 管理工具，支持多账号管理、自动发送任务、数据库备份等
-- **防火墙**: 防火墙管理功能（开发中）
-- 更多功能模块待添加...
+- Go 版默认访问地址：http://127.0.0.1:15018
+- 旧 Python 版仍保留在仓库根目录，但后续功能以 Go 版为主
 
-默认访问地址：[http://127.0.0.1:15018](http://127.0.0.1:15018)
+## 当前状态（重要）
 
-## 特性
+Go 版目前尚未完全覆盖 Python 版所有功能：
+- 已迁移：注册/登录/改密、程序更新（GitHub Release）、服务器状态、Shell 交互、防火墙、SSH 设置（端口/登录方式/Fail2ban/诊断，需 root 才能应用）、TG 登录（验证码/可选 2FA）、TG 账号管理/代理设置、dialogs 刷新与选择目标、自动发送任务（基础版）、自动回复（基础版：实时 Updates 监听 + 关键词包含匹配）、签到任务（含每日自动签到）、数据库 D1 备份/拉取与每日自动备份。
+- TG 补充：/tg/accounts 页面支持选择账号后“一键刷新 dialogs”，并可在同页配置/执行签到任务。
 
-### Tg助手功能
-- 首次注册/登录
-- 多 TG 账号管理
-- 自动发送任务（每日时间 + 随机延时）
-- 本地数据库与 Cloudflare D1 备份/拉取
+### 自动签到（Go 版）
+
+Go 版提供每日自动签到后台任务（默认关闭）。通过数据库表 `app_settings` 配置：
+- `tg_sign_auto_enabled=1` 开启
+- `tg_sign_auto_time=HH:MM` 设置每天执行时间（默认 03:30，依赖系统时区/`TZ`）
+
+执行结果会写入 `tg_sign_auto_last_result`，并在 `/tg/sign` 页面展示“最近自动签到”。
+
+### 自动回复（Go 版）
+
+自动回复支持基础规则（包含匹配，忽略大小写）与后台实时监听。为防刷屏，默认对“同一会话 + 同一规则”做冷却。
+可通过数据库表 `app_settings` 配置：
+- `tg_auto_reply_cooldown_seconds=15` 冷却秒数（默认 15；设置为 0 或负数表示关闭冷却）
+
+运行统计（用于排障，后台每 30 秒写入一次）：
+- `tg_auto_reply_stats_<owner>_<accountID>`（例如 `tg_auto_reply_stats_admin_1`）
+
+## 仍待完善（示例）
+
+- 自动回复的高级规则引擎（目前已提供基础版：实时监听 + 关键词包含匹配）
 
 ### 页面结构
 - **一级页面**: 主菜单，显示各功能模块入口（Tg助手、防火墙等）
 - **二级页面**: 各功能模块的详细操作界面
 
-## 安装与使用
+## 安装与使用（Go 版）
+
+### Windows 快速启动
+
+```powershell
+cd goapp
+go run ./cmd/server
+```
+
+### Linux 一键安装为服务（Go 版，基于 Release）
+
+```bash
+curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install-go.sh | sudo bash
+```
+
+说明：脚本会下载 GitHub Releases 的最新二进制并安装 systemd 服务（默认服务名 `vpshelper`，安装目录 `/opt/vpshelper`）。
+说明：默认会替换旧的 Python 服务 `vpshelper.service`（会先 stop/disable，并备份 unit）。
+
+### 生产运行（建议）
+
+```powershell
+cd goapp
+go build -o .\bin\vpshelper.exe .\cmd\server
+.\bin\vpshelper.exe
+```
+
+## 安装与使用（Python 版，旧）
 
 ### Windows 快速启动
 双击运行 `VpsHelper.bat`

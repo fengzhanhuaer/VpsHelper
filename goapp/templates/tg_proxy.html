@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root { color-scheme: light; --bg:#f5f2ee; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; }
+        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
+        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
+        main { padding:24px 32px 48px; max-width:980px; margin:0 auto; }
+        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
+        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
+        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
+        .field { display:grid; gap:6px; margin-bottom:12px; }
+        .field input { padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
+        .muted { color:#5e4f42; font-size:12px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap:10px;">
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>代理设置（Telegram）</h1>
+            <p class="muted">该设置会写入本地数据库，并在 TG 登录/任务发送时作为 ALL_PROXY 生效（socks5/http 取决于你的 URL）。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+
+            <form method="post" action="/tg/proxy" style="display:grid; gap:8px;">
+                <div class="field">
+                    <label for="all_proxy">ALL_PROXY</label>
+                    <input id="all_proxy" name="all_proxy" value="{{ .AllProxy }}" placeholder="socks5://user:pass@127.0.0.1:1080" />
+                    <div class="muted">示例：socks5://127.0.0.1:1080 或 http://127.0.0.1:7890</div>
+                </div>
+
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn" type="submit" name="action" value="save">保存</button>
+                    <button class="ghost" type="submit" name="action" value="clear">清空</button>
+                </div>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

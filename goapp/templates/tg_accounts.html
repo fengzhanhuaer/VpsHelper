@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root { color-scheme: light; --bg:#f5f2ee; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; }
+        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
+        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
+        main { padding:24px 32px 48px; max-width:980px; margin:0 auto; }
+        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
+        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
+        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
+        table { width:100%; border-collapse: collapse; }
+        th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eee; }
+        .muted { color:#5e4f42; font-size:12px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap:10px;">
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>TG 账号管理</h1>
+            <p class="muted">账号登录入口在“账号登录”。本页支持：删除账号、刷新 dialogs、配置/执行签到。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
+                <a class="btn" href="/tg/login/start">添加账号（登录）</a>
+                <a class="ghost" href="/tg/dialogs">Dialogs 页面</a>
+                <a class="ghost" href="/tg/sign">签到页面</a>
+            </div>
+
+            {{ if .HasAccounts }}
+            <form method="get" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin:12px 0;">
+                <div class="field" style="min-width:320px;">
+                    <label for="account_id">选择账号</label>
+                    <select id="account_id" name="account_id" style="padding:10px 12px; border-radius:10px; border:1px solid #ddd;">
+                        {{ range .Accounts }}
+                          <option value="{{ .ID }}" {{ if eq $.SelectedAccountID .ID }}selected{{ end }}>{{ .ID }} - {{ .AccountName }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <button class="ghost" type="submit">切换</button>
+            </form>
+
+            <form method="post" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+                <input type="hidden" name="account_id" value="{{ .SelectedAccountID }}" />
+                <button class="ghost" type="submit" name="action" value="refresh_dialogs">刷新 dialogs</button>
+            </form>
+
+            <div style="display:grid; gap:10px; margin:12px 0;">
+                <div>
+                    <h2 style="font-size:16px; margin:0 0 8px;">签到任务（当前账号）</h2>
+                    <form method="post" action="/tg/accounts" style="display:grid; gap:8px;">
+                        <input type="hidden" name="account_id" value="{{ .SelectedAccountID }}" />
+
+                        {{ if .Dialogs }}
+                        <div class="field">
+                            <label for="sign_dialog_pick">从 dialogs 选择目标（可选）</label>
+                            <select id="sign_dialog_pick" name="sign_dialog_pick" style="padding:10px 12px; border-radius:10px; border:1px solid #ddd;">
+                                <option value="">（不选择，手动填写下方目标）</option>
+                                {{ range .Dialogs }}
+                                  <option value="{{ .DialogID }}" {{ if eq $.SignDialogID .DialogID }}selected{{ end }}>{{ .Title }} ({{ .DialogID }})</option>
+                                {{ end }}
+                            </select>
+                        </div>
+                        {{ end }}
+
+                        <div class="field">
+                            <label for="sign_dialog_id">目标（@username）</label>
+                            <input id="sign_dialog_id" name="sign_dialog_id" value="{{ .SignDialogID }}" style="padding:10px 12px; border-radius:10px; border:1px solid #ddd;" placeholder="@mychannel" />
+                        </div>
+                        <div class="field">
+                            <label for="sign_message">消息内容（可空）</label>
+                            <textarea id="sign_message" name="sign_message" rows="3" style="padding:10px 12px; border-radius:10px; border:1px solid #ddd; font:inherit;">{{ .SignMessage }}</textarea>
+                        </div>
+
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <button class="btn" type="submit" name="action" value="sign_save">保存</button>
+                            <button class="ghost" type="submit" name="action" value="sign_run">立即执行</button>
+                            <button class="ghost" type="submit" name="action" value="sign_delete" onclick="return confirm('确定删除该账号的签到任务吗？');">删除</button>
+                        </div>
+
+                        {{ if .SignCreatedAt }}
+                        <div class="muted">上次保存时间：{{ .SignCreatedAt }}</div>
+                        {{ end }}
+                    </form>
+                </div>
+
+                <div>
+                    <h2 style="font-size:16px; margin:0 0 8px;">Dialogs（当前账号）</h2>
+                    <p class="muted" style="margin:0 0 8px;">只展示有 @username 的目标，用于任务发送/签到。</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>标题</th>
+                                <th>目标</th>
+                                <th>更新时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {{ range .Dialogs }}
+                            <tr>
+                                <td>{{ .Title }}</td>
+                                <td>{{ .DialogID }}</td>
+                                <td class="muted">{{ .UpdatedAt }}</td>
+                            </tr>
+                        {{ else }}
+                            <tr><td colspan="3" class="muted">暂无数据（先点“刷新 dialogs”）</td></tr>
+                        {{ end }}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {{ end }}
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>账号名</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {{ range .Accounts }}
+                    <tr>
+                        <td>{{ .ID }}</td>
+                        <td>{{ .AccountName }}</td>
+                        <td>{{ .CreatedAt }}</td>
+                        <td>
+                            <form method="post" action="/tg/accounts" style="display:inline;">
+                                <input type="hidden" name="id" value="{{ .ID }}" />
+                                <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除该账号会话吗？');">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                {{ else }}
+                    <tr><td colspan="4" class="muted">暂无账号</td></tr>
+                {{ end }}
+                </tbody>
+            </table>
+        </section>
+    </main>
+</body>
+</html>

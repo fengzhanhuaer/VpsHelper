@@ -1,0 +1,85 @@
+name: tag-from-version
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag when VERSION changed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BEFORE='${{ github.event.before }}'
+          SHA='${{ github.sha }}'
+
+          if [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "First push detected; treating VERSION as changed"
+            VERSION_CHANGED=1
+          else
+            if git diff --name-only "$BEFORE" "$SHA" | grep -qx "VERSION"; then
+              VERSION_CHANGED=1
+            else
+              VERSION_CHANGED=0
+            fi
+          fi
+
+          if [[ "$VERSION_CHANGED" != "1" ]]; then
+            echo "VERSION not changed; skip tagging"
+            exit 0
+          fi
+
+          if [[ ! -f VERSION ]]; then
+            echo "VERSION file not found"
+            exit 1
+          fi
+
+          VER_RAW="$(tr -d ' \t\r\n' < VERSION)"
+          if [[ -z "$VER_RAW" ]]; then
+            echo "VERSION is empty"
+            exit 1
+          fi
+
+          # Normalize tag name.
+          TAG="$VER_RAW"
+          if [[ "$TAG" != v* ]]; then
+            TAG="v$TAG"
+          fi
+
+          # Skip placeholder.
+          VER_NO_V="${TAG#v}"
+          if [[ "$VER_NO_V" == "0.0.0" ]]; then
+            echo "VERSION is 0.0.0 placeholder; skip tagging"
+            exit 0
+          fi
+
+          # Validate (basic semver with optional pre-release/build).
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([\-+][0-9A-Za-z\.-]+)?$ ]]; then
+            echo "Invalid VERSION format: '$VER_RAW' (expected 1.2.3 or v1.2.3 or 1.2.3-beta.1)"
+            exit 1
+          fi
+
+          if git tag -l "$TAG" | grep -qx "$TAG"; then
+            echo "Tag already exists: $TAG"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          echo "Created and pushed tag: $TAG"

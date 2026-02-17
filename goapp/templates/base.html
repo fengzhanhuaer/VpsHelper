@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f5f2ee;
+            --panel: #ffffff;
+            --ink: #1f1b16;
+            --accent: #d9480f;
+        }
+        body {
+            margin: 0;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%);
+            color: var(--ink);
+        }
+        header {
+            padding: 24px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        main {
+            padding: 24px 32px 48px;
+            max-width: 980px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: var(--panel);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(31, 27, 22, 0.08);
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 18px;
+            border-radius: 999px;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .muted {
+            color: #5e4f42;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="btn" href="/tg_helper">TG Helper</a>
+        </nav>
+    </header>
+    <main>
+        {{ template "content" . }}
+    </main>
+</body>
+</html>

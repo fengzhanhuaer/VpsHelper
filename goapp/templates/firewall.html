@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root { color-scheme: light; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; --muted:#5e4f42; }
+        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
+        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
+        main { padding:24px 32px 48px; max-width:980px; margin:0 auto; }
+        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
+        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
+        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin: 12px 0; }
+        .muted { color: var(--muted); font-size:12px; }
+        table { width:100%; border-collapse: collapse; font-size:14px; }
+        th, td { border-bottom:1px solid #e5e7eb; text-align:left; padding:8px 6px; vertical-align: top; }
+        th { color: var(--muted); font-weight:600; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap:10px;">
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>防火墙</h1>
+            <p class="muted">查看防火墙类型、开放端口、监听 IP 与进程，并可执行启用与端口开放操作。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+
+            <div style="margin-top:12px; margin-bottom:12px;">
+                <div><strong>防火墙类型：</strong>{{ .FirewallType }}</div>
+                <div><strong>当前状态：</strong>{{ .FirewallStatus }}</div>
+                {{ if .Note }}
+                <div style="margin-top:6px;" class="muted">{{ .Note }}</div>
+                {{ end }}
+            </div>
+
+            <form method="post" action="/firewall" style="display:grid; gap:8px; margin-bottom:12px;">
+                <button class="ghost" type="submit" name="action" value="enable_firewall">启用防火墙</button>
+            </form>
+
+            <form method="post" action="/firewall" style="display:grid; gap:8px; margin-bottom:14px;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input name="port" placeholder="输入要开放的端口，例如 8080" />
+                    <select name="protocol" style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px;">
+                        <option value="tcp">tcp</option>
+                        <option value="udp">udp</option>
+                    </select>
+                    <button class="btn" type="submit" name="action" value="open_port" style="width:auto;">开放端口</button>
+                </div>
+            </form>
+
+            <h3 style="margin: 0 0 8px; font-size: 16px;">防火墙已开放端口</h3>
+
+            {{ if .PortRows }}
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 140px;">开放端口</th>
+                        <th style="width: 120px;">端口类型</th>
+                        <th style="width: 260px;">绑定 IP</th>
+                        <th>进程名称</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range .PortRows }}
+                    <tr>
+                        <td>{{ .port }}</td>
+                        <td>{{ .protocol }}</td>
+                        <td>{{ join .bind_ips "，" }}</td>
+                        <td>{{ join .process_names "，" }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+            {{ else }}
+            <p class="muted" style="margin-top:12px;">未检测到防火墙开放端口。</p>
+            {{ end }}
+
+            <h3 style="margin: 16px 0 8px; font-size: 16px;">已打开端口（监听中）</h3>
+            {{ if .ListeningRows }}
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 140px;">监听端口</th>
+                        <th style="width: 120px;">端口类型</th>
+                        <th style="width: 260px;">绑定 IP</th>
+                        <th>进程名称</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range .ListeningRows }}
+                    <tr>
+                        <td>{{ .Port }}</td>
+                        <td>{{ .Protocol }}</td>
+                        <td>{{ .BindIP }}</td>
+                        <td>{{ join .ProcNames "，" }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+            {{ else }}
+            <p class="muted" style="margin-top:12px;">未检测到监听端口。</p>
+            {{ end }}
+        </section>
+    </main>
+</body>
+</html>

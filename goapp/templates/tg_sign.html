@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root { color-scheme: light; --bg:#f5f2ee; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; }
+        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
+        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
+        main { padding:24px 32px 48px; max-width:980px; margin:0 auto; }
+        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
+        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
+        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
+        .field { display:grid; gap:6px; margin-bottom:12px; }
+        .field input, .field textarea, .field select { padding:10px 12px; border-radius:10px; border:1px solid #ddd; font: inherit; }
+        .muted { color:#5e4f42; font-size:12px; }
+        code { background:#f6f6f6; padding:2px 6px; border-radius:8px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap:10px;">
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>签到任务</h1>
+            <p class="muted">为每个账号保存一条签到配置（目标 + 消息）。可手动“立即执行”。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+
+            {{ if .AutoLast }}
+            <p class="muted" style="white-space:pre-wrap; margin-top:10px;">最近自动签到：
+{{ .AutoLast }}</p>
+            {{ end }}
+
+            <form method="get" action="/tg/sign" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                <div class="field" style="min-width:320px;">
+                    <label for="account_id">选择账号</label>
+                    <select id="account_id" name="account_id">
+                        {{ range .Accounts }}
+                          <option value="{{ .ID }}" {{ if eq $.AccountID .ID }}selected{{ end }}>{{ .ID }} - {{ .AccountName }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <button class="ghost" type="submit">切换</button>
+            </form>
+
+            <form method="post" action="/tg/sign" style="margin-top:10px;">
+                <input type="hidden" name="account_id" value="{{ .AccountID }}" />
+
+                {{ if .Dialogs }}
+                <div class="field">
+                    <label for="dialog_pick">从 dialogs 选择目标（可选）</label>
+                    <select id="dialog_pick" name="dialog_pick">
+                        <option value="">（不选择，手动填写下方目标）</option>
+                        {{ range .Dialogs }}
+                          <option value="{{ .DialogID }}" {{ if eq $.DialogID .DialogID }}selected{{ end }}>{{ .Title }} ({{ .DialogID }})</option>
+                        {{ end }}
+                    </select>
+                    <div class="muted">如列表为空，请先到“Dialogs”页面点击刷新。</div>
+                </div>
+                {{ end }}
+
+                <div class="field">
+                    <label for="dialog_id">目标（@username 或 t.me/username）</label>
+                    <input id="dialog_id" name="dialog_id" value="{{ .DialogID }}" placeholder="@mychannel" />
+                </div>
+
+                <div class="field">
+                    <label for="msg">消息内容（可空）</label>
+                    <textarea id="msg" name="msg" rows="3" placeholder="例如：签到">{{ .SignMessage }}</textarea>
+                </div>
+
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="btn" type="submit" name="action" value="save">保存</button>
+                    <button class="ghost" type="submit" name="action" value="run">立即执行</button>
+                    <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除该账号的签到任务吗？');">删除</button>
+                </div>
+
+                {{ if .CreatedAt }}
+                <p class="muted" style="margin-top:12px;">上次保存时间：{{ .CreatedAt }}</p>
+                {{ end }}
+            </form>
+        </section>
+    </main>
+</body>
+</html>

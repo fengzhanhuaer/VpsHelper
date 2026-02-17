@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f5f2ee;
+            --panel: #ffffff;
+            --ink: #1f1b16;
+            --accent: #d9480f;
+        }
+        body {
+            margin: 0;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%);
+            color: var(--ink);
+        }
+        header {
+            padding: 24px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        main {
+            padding: 24px 32px 48px;
+            max-width: 980px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: var(--panel);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(31, 27, 22, 0.08);
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 18px;
+            border-radius: 999px;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+        }
+        .ghost {
+            display: inline-block;
+            padding: 10px 18px;
+            border-radius: 999px;
+            background: transparent;
+            color: var(--ink);
+            text-decoration: none;
+            font-weight: 600;
+            border: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .error {
+            background: #ffe3e3;
+            color: #9b1c1c;
+            padding: 10px 12px;
+            border-radius: 10px;
+            margin: 12px 0;
+        }
+        .muted { color: #5e4f42; }
+        .grid { display: grid; gap: 8px; margin-bottom: 14px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav style="display:flex; gap: 10px;">
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h1>程序更新（Go）</h1>
+            <p class="muted">当前版本：{{ .CurrentVersion }}</p>
+            <p class="muted" style="font-size:12px;">更新来源：GitHub Release（不再使用 git 拉取/构建）。</p>
+
+            {{ if .Message }}
+            <div class="error">{{ .Message }}</div>
+            {{ end }}
+            <form method="post" action="/system/update" style="display:grid; gap:8px;">
+                <button class="ghost" type="submit" name="action" value="restart">重启服务</button>
+            </form>
+
+            <hr style="margin:18px 0; border:none; border-top:1px solid #eee;" />
+
+            <h2 style="margin:0 0 10px;">GitHub Release 更新</h2>
+            <p class="muted" style="margin-top:0;">适用于不在服务器上构建：从 GitHub Release 下载已编译二进制并重启切换。</p>
+
+            {{ if .GH.Note }}
+            <div class="error">{{ .GH.Note }}</div>
+            {{ end }}
+
+            <div class="grid">
+                <div><strong>最新 Release：</strong>{{ .GH.TagName }}</div>
+                <div><strong>Release 名称：</strong>{{ .GH.Name }}</div>
+                <div><strong>发布时间：</strong>{{ .GH.PublishedAt }}</div>
+                <div><strong>选择的 Asset：</strong>{{ .GH.AssetName }}</div>
+            </div>
+
+            <form method="post" action="/system/update" style="display:grid; gap:8px;">
+                <label>Owner：<input name="gh_owner" value="{{ .GHOwner }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
+                <label>Repo：<input name="gh_repo" value="{{ .GHRepo }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
+                <label>Token（可选，私有仓库需要）：<input name="gh_token" value="{{ .GHToken }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
+                <label>Asset 名称（可选，不填则自动匹配当前系统）：<input name="gh_asset" value="{{ .GHAsset }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
+
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="ghost" type="submit" name="action" value="gh_save">保存配置</button>
+                    <button class="ghost" type="submit" name="action" value="gh_check">检查最新 Release</button>
+                    <button class="btn" type="submit" name="action" value="gh_update">从 Release 更新并重启</button>
+                </div>
+            </form>
+        </section>
+    </main>
+</body>
+</html>
