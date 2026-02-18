@@ -60,14 +60,14 @@
 
                 {{ if .Dialogs }}
                 <div class="field">
-                    <label for="dialog_pick">从 dialogs 选择目标（可选）</label>
+                    <label for="dialog_pick">从会话列表选择目标（可选）</label>
                     <select id="dialog_pick" name="dialog_pick">
                         <option value="">（不选择，手动填写下方目标）</option>
                         {{ range .Dialogs }}
                           <option value="{{ .DialogID }}" {{ if eq $.DialogID .DialogID }}selected{{ end }}>{{ .Title }} ({{ .DialogID }})</option>
                         {{ end }}
                     </select>
-                    <div class="muted">如列表为空，请先到“Dialogs”页面点击刷新。</div>
+                    <div class="muted">如列表为空，请先到“会话列表”页面点击刷新。</div>
                 </div>
                 {{ end }}
 

@@ -31,7 +31,7 @@
     <main>
         <section class="panel">
             <h1>TG 账号管理</h1>
-            <p class="muted">账号登录入口在“账号登录”。本页支持：删除账号、刷新 dialogs、配置/执行签到。</p>
+            <p class="muted">账号登录入口在“账号登录”。本页支持：删除账号、刷新会话列表、配置/执行签到。</p>
 
             {{ if .Message }}
             <div class="error">{{ .Message }}</div>
@@ -39,7 +39,7 @@
 
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
                 <a class="btn" href="/tg/login/start">添加账号（登录）</a>
-                <a class="ghost" href="/tg/dialogs">Dialogs 页面</a>
+                <a class="ghost" href="/tg/dialogs">会话列表页面</a>
                 <a class="ghost" href="/tg/sign">签到页面</a>
             </div>
 
@@ -58,7 +58,7 @@
 
             <form method="post" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
                 <input type="hidden" name="account_id" value="{{ .SelectedAccountID }}" />
-                <button class="ghost" type="submit" name="action" value="refresh_dialogs">刷新 dialogs</button>
+                <button class="ghost" type="submit" name="action" value="refresh_dialogs">刷新会话列表</button>
             </form>
 
             <div style="display:grid; gap:10px; margin:12px 0;">
@@ -69,7 +69,7 @@
 
                         {{ if .Dialogs }}
                         <div class="field">
-                            <label for="sign_dialog_pick">从 dialogs 选择目标（可选）</label>
+                            <label for="sign_dialog_pick">从会话列表选择目标（可选）</label>
                             <select id="sign_dialog_pick" name="sign_dialog_pick" style="padding:10px 12px; border-radius:10px; border:1px solid #ddd;">
                                 <option value="">（不选择，手动填写下方目标）</option>
                                 {{ range .Dialogs }}
@@ -101,7 +101,7 @@
                 </div>
 
                 <div>
-                    <h2 style="font-size:16px; margin:0 0 8px;">Dialogs（当前账号）</h2>
+                    <h2 style="font-size:16px; margin:0 0 8px;">会话列表（当前账号）</h2>
                     <p class="muted" style="margin:0 0 8px;">只展示有 @username 的目标，用于任务发送/签到。</p>
                     <table>
                         <thead>
@@ -119,7 +119,7 @@
                                 <td class="muted">{{ .UpdatedAt }}</td>
                             </tr>
                         {{ else }}
-                            <tr><td colspan="3" class="muted">暂无数据（先点“刷新 dialogs”）</td></tr>
+                            <tr><td colspan="3" class="muted">暂无数据（先点“刷新会话列表”）</td></tr>
                         {{ end }}
                         </tbody>
                     </table>

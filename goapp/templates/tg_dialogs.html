@@ -33,7 +33,7 @@
 
     <main>
         <section class="panel">
-            <h1>Dialogs 列表</h1>
+            <h1>会话列表</h1>
             <p class="muted">这里只展示有 <code>@username</code> 的目标（便于任务发送）。点击“刷新”会用所选账号拉取并覆盖保存到本地数据库。</p>
 
             {{ if .Message }}
@@ -54,7 +54,7 @@
 
             <form method="post" action="/tg/dialogs" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
                 <input type="hidden" name="account_id" value="{{ .AccountID }}" />
-                <button class="btn" type="submit" name="action" value="refresh">刷新 dialogs</button>
+                <button class="btn" type="submit" name="action" value="refresh">刷新会话列表</button>
             </form>
 
             <table style="margin-top:12px;">

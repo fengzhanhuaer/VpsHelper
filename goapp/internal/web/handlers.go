@@ -625,7 +625,7 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 				message = "刷新失败：" + msg
 				break
 			}
-			message = fmt.Sprintf("已刷新 dialogs：%d 条（仅保存有 @username 的目标）。", n)
+			message = fmt.Sprintf("已刷新会话列表：%d 条（仅保存有 @username 的目标）。", n)
 		case "sign_save", "sign_run", "sign_delete":
 			if selectedAccountID <= 0 {
 				message = "请先选择账号。"
@@ -763,7 +763,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 	}
 	if len(accounts) == 0 {
 		c.HTML(http.StatusOK, "tg_dialogs.html", gin.H{
-			"Title":     "Dialogs",
+			"Title":     "会话列表",
 			"Message":   "请先登录添加一个 TG 账号。",
 			"Accounts":  accounts,
 			"AccountID": int64(0),
@@ -806,7 +806,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 					if msg != "ok" {
 						message = "刷新失败：" + msg
 					} else {
-						message = fmt.Sprintf("已刷新 dialogs：%d 条（仅保存有 @username 的目标）。", n)
+						message = fmt.Sprintf("已刷新会话列表：%d 条（仅保存有 @username 的目标）。", n)
 					}
 				}
 			}
@@ -822,7 +822,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "tg_dialogs.html", gin.H{
-		"Title":     "Dialogs",
+		"Title":     "会话列表",
 		"Message":   message,
 		"Accounts":  accounts,
 		"AccountID": accountID,
@@ -1120,11 +1120,54 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 		return
 	}
 
-	// Defaults.
+	accounts, err := store.ListTGAccounts(h.dbConn, username)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "load accounts failed")
+		return
+	}
+
+	selectedAccountID := int64(0)
+	if len(accounts) > 0 {
+		selectedAccountID = accounts[0].ID
+	}
+
+	accountIDText := strings.TrimSpace(c.Query("account_id"))
+	if c.Request.Method == http.MethodPost {
+		if v := strings.TrimSpace(c.PostForm("account_id")); v != "" {
+			accountIDText = v
+		}
+	}
+	if accountIDText != "" {
+		if id, err := strconv.ParseInt(accountIDText, 10, 64); err == nil && id > 0 {
+			selectedAccountID = id
+		}
+	}
+
+	accountOwned := false
+	for _, a := range accounts {
+		if a.ID == selectedAccountID {
+			accountOwned = true
+			break
+		}
+	}
+	if !accountOwned && len(accounts) > 0 {
+		selectedAccountID = accounts[0].ID
+		accountOwned = true
+	}
+
+	dialogs := []store.TGDialog{}
+	if accountOwned {
+		if d, err := store.ListTGDialogs(h.dbConn, selectedAccountID); err == nil {
+			dialogs = d
+		}
+	}
+
 	view := gin.H{
 		"Title":           "新建自动发送任务",
 		"Error":           "",
-		"AccountID":       "",
+		"Accounts":        accounts,
+		"AccountID":       selectedAccountID,
+		"Dialogs":         dialogs,
 		"DialogID":        "",
 		"Message":         "",
 		"ScheduleType":    "interval",
@@ -1134,32 +1177,12 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 		"Enabled":         true,
 	}
 
-	// If account_id is provided (GET or POST), load dialogs for selection.
-	accountIDForDialogs := int64(0)
-	if v := strings.TrimSpace(c.Query("account_id")); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-			accountIDForDialogs = id
-			view["AccountID"] = v
-		}
-	}
-
-	if accountIDForDialogs > 0 {
-		if dialogs, err := store.ListTGDialogs(h.dbConn, accountIDForDialogs); err == nil {
-			view["Dialogs"] = dialogs
-		}
-	}
-
 	if c.Request.Method == http.MethodGet {
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
 
-	accountIDText := strings.TrimSpace(c.PostForm("account_id"))
-	dialogPick := strings.TrimSpace(c.PostForm("dialog_pick"))
 	dialogID := strings.TrimSpace(c.PostForm("dialog_id"))
-	if dialogPick != "" {
-		dialogID = dialogPick
-	}
 	msg := strings.TrimSpace(c.PostForm("message"))
 	scheduleType := strings.TrimSpace(c.PostForm("schedule_type"))
 	intervalText := strings.TrimSpace(c.PostForm("interval_seconds"))
@@ -1167,7 +1190,7 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 	jitterText := strings.TrimSpace(c.PostForm("jitter_seconds"))
 	enabled := c.PostForm("enabled") == "on"
 
-	view["AccountID"] = accountIDText
+	view["AccountID"] = selectedAccountID
 	view["DialogID"] = dialogID
 	view["Message"] = msg
 	view["ScheduleType"] = scheduleType
@@ -1175,25 +1198,42 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 	view["TimeOfDay"] = timeOfDay
 	view["JitterSeconds"] = jitterText
 	view["Enabled"] = enabled
-	if accountID, err := strconv.ParseInt(accountIDText, 10, 64); err == nil && accountID > 0 {
-		if dialogs, err := store.ListTGDialogs(h.dbConn, accountID); err == nil {
-			view["Dialogs"] = dialogs
-		}
-	}
 
-	accountID, err := strconv.ParseInt(accountIDText, 10, 64)
-	if err != nil || accountID <= 0 {
-		view["Error"] = "账号ID 格式不正确。"
+	if len(accounts) == 0 {
+		view["Error"] = "请先添加 TG 账号。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
-	if _, err := store.GetTGAccountByID(h.dbConn, username, accountID); err != nil {
+	if !accountOwned || selectedAccountID <= 0 {
 		view["Error"] = "账号不存在或不属于当前用户。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
-	if dialogID == "" || msg == "" {
-		view["Error"] = "目标与消息内容不能为空。"
+	if _, err := store.GetTGAccountByID(h.dbConn, username, selectedAccountID); err != nil {
+		view["Error"] = "账号不存在或不属于当前用户。"
+		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
+		return
+	}
+
+	if dialogID == "" {
+		view["Error"] = "请选择会话ID。"
+		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
+		return
+	}
+	dialogOwned := false
+	for _, d := range dialogs {
+		if d.DialogID == dialogID {
+			dialogOwned = true
+			break
+		}
+	}
+	if !dialogOwned {
+		view["Error"] = "会话ID不存在或不属于当前账号。"
+		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
+		return
+	}
+	if msg == "" {
+		view["Error"] = "消息内容不能为空。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
@@ -1212,21 +1252,21 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 
 	if scheduleType == "daily" {
 		if _, err := time.Parse("15:04", timeOfDay); err != nil {
-			view["Error"] = "daily 模式下 time_of_day 必须是 HH:MM。"
+			view["Error"] = "daily 模式中 time_of_day 必须是 HH:MM。"
 			c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 			return
 		}
 	} else {
 		scheduleType = "interval"
 		if intervalSeconds <= 0 {
-			view["Error"] = "interval 模式下 interval_seconds 必须 > 0。"
+			view["Error"] = "interval 模式中 interval_seconds 必须 > 0。"
 			c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 			return
 		}
 	}
 
 	next := time.Now().Format(time.RFC3339)
-	if err := store.CreateAutoSendTask(h.dbConn, username, accountID, dialogID, msg, intervalSeconds, jitterSeconds, scheduleType, timeOfDay, enabled, next); err != nil {
+	if err := store.CreateAutoSendTask(h.dbConn, username, selectedAccountID, dialogID, msg, intervalSeconds, jitterSeconds, scheduleType, timeOfDay, enabled, next); err != nil {
 		view["Error"] = "创建失败。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return

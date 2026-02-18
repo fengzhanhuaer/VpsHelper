@@ -31,7 +31,7 @@
     <main>
         <section class="panel">
             <h1>新建自动发送任务</h1>
-            <p class="muted">说明：目标目前建议填写 @username（channel/user）。</p>
+            <p class="muted">账号和会话ID均通过下拉选择。若无会话ID，请先到“会话列表”页面刷新。</p>
 
             {{ if .Error }}
             <div class="error">{{ .Error }}</div>
@@ -39,27 +39,28 @@
 
             <form method="post" action="/tg/auto/send/new" style="display:grid; gap:8px;">
                 <div class="field">
-                    <label for="account_id">账号ID</label>
-                    <input id="account_id" name="account_id" value="{{ .AccountID }}" placeholder="例如 1" />
-                    <div class="muted">在“账号管理”页面可以看到 ID。</div>
-                </div>
-
-                {{ if .Dialogs }}
-                <div class="field">
-                    <label for="dialog_pick">从 dialogs 选择目标（可选）</label>
-                    <select id="dialog_pick" name="dialog_pick">
-                        <option value="">（不选择，手动填写下方目标）</option>
-                        {{ range .Dialogs }}
-                          <option value="{{ .DialogID }}">{{ .Title }} ({{ .DialogID }})</option>
+                    <label for="account_id">账号</label>
+                    {{ if .Accounts }}
+                    <select id="account_id" name="account_id" onchange="window.location.href='/tg/auto/send/new?account_id='+this.value;">
+                        {{ range .Accounts }}
+                          <option value="{{ .ID }}" {{ if eq $.AccountID .ID }}selected{{ end }}>{{ .ID }} - {{ .AccountName }}</option>
                         {{ end }}
                     </select>
-                    <div class="muted">如列表为空，请先到“Dialogs”页面点击刷新。</div>
+                    <div class="muted">切换账号会自动刷新会话ID下拉列表。</div>
+                    {{ else }}
+                    <div class="muted">暂无可用账号，请先在“账号登录”页面添加账号。</div>
+                    {{ end }}
                 </div>
-                {{ end }}
 
                 <div class="field">
-                    <label for="dialog_id">目标（@username）</label>
-                    <input id="dialog_id" name="dialog_id" value="{{ .DialogID }}" placeholder="@mychannel" />
+                    <label for="dialog_id">会话ID</label>
+                    <select id="dialog_id" name="dialog_id">
+                        <option value="">请选择会话ID</option>
+                        {{ range .Dialogs }}
+                          <option value="{{ .DialogID }}" {{ if eq $.DialogID .DialogID }}selected{{ end }}>{{ .Title }} ({{ .DialogID }})</option>
+                        {{ end }}
+                    </select>
+                    <div class="muted">如无可选项，请先在“会话列表”页面刷新对应账号的数据。</div>
                 </div>
 
                 <div class="field">
