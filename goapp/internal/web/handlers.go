@@ -1456,12 +1456,19 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 				break
 			}
 
-			// Download and restart to downloaded binary.
+			// Download and restart.
 			ext := ""
 			if runtime.GOOS == "windows" {
 				ext = ".exe"
 			}
 			dest := filepath.Join(goappDir, "bin", "vpshelper-release-next"+ext)
+			// Under systemd, replace the current executable in-place so the
+			// service restart uses the new binary path (ExecStart).
+			if update.IsSystemdManaged() {
+				if currentExe, e := os.Executable(); e == nil && currentExe != "" {
+					dest = currentExe
+				}
+			}
 
 			dlCtx, dlCancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
 			defer dlCancel()
@@ -1469,6 +1476,21 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			if err != nil {
 				message = "从 Release 下载失败：" + err.Error()
 				break
+			}
+			// If downloaded asset is a zip, final binary path may differ from
+			// ExecStart path. Move it back to current executable for systemd.
+			if update.IsSystemdManaged() {
+				if currentExe, e := os.Executable(); e == nil && currentExe != "" {
+					if filepath.Clean(bin) != filepath.Clean(currentExe) {
+						_ = os.Remove(currentExe)
+						if err := os.Rename(bin, currentExe); err != nil {
+							message = "替换可执行文件失败：" + err.Error()
+							break
+						}
+						_ = os.Chmod(currentExe, 0o755)
+						bin = currentExe
+					}
+				}
 			}
 			message = "已下载 Release：" + ghInfo.TagName + "（" + ghInfo.AssetName + "），服务将在 1 秒后自动重启。"
 			update.RestartToDelayed(bin, os.Args[1:], 1*time.Second)
