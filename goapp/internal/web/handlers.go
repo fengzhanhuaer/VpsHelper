@@ -626,7 +626,16 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 				message = "刷新失败：" + msg
 				break
 			}
-			message = fmt.Sprintf("已刷新会话列表：%d 条（仅保存有 @username 的目标）。", n)
+			migrated, migrateErr := tg.NormalizeStoredTargetsByDialogs(h.dbConn, username, selectedAccountID)
+			if migrateErr != nil {
+				message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。任务迁移失败：%s", n, migrateErr.Error())
+				break
+			}
+			if migrated > 0 {
+				message = fmt.Sprintf("已刷新会话列表：%d 条，已迁移 %d 条任务目标为会话ID。", n, migrated)
+			} else {
+				message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。", n)
+			}
 		case "sign_save", "sign_run", "sign_delete":
 			if selectedAccountID <= 0 {
 				message = "请先选择账号。"
@@ -649,6 +658,14 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 					message = "请选择/填写目标。"
 					break
 				}
+				resolveCtx, resolveCancel := context.WithTimeout(c.Request.Context(), 35*time.Second)
+				resolvedDialogID, resolveErr := tg.ResolveDialogIDForAccount(resolveCtx, h.dbConn, username, selectedAccountID, dialogID)
+				resolveCancel()
+				if resolveErr != nil {
+					message = "目标解析失败：" + resolveErr.Error()
+					break
+				}
+				dialogID = resolvedDialogID
 				if err := store.UpsertSignTask(h.dbConn, username, selectedAccountID, dialogID, signMsg); err != nil {
 					message = "保存失败。"
 				} else {
@@ -665,11 +682,22 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 					message = "请选择/填写目标。"
 					break
 				}
+				submittedDialogID := dialogID
 				ctx, cancel := context.WithTimeout(c.Request.Context(), 40*time.Second)
 				defer cancel()
-				ok, msg := tg.SendOnce(ctx, h.dbConn, username, selectedAccountID, dialogID, signMsg)
+				ok, msg, resolvedDialogID := tg.SendOnceWithResolvedDialogID(ctx, h.dbConn, username, selectedAccountID, dialogID, signMsg)
 				if ok {
 					message = msg
+					if resolvedDialogID != "" {
+						dialogID = resolvedDialogID
+						if savedTask, okSaved, _ := store.GetSignTask(h.dbConn, username, selectedAccountID); okSaved {
+							sameTarget := strings.TrimSpace(savedTask.DialogID) == strings.TrimSpace(submittedDialogID) ||
+								strings.EqualFold(tg.NormalizeUsername(savedTask.DialogID), tg.NormalizeUsername(submittedDialogID))
+							if sameTarget && strings.TrimSpace(savedTask.DialogID) != strings.TrimSpace(resolvedDialogID) {
+								_ = store.UpsertSignTask(h.dbConn, username, selectedAccountID, resolvedDialogID, savedTask.Message)
+							}
+						}
+					}
 				} else {
 					message = "执行失败：" + msg
 				}
@@ -807,7 +835,14 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 					if msg != "ok" {
 						message = "刷新失败：" + msg
 					} else {
-						message = fmt.Sprintf("已刷新会话列表：%d 条（仅保存有 @username 的目标）。", n)
+						migrated, migrateErr := tg.NormalizeStoredTargetsByDialogs(h.dbConn, username, accountID)
+						if migrateErr != nil {
+							message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。任务迁移失败：%s", n, migrateErr.Error())
+						} else if migrated > 0 {
+							message = fmt.Sprintf("已刷新会话列表：%d 条，已迁移 %d 条任务目标为会话ID。", n, migrated)
+						} else {
+							message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。", n)
+						}
 					}
 				}
 			}
@@ -904,6 +939,14 @@ func (h *Handler) tgSign(c *gin.Context) {
 				message = "请选择/填写目标。"
 				break
 			}
+			resolveCtx, resolveCancel := context.WithTimeout(c.Request.Context(), 35*time.Second)
+			resolvedDialogID, resolveErr := tg.ResolveDialogIDForAccount(resolveCtx, h.dbConn, username, accountID, dialogID)
+			resolveCancel()
+			if resolveErr != nil {
+				message = "目标解析失败：" + resolveErr.Error()
+				break
+			}
+			dialogID = resolvedDialogID
 			if err := store.UpsertSignTask(h.dbConn, username, accountID, dialogID, signMsg); err != nil {
 				message = "保存失败。"
 			} else {
@@ -923,11 +966,22 @@ func (h *Handler) tgSign(c *gin.Context) {
 				message = "请选择/填写目标。"
 				break
 			}
+			submittedDialogID := dialogID
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 40*time.Second)
 			defer cancel()
-			ok, msg := tg.SendOnce(ctx, h.dbConn, username, accountID, dialogID, signMsg)
+			ok, msg, resolvedDialogID := tg.SendOnceWithResolvedDialogID(ctx, h.dbConn, username, accountID, dialogID, signMsg)
 			if ok {
 				message = msg
+				if resolvedDialogID != "" {
+					dialogID = resolvedDialogID
+					if savedTask, okSavedNow, _ := store.GetSignTask(h.dbConn, username, accountID); okSavedNow {
+						sameTarget := strings.TrimSpace(savedTask.DialogID) == strings.TrimSpace(submittedDialogID) ||
+							strings.EqualFold(tg.NormalizeUsername(savedTask.DialogID), tg.NormalizeUsername(submittedDialogID))
+						if sameTarget && strings.TrimSpace(savedTask.DialogID) != strings.TrimSpace(resolvedDialogID) {
+							_ = store.UpsertSignTask(h.dbConn, username, accountID, resolvedDialogID, savedTask.Message)
+						}
+					}
+				}
 			} else {
 				message = "执行失败：" + msg
 			}
@@ -1088,12 +1142,13 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 					message = "已删除。"
 				}
 			case "run":
-				// Best-effort: move next_run_at to now so scheduler picks it up soon.
-				nowText := time.Now().Format(time.RFC3339)
-				if err := store.SetAutoSendTaskNextRunAt(h.dbConn, username, id, nowText); err != nil {
-					message = "触发失败。"
+				runCtx, cancel := context.WithTimeout(c.Request.Context(), 50*time.Second)
+				defer cancel()
+				ok, msg := tg.RunAutoSendTaskNow(runCtx, h.dbConn, username, id)
+				if ok {
+					message = "已立即执行。"
 				} else {
-					message = "已触发，将在 30 秒内执行（后台轮询）。"
+					message = "立即执行失败：" + msg
 				}
 			default:
 				message = "未知操作。"
@@ -1221,6 +1276,17 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
+	resolveCtx, resolveCancel := context.WithTimeout(c.Request.Context(), 35*time.Second)
+	resolvedDialogID, resolveErr := tg.ResolveDialogIDForAccount(resolveCtx, h.dbConn, username, selectedAccountID, dialogID)
+	resolveCancel()
+	if resolveErr != nil {
+		view["Error"] = "目标解析失败：" + resolveErr.Error()
+		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
+		return
+	}
+	dialogID = resolvedDialogID
+	view["DialogID"] = dialogID
+
 	dialogOwned := false
 	for _, d := range dialogs {
 		if d.DialogID == dialogID {
@@ -1469,10 +1535,17 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			_ = store.SetSetting(h.dbConn, "github_release_asset", ghAsset)
 			message = "已保存 GitHub Release 配置。"
 		case "gh_check", "gh_update":
-			ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 			defer cancel()
 
 			info, rel, err := update.FetchLatestGitHubRelease(ctx, ghOwner, ghRepo, ghToken)
+			if err != nil && strings.TrimSpace(ghToken) != "" {
+				// Fallback for public repos when saved token is invalid/expired.
+				if info2, rel2, err2 := update.FetchLatestGitHubRelease(ctx, ghOwner, ghRepo, ""); err2 == nil {
+					info, rel, err = info2, rel2, nil
+					ghToken = ""
+				}
+			}
 			if err != nil {
 				ghInfo = info
 				if ghInfo.Note == "" {
@@ -1511,7 +1584,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 				}
 			}
 
-			dlCtx, dlCancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+			dlCtx, dlCancel := context.WithTimeout(c.Request.Context(), 15*time.Minute)
 			defer dlCancel()
 			bin, err := update.DownloadReleaseAsset(dlCtx, asset, ghToken, dest)
 			if err != nil {
@@ -1588,17 +1661,17 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		ghToken = settings["github_release_token"]
 		ghAsset = settings["github_release_asset"]
 	}
-	if v := strings.TrimSpace(c.PostForm("gh_owner")); v != "" {
-		ghOwner = v
+	if v, ok := c.GetPostForm("gh_owner"); ok {
+		ghOwner = strings.TrimSpace(v)
 	}
-	if v := strings.TrimSpace(c.PostForm("gh_repo")); v != "" {
-		ghRepo = v
+	if v, ok := c.GetPostForm("gh_repo"); ok {
+		ghRepo = strings.TrimSpace(v)
 	}
-	if v := strings.TrimSpace(c.PostForm("gh_token")); v != "" {
-		ghToken = v
+	if v, ok := c.GetPostForm("gh_token"); ok {
+		ghToken = strings.TrimSpace(v)
 	}
-	if v := strings.TrimSpace(c.PostForm("gh_asset")); v != "" {
-		ghAsset = v
+	if v, ok := c.GetPostForm("gh_asset"); ok {
+		ghAsset = strings.TrimSpace(v)
 	}
 
 	c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
@@ -1642,13 +1715,22 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 	if !send(10, "正在获取最新 Release 信息...", false, false) {
 		return
 	}
 
 	info, rel, err := update.FetchLatestGitHubRelease(ctx, ghOwner, ghRepo, ghToken)
+	if err != nil && strings.TrimSpace(ghToken) != "" {
+		if !send(12, "Token 鉴权失败，尝试匿名获取 Release...", false, false) {
+			return
+		}
+		if info2, rel2, err2 := update.FetchLatestGitHubRelease(ctx, ghOwner, ghRepo, ""); err2 == nil {
+			info, rel, err = info2, rel2, nil
+			ghToken = ""
+		}
+	}
 	if err != nil {
 		msg := "检查 Release 失败"
 		if info.Note != "" {
@@ -1687,7 +1769,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		return
 	}
 
-	dlCtx, dlCancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	dlCtx, dlCancel := context.WithTimeout(c.Request.Context(), 15*time.Minute)
 	defer dlCancel()
 
 	bin, err := update.DownloadReleaseAssetWithProgress(dlCtx, asset, ghToken, dest, func(p update.DownloadProgress) {

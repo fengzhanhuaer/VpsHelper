@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,7 +53,6 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 			}
 
 			for _, d := range batch {
-				// Only keep items we can address by username.
 				if d.DialogID == "" {
 					continue
 				}
@@ -145,15 +145,15 @@ func convertDialogs(dialogs []tg.DialogClass, users []tg.UserClass, chats []tg.C
 			continue
 		}
 
-		username, title, peer := resolvePeer(d.Peer, userByID, chatByID, channelByID)
-		if username == "" {
+		dialogID, username, title, peer := resolveDialogPeer(d.Peer, userByID, chatByID, channelByID)
+		if dialogID == "" {
 			continue
 		}
 		if title == "" {
-			title = "@" + username
+			title = dialogID
 		}
 
-		out = append(out, store.TGDialog{DialogID: "@" + username, Title: title, Username: username})
+		out = append(out, store.TGDialog{DialogID: dialogID, Title: title, Username: username})
 
 		// Update offsets best-effort.
 		lastPeer = peer
@@ -165,44 +165,53 @@ func convertDialogs(dialogs []tg.DialogClass, users []tg.UserClass, chats []tg.C
 	return out, lastPeer, lastID, 0, nil
 }
 
-func resolvePeer(peer tg.PeerClass, users map[int64]*tg.User, chats map[int64]*tg.Chat, channels map[int64]*tg.Channel) (username, title string, outPeer tg.InputPeerClass) {
+func resolveDialogPeer(peer tg.PeerClass, users map[int64]*tg.User, chats map[int64]*tg.Chat, channels map[int64]*tg.Channel) (dialogID, username, title string, outPeer tg.InputPeerClass) {
 	switch p := peer.(type) {
 	case *tg.PeerUser:
 		u := users[p.UserID]
 		if u == nil {
-			return "", "", &tg.InputPeerEmpty{}
+			return "", "", "", &tg.InputPeerEmpty{}
 		}
+		dialogID = dialogIDForUser(u.ID)
 		username = strings.TrimSpace(u.Username)
-		if username == "" {
-			return "", "", &tg.InputPeerEmpty{}
-		}
 		name := strings.TrimSpace(strings.TrimSpace(u.FirstName + " " + u.LastName))
-		if name == "" {
-			name = "@" + username
+		switch {
+		case name != "":
+			title = name
+		case username != "":
+			title = "@" + username
+		default:
+			title = "user-" + strconv.FormatInt(u.ID, 10)
 		}
-		return username, name, &tg.InputPeerUser{UserID: u.ID, AccessHash: u.AccessHash}
+		return dialogID, username, title, &tg.InputPeerUser{UserID: u.ID, AccessHash: u.AccessHash}
 	case *tg.PeerChat:
 		c := chats[p.ChatID]
 		if c == nil {
-			return "", "", &tg.InputPeerEmpty{}
+			return "", "", "", &tg.InputPeerEmpty{}
 		}
-		// Basic groups often have no username.
-		return "", c.Title, &tg.InputPeerChat{ChatID: c.ID}
+		dialogID = dialogIDForChat(int64(c.ID))
+		title = strings.TrimSpace(c.Title)
+		if title == "" {
+			title = "group-" + strconv.FormatInt(int64(c.ID), 10)
+		}
+		return dialogID, "", title, &tg.InputPeerChat{ChatID: c.ID}
 	case *tg.PeerChannel:
 		ch := channels[p.ChannelID]
 		if ch == nil {
-			return "", "", &tg.InputPeerEmpty{}
+			return "", "", "", &tg.InputPeerEmpty{}
 		}
+		dialogID = dialogIDForChannel(ch.ID)
 		username = strings.TrimSpace(ch.Username)
-		if username == "" {
-			return "", ch.Title, &tg.InputPeerEmpty{}
-		}
 		title = strings.TrimSpace(ch.Title)
 		if title == "" {
-			title = "@" + username
+			if username != "" {
+				title = "@" + username
+			} else {
+				title = "channel-" + strconv.FormatInt(ch.ID, 10)
+			}
 		}
-		return username, title, &tg.InputPeerChannel{ChannelID: ch.ID, AccessHash: ch.AccessHash}
+		return dialogID, username, title, &tg.InputPeerChannel{ChannelID: ch.ID, AccessHash: ch.AccessHash}
 	default:
-		return "", "", &tg.InputPeerEmpty{}
+		return "", "", "", &tg.InputPeerEmpty{}
 	}
 }

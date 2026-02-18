@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -104,6 +105,15 @@ type DownloadProgress struct {
 
 type ProgressCallback func(DownloadProgress)
 
+type downloadHTTPStatusError struct {
+	Status int
+	Body   string
+}
+
+func (e *downloadHTTPStatusError) Error() string {
+	return fmt.Sprintf("download status %d: %s", e.Status, strings.TrimSpace(e.Body))
+}
+
 func SelectReleaseAsset(rel *ghRelease, preferredName string) (SelectedAsset, error) {
 	if rel == nil {
 		return SelectedAsset{}, errors.New("nil release")
@@ -181,65 +191,8 @@ func DownloadReleaseAssetWithProgress(ctx context.Context, asset SelectedAsset, 
 
 	_ = os.MkdirAll(filepath.Dir(destPath), 0o755)
 	tmp := destPath + ".download"
-	_ = os.Remove(tmp)
-
-	url := asset.BrowserURL
-	accept := ""
-	if strings.TrimSpace(token) != "" {
-		// Use API asset download for private repos.
-		url = asset.APIURL
-		accept = "application/octet-stream"
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
+	if err := downloadAssetToTempWithRetry(ctx, asset, token, tmp, onProgress); err != nil {
 		return "", err
-	}
-	if accept != "" {
-		req.Header.Set("Accept", accept)
-	}
-	setGitHubHeaders(req, token, req.Header.Get("Accept"))
-
-	client := &http.Client{
-		Timeout: 0,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return errors.New("too many redirects")
-			}
-			setGitHubHeaders(req, token, req.Header.Get("Accept"))
-			return nil
-		},
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<10))
-		return "", fmt.Errorf("download status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
-	}
-
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-	if err != nil {
-		return "", err
-	}
-
-	var cpErr error
-	if onProgress == nil {
-		_, cpErr = io.Copy(f, resp.Body)
-	} else {
-		cpErr = copyWithProgress(resp.Body, f, resp.ContentLength, onProgress)
-	}
-	closeErr := f.Close()
-	if cpErr != nil {
-		_ = os.Remove(tmp)
-		return "", cpErr
-	}
-	if closeErr != nil {
-		_ = os.Remove(tmp)
-		return "", closeErr
 	}
 
 	finalPath := destPath
@@ -266,8 +219,149 @@ func DownloadReleaseAssetWithProgress(ctx context.Context, asset SelectedAsset, 
 	return finalPath, nil
 }
 
-func copyWithProgress(src io.Reader, dst io.Writer, total int64, onProgress ProgressCallback) error {
-	var copied int64
+func downloadAssetToTempWithRetry(ctx context.Context, asset SelectedAsset, token string, tmp string, onProgress ProgressCallback) error {
+	const maxAttempts = 5
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		if err := downloadAssetToTempOnce(ctx, asset, token, tmp, onProgress); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			if !isRetryableDownloadErr(err) || attempt == maxAttempts {
+				return err
+			}
+
+			backoff := time.Duration(attempt) * 2 * time.Second
+			if backoff > 10*time.Second {
+				backoff = 10 * time.Second
+			}
+			if !sleepWithContext(ctx, backoff) {
+				return ctx.Err()
+			}
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+	return errors.New("download failed")
+}
+
+func downloadAssetToTempOnce(ctx context.Context, asset SelectedAsset, token string, tmp string, onProgress ProgressCallback) error {
+	url := asset.BrowserURL
+	accept := ""
+	if strings.TrimSpace(token) != "" {
+		// Use API asset download for private repos.
+		url = asset.APIURL
+		accept = "application/octet-stream"
+	}
+
+	client := &http.Client{
+		Timeout: 0,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return errors.New("too many redirects")
+			}
+			setGitHubHeaders(req, token, req.Header.Get("Accept"))
+			return nil
+		},
+	}
+
+	existing := int64(0)
+	if st, err := os.Stat(tmp); err == nil {
+		existing = st.Size()
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	tryResume := existing > 0
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		if accept != "" {
+			req.Header.Set("Accept", accept)
+		}
+		if tryResume && existing > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", existing))
+		}
+		setGitHubHeaders(req, token, req.Header.Get("Accept"))
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+
+		// Local partial file is stale or larger than upstream file. Restart once.
+		if tryResume && resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+			_ = resp.Body.Close()
+			_ = os.Remove(tmp)
+			existing = 0
+			tryResume = false
+			continue
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			b, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<10))
+			_ = resp.Body.Close()
+			return &downloadHTTPStatusError{Status: resp.StatusCode, Body: string(b)}
+		}
+
+		appendMode := tryResume && resp.StatusCode == http.StatusPartialContent
+		start := int64(0)
+		if appendMode {
+			start = existing
+		}
+
+		flags := os.O_CREATE | os.O_WRONLY
+		if appendMode {
+			flags |= os.O_APPEND
+		} else {
+			flags |= os.O_TRUNC
+		}
+
+		f, err := os.OpenFile(tmp, flags, 0o755)
+		if err != nil {
+			_ = resp.Body.Close()
+			return err
+		}
+
+		total := resp.ContentLength
+		if appendMode && total >= 0 {
+			total += start
+		}
+
+		var cpErr error
+		if onProgress == nil {
+			_, cpErr = io.Copy(f, resp.Body)
+		} else {
+			cpErr = copyWithProgress(resp.Body, f, start, total, onProgress)
+		}
+
+		bodyCloseErr := resp.Body.Close()
+		fileCloseErr := f.Close()
+
+		if cpErr != nil {
+			return cpErr
+		}
+		if bodyCloseErr != nil {
+			return bodyCloseErr
+		}
+		if fileCloseErr != nil {
+			return fileCloseErr
+		}
+		return nil
+	}
+}
+
+func copyWithProgress(src io.Reader, dst io.Writer, initial int64, total int64, onProgress ProgressCallback) error {
+	copied := initial
 	buf := make([]byte, 64*1024)
 	lastReport := time.Time{}
 
@@ -297,6 +391,46 @@ func copyWithProgress(src io.Reader, dst io.Writer, total int64, onProgress Prog
 			return readErr
 		}
 	}
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func isRetryableDownloadErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	var hs *downloadHTTPStatusError
+	if errors.As(err, &hs) {
+		return hs.Status == http.StatusTooManyRequests || hs.Status >= 500
+	}
+
+	var ne net.Error
+	if errors.As(err, &ne) {
+		return true
+	}
+
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "unexpected eof") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "timeout") {
+		return true
+	}
+	return false
 }
 
 func unzipSingleBinary(zipPath, outDir string) (string, error) {

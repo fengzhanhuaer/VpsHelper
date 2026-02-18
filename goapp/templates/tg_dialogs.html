@@ -34,7 +34,7 @@
     <main>
         <section class="panel">
             <h1>会话列表</h1>
-            <p class="muted">这里只展示有 <code>@username</code> 的目标（便于任务发送）。点击“刷新”会用所选账号拉取并覆盖保存到本地数据库。</p>
+            <p class="muted">会话列表保存的是可发送目标的会话ID。若历史任务仍使用 @username，刷新后会自动迁移为会话ID。</p>
 
             {{ if .Message }}
             <div class="error">{{ .Message }}</div>
@@ -62,7 +62,7 @@
                     <tr>
                         <th>标题</th>
                         <th>username</th>
-                        <th>用于任务的目标值</th>
+                        <th>会话ID</th>
                         <th>更新时间</th>
                     </tr>
                 </thead>
@@ -71,7 +71,7 @@
                     <tr>
                         <td>{{ .Title }}</td>
                         <td>{{ .Username }}</td>
-                        <td><code>@{{ .Username }}</code></td>
+                        <td><code>{{ .DialogID }}</code></td>
                         <td class="muted">{{ .UpdatedAt }}</td>
                     </tr>
                 {{ else }}

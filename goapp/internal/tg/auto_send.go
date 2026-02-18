@@ -3,6 +3,7 @@ package tg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -31,6 +32,43 @@ func StartAutoSend(ctx context.Context, dbConn *sql.DB) {
 	}()
 }
 
+type autoSendConfig struct {
+	apiID    int
+	apiHash  string
+	allProxy string
+}
+
+func RunAutoSendTaskNow(ctx context.Context, dbConn *sql.DB, owner string, taskID int64) (bool, string) {
+	task, err := store.GetAutoSendTaskByID(dbConn, owner, taskID)
+	if err != nil {
+		return false, "task not found"
+	}
+
+	cfg, err := loadAutoSendConfig(dbConn)
+	if err != nil {
+		return false, err.Error()
+	}
+
+	runAt := time.Now()
+	lastRun := runAt.Format(time.RFC3339)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	callCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	errMsg, resolvedDialogID := runAutoSendTask(callCtx, dbConn, task, cfg)
+	cancel()
+	if resolvedDialogID != "" && resolvedDialogID != strings.TrimSpace(task.DialogID) {
+		_ = store.UpdateAutoSendTaskDialogID(dbConn, task.Owner, task.ID, resolvedDialogID)
+		task.DialogID = resolvedDialogID
+	}
+
+	_ = store.UpdateAutoSendAfterRun(dbConn, task.Owner, task.ID, nextRunAt(runAt, task), lastRun, truncate(errMsg, 500))
+	if errMsg != "ok" {
+		return false, errMsg
+	}
+	return true, "ok"
+}
+
 func runAutoSendTick(dbConn *sql.DB) {
 	if !autoSendRunning.CompareAndSwap(false, true) {
 		return
@@ -47,18 +85,7 @@ func runAutoSendTick(dbConn *sql.DB) {
 		return
 	}
 
-	settings, err := store.GetSettings(dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
-	if err != nil {
-		return
-	}
-	apiIDText := strings.TrimSpace(settings["telegram_api_id"])
-	apiHash := strings.TrimSpace(settings["telegram_api_hash"])
-	allProxy := strings.TrimSpace(settings["tg_all_proxy"])
-	if apiIDText == "" || apiHash == "" {
-		return
-	}
-
-	apiID, err := parseInt(apiIDText)
+	cfg, err := loadAutoSendConfig(dbConn)
 	if err != nil {
 		return
 	}
@@ -66,31 +93,65 @@ func runAutoSendTick(dbConn *sql.DB) {
 	rand.Seed(time.Now().UnixNano())
 
 	for _, t := range tasks {
-		lastRun := time.Now().Format(time.RFC3339)
+		runAt := time.Now()
+		lastRun := runAt.Format(time.RFC3339)
 		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
-		errMsg := "ok"
-
-		storage := NewAccountSessionStorage(dbConn, t.Owner, t.AccountID)
-		opts, err := buildOptions(storage, allProxy)
-		if err != nil {
-			errMsg = "client options error"
-			cancel()
-			_ = store.UpdateAutoSendAfterRun(dbConn, t.Owner, t.ID, nextRunAt(now, t), lastRun, errMsg)
-			continue
-		}
-
-		client := telegram.NewClient(apiID, apiHash, opts)
-		err = client.Run(ctx, func(ctx context.Context) error {
-			return SendMessageToUsername(ctx, client, t.DialogID, t.Message)
-		})
-		if err != nil {
-			errMsg = err.Error()
-		}
+		errMsg, resolvedDialogID := runAutoSendTask(ctx, dbConn, t, cfg)
 		cancel()
+		if resolvedDialogID != "" && resolvedDialogID != strings.TrimSpace(t.DialogID) {
+			_ = store.UpdateAutoSendTaskDialogID(dbConn, t.Owner, t.ID, resolvedDialogID)
+			t.DialogID = resolvedDialogID
+		}
 
-		next := nextRunAt(now, t)
+		next := nextRunAt(runAt, t)
 		_ = store.UpdateAutoSendAfterRun(dbConn, t.Owner, t.ID, next, lastRun, truncate(errMsg, 500))
 	}
+}
+
+func loadAutoSendConfig(dbConn *sql.DB) (autoSendConfig, error) {
+	settings, err := store.GetSettings(dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+	if err != nil {
+		return autoSendConfig{}, err
+	}
+	apiIDText := strings.TrimSpace(settings["telegram_api_id"])
+	apiHash := strings.TrimSpace(settings["telegram_api_hash"])
+	allProxy := strings.TrimSpace(settings["tg_all_proxy"])
+	if apiIDText == "" || apiHash == "" {
+		return autoSendConfig{}, errors.New("telegram api settings missing")
+	}
+
+	apiID, err := parseInt(apiIDText)
+	if err != nil {
+		return autoSendConfig{}, err
+	}
+
+	return autoSendConfig{apiID: apiID, apiHash: apiHash, allProxy: allProxy}, nil
+}
+
+func runAutoSendTask(ctx context.Context, dbConn *sql.DB, t store.AutoSendTask, cfg autoSendConfig) (string, string) {
+	storage := NewAccountSessionStorage(dbConn, t.Owner, t.AccountID)
+	opts, err := buildOptions(storage, cfg.allProxy)
+	if err != nil {
+		return "client options error", ""
+	}
+
+	client := telegram.NewClient(cfg.apiID, cfg.apiHash, opts)
+	resolvedDialogID := ""
+	err = client.Run(ctx, func(ctx context.Context) error {
+		usedDialogID, err := SendMessageToTarget(ctx, client, t.DialogID, t.Message)
+		if err != nil {
+			return err
+		}
+		resolvedDialogID = strings.TrimSpace(usedDialogID)
+		return nil
+	})
+	if err != nil {
+		return err.Error(), resolvedDialogID
+	}
+	if normalized, ok := NormalizeDialogID(resolvedDialogID); ok {
+		resolvedDialogID = normalized
+	}
+	return "ok", resolvedDialogID
 }
 
 func buildOptions(storage telegram.SessionStorage, allProxy string) (telegram.Options, error) {

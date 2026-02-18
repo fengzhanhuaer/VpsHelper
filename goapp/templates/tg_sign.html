@@ -72,8 +72,8 @@
                 {{ end }}
 
                 <div class="field">
-                    <label for="dialog_id">目标（@username 或 t.me/username）</label>
-                    <input id="dialog_id" name="dialog_id" value="{{ .DialogID }}" placeholder="@mychannel" />
+                    <label for="dialog_id">目标（会话ID，支持 @username 或 t.me/username 自动转换）</label>
+                    <input id="dialog_id" name="dialog_id" value="{{ .DialogID }}" placeholder="-100xxxxxxxxxx 或 @mychannel" />
                 </div>
 
                 <div class="field">

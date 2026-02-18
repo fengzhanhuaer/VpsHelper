@@ -95,13 +95,20 @@ func runAutoSignOnce(dbConn *sql.DB) {
 			msg = "签到"
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
-		ok, res := SendOnce(ctx, dbConn, t.Owner, t.AccountID, t.DialogID, msg)
+		ok, res, resolvedDialogID := SendOnceWithResolvedDialogID(ctx, dbConn, t.Owner, t.AccountID, t.DialogID, msg)
 		cancel()
+		if ok && resolvedDialogID != "" && resolvedDialogID != strings.TrimSpace(t.DialogID) {
+			_ = store.UpsertSignTask(dbConn, t.Owner, t.AccountID, resolvedDialogID, t.Message)
+		}
 		state := "OK"
 		if !ok {
 			state = "FAIL"
 		}
-		sb.WriteString(fmt.Sprintf("- %s acc=%d target=%s: %s %s\n", t.Owner, t.AccountID, t.DialogID, state, res))
+		target := t.DialogID
+		if resolvedDialogID != "" {
+			target = resolvedDialogID
+		}
+		sb.WriteString(fmt.Sprintf("- %s acc=%d target=%s: %s %s\n", t.Owner, t.AccountID, target, state, res))
 	}
 
 	result := sb.String()

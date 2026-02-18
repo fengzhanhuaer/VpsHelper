@@ -32,7 +32,7 @@
     <main>
         <section class="panel">
             <h1>自动发送任务</h1>
-            <p class="muted">目标目前建议填写 <code>@username</code>（channel/user）。后台会按 next_run_at 触发发送，并写入 last_result。</p>
+            <p class="muted">任务目标优先使用会话ID；若历史任务仍是 @username，执行成功后会自动转换并保存为会话ID。</p>
 
             {{ if .Message }}
             <div class="error">{{ .Message }}</div>
