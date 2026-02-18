@@ -1251,8 +1251,6 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		return
 	}
 
-	dbName := config.UnifiedDBName
-
 	keys := []string{
 		"cf_api_token",
 		"cf_account_id",
@@ -1268,11 +1266,14 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		return
 	}
 
-	cfToken := settings["cf_api_token"]
-	accountID := settings["cf_account_id"]
-	if settings["cf_d1_database_name"] != dbName {
+	dbName := strings.TrimSpace(settings["cf_d1_database_name"])
+	if dbName == "" || dbName == config.UnifiedDBName {
+		dbName = config.UnifiedD1DBName
 		_ = store.SetSetting(h.dbConn, "cf_d1_database_name", dbName)
 	}
+
+	cfToken := settings["cf_api_token"]
+	accountID := settings["cf_account_id"]
 	dbID := settings["cf_d1_database_id"]
 	autoEnabled := settings["db_auto_backup_enabled"] == "1"
 	autoTime := settings["db_auto_backup_time"]
