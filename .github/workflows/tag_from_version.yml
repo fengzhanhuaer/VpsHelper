@@ -1,6 +1,9 @@
 name: tag-from-version
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -22,10 +25,14 @@ jobs:
         run: |
           set -euo pipefail
 
+          EVENT_NAME='${{ github.event_name }}'
           BEFORE='${{ github.event.before }}'
           SHA='${{ github.sha }}'
 
-          if [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "workflow_dispatch detected; treating VERSION as changed"
+            VERSION_CHANGED=1
+          elif [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
             echo "First push detected; treating VERSION as changed"
             VERSION_CHANGED=1
           else

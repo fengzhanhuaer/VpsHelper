@@ -1,6 +1,7 @@
 name: auto-bump-version
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
