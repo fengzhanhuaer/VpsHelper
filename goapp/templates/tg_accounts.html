@@ -12,6 +12,7 @@
         .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
         .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
         .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .ghost[disabled], .btn[disabled] { opacity:.6; cursor:not-allowed; }
         .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
         table { width:100%; border-collapse: collapse; }
         th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eee; }
@@ -22,8 +23,8 @@
     <header>
         <strong>VpsHelper</strong>
         <nav style="display:flex; gap:10px;">
-            <a class="ghost" href="/tg_helper">返回Tg助手</a>
-            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/tg_helper">返回 Tg 助手</a>
+            <a class="ghost" href="/home">返回主页</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
@@ -31,7 +32,7 @@
     <main>
         <section class="panel">
             <h1>TG 账号管理</h1>
-            <p class="muted">账号登录入口在“账号登录”。本页支持：删除账号、刷新会话列表、配置/执行签到。</p>
+            <p class="muted">本页支持：删除账号、刷新会话列表。</p>
 
             {{ if .Message }}
             <div class="error">{{ .Message }}</div>
@@ -40,7 +41,6 @@
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
                 <a class="btn" href="/tg/login/start">添加账号（登录）</a>
                 <a class="ghost" href="/tg/dialogs">会话列表页面</a>
-                <a class="ghost" href="/tg/sign">签到页面</a>
             </div>
 
             {{ if .HasAccounts }}
@@ -56,53 +56,16 @@
                 <button class="ghost" type="submit">切换</button>
             </form>
 
-            <form method="post" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+            <form id="refresh-dialogs-form" method="post" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; align-items:center;">
                 <input type="hidden" name="account_id" value="{{ .SelectedAccountID }}" />
-                <button class="ghost" type="submit" name="action" value="refresh_dialogs">刷新会话列表</button>
+                <button id="refresh-dialogs-btn" class="ghost" type="submit" name="action" value="refresh_dialogs">刷新会话列表</button>
+                <span id="refresh-dialogs-status" class="muted" style="display:none;">正在刷新会话列表，可能需要 10-120 秒，请勿重复点击。</span>
             </form>
 
             <div style="display:grid; gap:10px; margin:12px 0;">
                 <div>
-                    <h2 style="font-size:16px; margin:0 0 8px;">签到任务（当前账号）</h2>
-                    <form method="post" action="/tg/accounts" style="display:grid; gap:8px;">
-                        <input type="hidden" name="account_id" value="{{ .SelectedAccountID }}" />
-
-                        {{ if .Dialogs }}
-                        <div class="field">
-                            <label for="sign_dialog_pick">从会话列表选择目标（可选）</label>
-                            <select id="sign_dialog_pick" name="sign_dialog_pick" style="padding:10px 12px; border-radius:10px; border:1px solid #ddd;">
-                                <option value="">（不选择，手动填写下方目标）</option>
-                                {{ range .Dialogs }}
-                                  <option value="{{ .DialogID }}" {{ if eq $.SignDialogID .DialogID }}selected{{ end }}>{{ .Title }} ({{ .DialogID }})</option>
-                                {{ end }}
-                            </select>
-                        </div>
-                        {{ end }}
-
-                        <div class="field">
-                            <label for="sign_dialog_id">目标（会话ID，支持填 @username 自动转换）</label>
-                            <input id="sign_dialog_id" name="sign_dialog_id" value="{{ .SignDialogID }}" style="padding:10px 12px; border-radius:10px; border:1px solid #ddd;" placeholder="-100xxxxxxxxxx 或 @mychannel" />
-                        </div>
-                        <div class="field">
-                            <label for="sign_message">消息内容（可空）</label>
-                            <textarea id="sign_message" name="sign_message" rows="3" style="padding:10px 12px; border-radius:10px; border:1px solid #ddd; font:inherit;">{{ .SignMessage }}</textarea>
-                        </div>
-
-                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                            <button class="btn" type="submit" name="action" value="sign_save">保存</button>
-                            <button class="ghost" type="submit" name="action" value="sign_run">立即执行</button>
-                            <button class="ghost" type="submit" name="action" value="sign_delete" onclick="return confirm('确定删除该账号的签到任务吗？');">删除</button>
-                        </div>
-
-                        {{ if .SignCreatedAt }}
-                        <div class="muted">上次保存时间：{{ .SignCreatedAt }}</div>
-                        {{ end }}
-                    </form>
-                </div>
-
-                <div>
                     <h2 style="font-size:16px; margin:0 0 8px;">会话列表（当前账号）</h2>
-                    <p class="muted" style="margin:0 0 8px;">列表中的目标值均为会话ID，任务保存时优先写入会话ID。</p>
+                    <p class="muted" style="margin:0 0 8px;">列表中的目标值均为会话ID。</p>
                     <table>
                         <thead>
                             <tr>
@@ -156,5 +119,19 @@
             </table>
         </section>
     </main>
+
+    <script>
+    (function () {
+        var form = document.getElementById('refresh-dialogs-form');
+        var btn = document.getElementById('refresh-dialogs-btn');
+        var status = document.getElementById('refresh-dialogs-status');
+        if (!form || !btn || !status) return;
+        form.addEventListener('submit', function () {
+            btn.disabled = true;
+            btn.textContent = '刷新中...';
+            status.style.display = 'inline';
+        });
+    })();
+    </script>
 </body>
 </html>

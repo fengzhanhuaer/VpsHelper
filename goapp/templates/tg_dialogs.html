@@ -12,6 +12,7 @@
         .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
         .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
         .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
+        .btn[disabled], .ghost[disabled] { opacity:.6; cursor:not-allowed; }
         .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
         .field { display:grid; gap:6px; margin-bottom:12px; }
         .field select { padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
@@ -25,8 +26,8 @@
     <header>
         <strong>VpsHelper</strong>
         <nav style="display:flex; gap:10px;">
-            <a class="ghost" href="/tg_helper">返回Tg助手</a>
-            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/tg_helper">返回 Tg 助手</a>
+            <a class="ghost" href="/home">返回主页</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
@@ -52,9 +53,10 @@
                 <button class="ghost" type="submit">切换</button>
             </form>
 
-            <form method="post" action="/tg/dialogs" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+            <form id="dialogs-refresh-form" method="post" action="/tg/dialogs" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                 <input type="hidden" name="account_id" value="{{ .AccountID }}" />
-                <button class="btn" type="submit" name="action" value="refresh">刷新会话列表</button>
+                <button id="dialogs-refresh-btn" class="btn" type="submit" name="action" value="refresh">刷新会话列表</button>
+                <span id="dialogs-refresh-status" class="muted" style="display:none;">正在刷新会话列表，可能需要 10-120 秒，请勿重复点击。</span>
             </form>
 
             <table style="margin-top:12px;">
@@ -81,5 +83,19 @@
             </table>
         </section>
     </main>
+
+    <script>
+    (function () {
+        var form = document.getElementById('dialogs-refresh-form');
+        var btn = document.getElementById('dialogs-refresh-btn');
+        var status = document.getElementById('dialogs-refresh-status');
+        if (!form || !btn || !status) return;
+        form.addEventListener('submit', function () {
+            btn.disabled = true;
+            btn.textContent = '刷新中...';
+            status.style.display = 'inline';
+        });
+    })();
+    </script>
 </body>
 </html>
