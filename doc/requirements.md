@@ -6,7 +6,7 @@ VpsHelper is implemented and maintained in Go only.
 
 - Backend: Go (Gin)
 - Storage: SQLite (`userdata/VpsHelper.db`)
-- Optional cloud DB: Cloudflare D1 (`VpsHelper_db`)
+- Optional cloud DB: Cloudflare D1 (`VpsHelper`)
 
 ## Functional scope
 

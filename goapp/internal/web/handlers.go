@@ -1266,9 +1266,8 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		return
 	}
 
-	dbName := strings.TrimSpace(settings["cf_d1_database_name"])
-	if dbName == "" || dbName == config.UnifiedDBName {
-		dbName = config.UnifiedD1DBName
+	dbName := config.UnifiedD1DBName
+	if settings["cf_d1_database_name"] != dbName {
 		_ = store.SetSetting(h.dbConn, "cf_d1_database_name", dbName)
 	}
 

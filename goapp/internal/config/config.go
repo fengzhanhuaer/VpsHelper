@@ -18,7 +18,7 @@ type Config struct {
 
 const (
 	UnifiedDBName   = "VpsHelper.db"
-	UnifiedD1DBName = "VpsHelper_db"
+	UnifiedD1DBName = "VpsHelper"
 )
 
 func Load() Config {
