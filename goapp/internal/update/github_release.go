@@ -97,6 +97,13 @@ type SelectedAsset struct {
 	BrowserURL string
 }
 
+type DownloadProgress struct {
+	Received int64
+	Total    int64
+}
+
+type ProgressCallback func(DownloadProgress)
+
 func SelectReleaseAsset(rel *ghRelease, preferredName string) (SelectedAsset, error) {
 	if rel == nil {
 		return SelectedAsset{}, errors.New("nil release")
@@ -161,6 +168,10 @@ func SelectReleaseAsset(rel *ghRelease, preferredName string) (SelectedAsset, er
 }
 
 func DownloadReleaseAsset(ctx context.Context, asset SelectedAsset, token string, destPath string) (string, error) {
+	return DownloadReleaseAssetWithProgress(ctx, asset, token, destPath, nil)
+}
+
+func DownloadReleaseAssetWithProgress(ctx context.Context, asset SelectedAsset, token string, destPath string, onProgress ProgressCallback) (string, error) {
 	if asset.Name == "" {
 		return "", errors.New("empty asset")
 	}
@@ -214,7 +225,13 @@ func DownloadReleaseAsset(ctx context.Context, asset SelectedAsset, token string
 	if err != nil {
 		return "", err
 	}
-	_, cpErr := io.Copy(f, resp.Body)
+
+	var cpErr error
+	if onProgress == nil {
+		_, cpErr = io.Copy(f, resp.Body)
+	} else {
+		cpErr = copyWithProgress(resp.Body, f, resp.ContentLength, onProgress)
+	}
 	closeErr := f.Close()
 	if cpErr != nil {
 		_ = os.Remove(tmp)
@@ -247,6 +264,39 @@ func DownloadReleaseAsset(ctx context.Context, asset SelectedAsset, token string
 	}
 
 	return finalPath, nil
+}
+
+func copyWithProgress(src io.Reader, dst io.Writer, total int64, onProgress ProgressCallback) error {
+	var copied int64
+	buf := make([]byte, 64*1024)
+	lastReport := time.Time{}
+
+	report := func(force bool) {
+		if !force && !lastReport.IsZero() && time.Since(lastReport) < 200*time.Millisecond {
+			return
+		}
+		lastReport = time.Now()
+		onProgress(DownloadProgress{Received: copied, Total: total})
+	}
+
+	report(true)
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			if _, writeErr := dst.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			copied += int64(n)
+			report(false)
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				report(true)
+				return nil
+			}
+			return readErr
+		}
+	}
 }
 
 func unzipSingleBinary(zipPath, outDir string) (string, error) {

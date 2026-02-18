@@ -76,6 +76,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/settings/ssh", h.sshSettings)
 	router.GET("/system/update", h.systemUpdate)
 	router.POST("/system/update", h.systemUpdate)
+	router.POST("/system/update/stream", h.systemUpdateStream)
 	router.GET("/server/status", h.serverStatus)
 	router.GET("/server/status/data", h.serverStatusData)
 	router.GET("/shell", h.shellConsole)
@@ -1555,6 +1556,209 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 		"GHAsset":        ghAsset,
 		"User":           username,
 	})
+}
+
+type updateStreamEvent struct {
+	Percent int    `json:"percent"`
+	Message string `json:"message"`
+	Done    bool   `json:"done"`
+	OK      bool   `json:"ok"`
+}
+
+func (h *Handler) systemUpdateStream(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "stream not supported"})
+		return
+	}
+
+	ghOwner := ""
+	ghRepo := ""
+	ghToken := ""
+	ghAsset := ""
+	if settings, err := store.GetSettings(h.dbConn, []string{"github_release_owner", "github_release_repo", "github_release_token", "github_release_asset"}); err == nil {
+		ghOwner = settings["github_release_owner"]
+		ghRepo = settings["github_release_repo"]
+		ghToken = settings["github_release_token"]
+		ghAsset = settings["github_release_asset"]
+	}
+	if v := strings.TrimSpace(c.PostForm("gh_owner")); v != "" {
+		ghOwner = v
+	}
+	if v := strings.TrimSpace(c.PostForm("gh_repo")); v != "" {
+		ghRepo = v
+	}
+	if v := strings.TrimSpace(c.PostForm("gh_token")); v != "" {
+		ghToken = v
+	}
+	if v := strings.TrimSpace(c.PostForm("gh_asset")); v != "" {
+		ghAsset = v
+	}
+
+	c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	send := func(percent int, message string, done bool, success bool) bool {
+		if percent < 0 {
+			percent = 0
+		}
+		if percent > 100 {
+			percent = 100
+		}
+		b, err := json.Marshal(updateStreamEvent{
+			Percent: percent,
+			Message: message,
+			Done:    done,
+			OK:      success,
+		})
+		if err != nil {
+			return false
+		}
+		if _, err := c.Writer.Write(append(b, '\n')); err != nil {
+			return false
+		}
+		flusher.Flush()
+		return true
+	}
+
+	fail := func(percent int, message string) {
+		_ = send(percent, message, true, false)
+	}
+
+	if !send(3, "开始检查更新配置...", false, false) {
+		return
+	}
+
+	if strings.TrimSpace(ghOwner) == "" || strings.TrimSpace(ghRepo) == "" {
+		fail(5, "缺少 GitHub owner/repo，请先填写并保存配置。")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	if !send(10, "正在获取最新 Release 信息...", false, false) {
+		return
+	}
+
+	info, rel, err := update.FetchLatestGitHubRelease(ctx, ghOwner, ghRepo, ghToken)
+	if err != nil {
+		msg := "检查 Release 失败"
+		if info.Note != "" {
+			msg = info.Note
+		}
+		fail(15, msg)
+		return
+	}
+
+	if !send(22, "已获取 Release："+info.TagName, false, false) {
+		return
+	}
+
+	asset, err := update.SelectReleaseAsset(rel, ghAsset)
+	if err != nil {
+		fail(25, "选择 Release Asset 失败："+err.Error())
+		return
+	}
+	if !send(30, "已选择 Asset："+asset.Name, false, false) {
+		return
+	}
+
+	goappDir := h.cfg.BaseDir
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	dest := filepath.Join(goappDir, "bin", "vpshelper-release-next"+ext)
+	if update.IsSystemdManaged() {
+		if currentExe, e := os.Executable(); e == nil && currentExe != "" {
+			dest = currentExe
+		}
+	}
+
+	if !send(35, "开始下载更新包...", false, false) {
+		return
+	}
+
+	dlCtx, dlCancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	defer dlCancel()
+
+	bin, err := update.DownloadReleaseAssetWithProgress(dlCtx, asset, ghToken, dest, func(p update.DownloadProgress) {
+		percent := 70
+		progressText := "下载中"
+		if p.Total > 0 {
+			delta := int((p.Received * 55) / p.Total)
+			if delta < 0 {
+				delta = 0
+			}
+			if delta > 55 {
+				delta = 55
+			}
+			percent = 35 + delta
+			progressText = "下载中：" + formatSize(p.Received) + " / " + formatSize(p.Total)
+		} else {
+			progressText = "下载中：" + formatSize(p.Received)
+		}
+		_ = send(percent, progressText, false, false)
+	})
+	if err != nil {
+		fail(40, "从 Release 下载失败："+err.Error())
+		return
+	}
+
+	if !send(92, "下载完成，正在替换可执行文件...", false, false) {
+		return
+	}
+
+	if update.IsSystemdManaged() {
+		if currentExe, e := os.Executable(); e == nil && currentExe != "" {
+			if filepath.Clean(bin) != filepath.Clean(currentExe) {
+				_ = os.Remove(currentExe)
+				if err := os.Rename(bin, currentExe); err != nil {
+					fail(94, "替换可执行文件失败："+err.Error())
+					return
+				}
+				_ = os.Chmod(currentExe, 0o755)
+				bin = currentExe
+			}
+		}
+	}
+
+	finalMsg := "更新完成：" + info.TagName + "（" + asset.Name + "），服务将在 1 秒后自动重启。"
+	if !send(100, finalMsg, true, true) {
+		return
+	}
+	update.RestartToDelayed(bin, os.Args[1:], 1*time.Second)
+}
+
+func formatSize(bytes int64) string {
+	if bytes < 0 {
+		return "0 B"
+	}
+	const kb = int64(1024)
+	const mb = kb * 1024
+	const gb = mb * 1024
+	const tb = gb * 1024
+
+	switch {
+	case bytes >= tb:
+		return fmt.Sprintf("%.2f TB", float64(bytes)/float64(tb))
+	case bytes >= gb:
+		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(gb))
+	case bytes >= mb:
+		return fmt.Sprintf("%.2f MB", float64(bytes)/float64(mb))
+	case bytes >= kb:
+		return fmt.Sprintf("%.2f KB", float64(bytes)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
 }
 
 func (h *Handler) sshSettings(c *gin.Context) {

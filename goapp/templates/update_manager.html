@@ -64,15 +64,56 @@
             border-radius: 10px;
             margin: 12px 0;
         }
-        .muted { color: #5e4f42; }
-        .grid { display: grid; gap: 8px; margin-bottom: 14px; }
+        .muted {
+            color: #5e4f42;
+        }
+        .grid {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .progress-card {
+            display: none;
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid #ecd7cb;
+            background: #fff8f3;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            border-radius: 999px;
+            background: #f1dfd2;
+            overflow: hidden;
+            margin: 8px 0 6px;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, #ff9f66 0%, #d9480f 100%);
+            transition: width 0.2s ease;
+        }
+        .progress-log {
+            margin: 8px 0 0;
+            padding: 8px 10px;
+            max-height: 180px;
+            overflow: auto;
+            border-radius: 10px;
+            border: 1px solid #f0dccc;
+            background: #fff;
+            font-size: 12px;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 </head>
 <body>
     <header>
         <strong>VpsHelper</strong>
         <nav style="display:flex; gap: 10px;">
-            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/home">返回主页</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
@@ -106,7 +147,7 @@
                 <div><strong>选择的 Asset：</strong>{{ .GH.AssetName }}</div>
             </div>
 
-            <form method="post" action="/system/update" style="display:grid; gap:8px;">
+            <form id="gh-release-form" method="post" action="/system/update" style="display:grid; gap:8px;">
                 <label>Owner：<input name="gh_owner" value="{{ .GHOwner }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
                 <label>Repo：<input name="gh_repo" value="{{ .GHRepo }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
                 <label>Token（可选，私有仓库需要）：<input name="gh_token" value="{{ .GHToken }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
@@ -115,10 +156,134 @@
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="ghost" type="submit" name="action" value="gh_save">保存配置</button>
                     <button class="ghost" type="submit" name="action" value="gh_check">检查最新 Release</button>
-                    <button class="btn" type="submit" name="action" value="gh_update">从 Release 更新并重启</button>
+                    <button class="btn" type="button" id="gh-update-btn">从 Release 更新并重启</button>
                 </div>
             </form>
+
+            <div id="update-progress-card" class="progress-card">
+                <div id="update-progress-text" class="muted">准备开始...</div>
+                <div class="progress-bar">
+                    <div id="update-progress-fill" class="progress-fill"></div>
+                </div>
+                <div id="update-progress-percent" class="muted">0%</div>
+                <div id="update-progress-log" class="progress-log"></div>
+            </div>
         </section>
     </main>
+
+    <script>
+        (function () {
+            const form = document.getElementById("gh-release-form");
+            const updateBtn = document.getElementById("gh-update-btn");
+            const card = document.getElementById("update-progress-card");
+            const textEl = document.getElementById("update-progress-text");
+            const fillEl = document.getElementById("update-progress-fill");
+            const percentEl = document.getElementById("update-progress-percent");
+            const logEl = document.getElementById("update-progress-log");
+            const saveBtn = form.querySelector('button[value="gh_save"]');
+            const checkBtn = form.querySelector('button[value="gh_check"]');
+
+            function setBusy(busy) {
+                saveBtn.disabled = busy;
+                checkBtn.disabled = busy;
+                updateBtn.disabled = busy;
+            }
+
+            function setProgress(percent, message) {
+                const p = Math.max(0, Math.min(100, Number(percent) || 0));
+                fillEl.style.width = p + "%";
+                percentEl.textContent = p + "%";
+                if (message) {
+                    textEl.textContent = message;
+                }
+            }
+
+            function appendLog(message) {
+                if (!message) return;
+                const now = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+                logEl.textContent += "[" + now + "] " + message + "\n";
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+
+            async function runUpdate() {
+                card.style.display = "block";
+                logEl.textContent = "";
+                setProgress(0, "准备启动更新...");
+                appendLog("开始执行更新流程");
+                setBusy(true);
+
+                const fd = new FormData(form);
+                fd.set("action", "gh_update");
+
+                try {
+                    const res = await fetch("/system/update/stream", {
+                        method: "POST",
+                        body: fd,
+                        credentials: "same-origin",
+                        headers: { "Accept": "application/x-ndjson" }
+                    });
+                    if (!res.ok || !res.body) {
+                        throw new Error("更新请求失败（HTTP " + res.status + "）");
+                    }
+
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = "";
+                    let finished = false;
+
+                    while (true) {
+                        const part = await reader.read();
+                        if (part.done) {
+                            break;
+                        }
+                        buffer += decoder.decode(part.value, { stream: true });
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop() || "";
+                        for (const line of lines) {
+                            const row = line.trim();
+                            if (!row) continue;
+                            let event;
+                            try {
+                                event = JSON.parse(row);
+                            } catch (_e) {
+                                continue;
+                            }
+                            setProgress(event.percent, event.message);
+                            appendLog(event.message);
+
+                            if (event.done) {
+                                finished = true;
+                                if (event.ok) {
+                                    appendLog("更新完成，等待服务重启...");
+                                    setTimeout(function () {
+                                        window.location.reload();
+                                    }, 4500);
+                                } else {
+                                    appendLog("更新失败，请根据日志检查配置或网络。");
+                                }
+                                break;
+                            }
+                        }
+                        if (finished) {
+                            break;
+                        }
+                    }
+
+                    if (!finished) {
+                        appendLog("连接已结束，请刷新页面确认版本是否已更新。");
+                    }
+                } catch (err) {
+                    appendLog((err && err.message) ? err.message : "更新执行失败");
+                    setProgress(0, "更新执行失败");
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            updateBtn.addEventListener("click", function () {
+                runUpdate();
+            });
+        })();
+    </script>
 </body>
 </html>
