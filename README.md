@@ -51,6 +51,12 @@ go run ./cmd/server
 curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install-go.sh | sudo bash
 ```
 
+如遇下载 Release 超时/断线，可重试（脚本支持断点续传），或临时调大下载超时（单位：秒）：
+
+```bash
+curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install-go.sh | sudo env VPSHELPER_DOWNLOAD_MAX_TIME=1800 bash
+```
+
 说明：脚本会下载 GitHub Releases 的最新二进制并安装 systemd 服务（默认服务名 `vpshelper`，安装目录 `/opt/vpshelper`）。
 说明：默认会替换旧的 Python 服务 `vpshelper.service`（会先 stop/disable，并备份 unit）。
 

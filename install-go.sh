@@ -37,6 +37,53 @@ else
   exit 1
 fi
 
+DOWNLOAD_RETRY="${VPSHELPER_DOWNLOAD_RETRY:-8}"
+DOWNLOAD_CONNECT_TIMEOUT="${VPSHELPER_DOWNLOAD_CONNECT_TIMEOUT:-15}"
+DOWNLOAD_MAX_TIME="${VPSHELPER_DOWNLOAD_MAX_TIME:-900}"
+
+curl_supports() {
+  local opt="$1"
+  curl --help all 2>/dev/null | grep -q -- "${opt}" || curl --help 2>/dev/null | grep -q -- "${opt}"
+}
+
+is_elf_file() {
+  local p="$1"
+  [[ -f "${p}" ]] || return 1
+  [[ -s "${p}" ]] || return 1
+  # 7f 45 4c 46 => \x7fELF
+  local magic
+  magic="$(dd if="${p}" bs=4 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+  [[ "${magic}" == "7f454c46" ]]
+}
+
+download_release() {
+  local url="$1"
+  local dest="$2"
+
+  if [[ "${DOWNLOADER}" == "curl" ]]; then
+    local -a curl_opts
+    curl_opts=(-fL --retry "${DOWNLOAD_RETRY}" --retry-delay 2 --connect-timeout "${DOWNLOAD_CONNECT_TIMEOUT}" --max-time "${DOWNLOAD_MAX_TIME}")
+    if curl_supports "--retry-connrefused"; then curl_opts+=(--retry-connrefused); fi
+    if curl_supports "--retry-all-errors"; then curl_opts+=(--retry-all-errors); fi
+
+    # First try: resume if partial exists.
+    if ! curl "${curl_opts[@]}" -C - -o "${dest}" "${url}"; then
+      # If range/resume fails or file is corrupted, retry once from scratch.
+      rm -f "${dest}" || true
+      curl "${curl_opts[@]}" -o "${dest}" "${url}"
+    fi
+  else
+    # wget: -c enables resume; add conservative timeouts/retries.
+    wget -c -O "${dest}" --tries="${DOWNLOAD_RETRY}" --timeout="${DOWNLOAD_CONNECT_TIMEOUT}" --waitretry=2 --retry-connrefused "${url}"
+  fi
+
+  if ! is_elf_file "${dest}"; then
+    echo "下载结果看起来不是可执行 ELF 文件（可能下载到错误页面或文件损坏）。"
+    echo "你可以重试，或设置更长超时：VPSHELPER_DOWNLOAD_MAX_TIME=1800"
+    exit 1
+  fi
+}
+
 ensure_command systemctl "需要 systemd (systemctl) 才能一键安装为服务"
 
 disable_service_if_exists() {
@@ -95,14 +142,10 @@ fi
 bin_path="${INSTALL_DIR}/bin/vpshelper"
 
 tmp="${bin_path}.download"
-rm -f "$tmp"
+mkdir -p "$(dirname "${tmp}")"
 
 echo "下载 Release: ${url}"
-if [[ "$DOWNLOADER" == "curl" ]]; then
-  curl -fL --retry 3 --connect-timeout 10 --max-time 120 -o "$tmp" "$url"
-else
-  wget -O "$tmp" "$url"
-fi
+download_release "${url}" "$tmp"
 
 chmod 755 "$tmp"
 
