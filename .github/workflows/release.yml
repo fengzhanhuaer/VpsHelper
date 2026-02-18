@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
     env:
       TAG_NAME: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
@@ -34,6 +34,13 @@ jobs:
             ext: '.exe'
 
     steps:
+      - name: Validate tag
+        run: |
+          if [[ "${TAG_NAME}" != v* ]]; then
+            echo "TAG_NAME must start with 'v' (current: ${TAG_NAME})."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -59,11 +66,35 @@ jobs:
           mkdir -p dist
           go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${{ env.TAG_NAME }}" -o "dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}" ./cmd/server
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpshelper-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: goapp/dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      TAG_NAME: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: vpshelper-*
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lah dist
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG_NAME }}
           name: ${{ env.TAG_NAME }}
           generate_release_notes: true
+          overwrite_files: true
           files: |
-            goapp/dist/*
+            dist/*
