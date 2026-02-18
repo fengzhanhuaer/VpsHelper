@@ -1,0 +1,65 @@
+name: auto-bump-version
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    # Avoid infinite loop when this workflow pushes VERSION commit.
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump VERSION patch
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f VERSION ]]; then
+            echo "VERSION file not found"
+            exit 1
+          fi
+
+          current="$(tr -d ' \t\r\n' < VERSION)"
+          current="${current#v}"
+
+          if ! [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must be numeric semver (x.y.z), got: $current"
+            exit 1
+          fi
+
+          IFS='.' read -r major minor patch <<< "$current"
+          patch=$((patch + 1))
+          next="${major}.${minor}.${patch}"
+
+          printf "%s\n" "$next" > VERSION
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push VERSION
+        shell: bash
+        env:
+          NEXT: ${{ steps.bump.outputs.next }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add VERSION
+          if git diff --cached --quiet; then
+            echo "No VERSION change to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: bump VERSION to ${NEXT}"
+          git push origin HEAD:main
