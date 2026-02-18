@@ -619,7 +619,7 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 				break
 			}
 
-			ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 			defer cancel()
 			n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, selectedAccountID, apiID, apiHash, allProxy)
 			if msg != "ok" {
@@ -829,7 +829,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 				if err != nil || apiHash == "" {
 					message = "请先在 API 设置里配置 Telegram API ID/Hash。"
 				} else {
-					ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+					ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 					defer cancel()
 					n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, accountID, apiID, apiHash, allProxy)
 					if msg != "ok" {

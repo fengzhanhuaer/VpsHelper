@@ -11,6 +11,7 @@ type AutoSendTask struct {
 	Owner           string
 	AccountID       int64
 	DialogID        string
+	DialogTitle     string
 	Message         string
 	IntervalSeconds int
 	JitterSeconds   int
@@ -20,17 +21,20 @@ type AutoSendTask struct {
 	NextRunAt       string
 	LastRunAt       string
 	LastResult      string
+	LastReply       string
 	CreatedAt       string
 	UpdatedAt       string
 }
 
 func ListAutoSendTasks(dbConn *sql.DB, owner string) ([]AutoSendTask, error) {
 	rows, err := dbConn.Query(
-		`SELECT id, owner, account_id, dialog_id, message, interval_seconds, jitter_seconds, schedule_type, time_of_day,
-               enabled, next_run_at, COALESCE(last_run_at, ''), COALESCE(last_result, ''), created_at, updated_at
-          FROM tg_auto_send_tasks
-         WHERE owner = ?
-         ORDER BY id DESC`,
+		`SELECT t.id, t.owner, t.account_id, t.dialog_id, COALESCE(d.title, ''), t.message, t.interval_seconds, t.jitter_seconds, t.schedule_type, t.time_of_day,
+               t.enabled, t.next_run_at, COALESCE(t.last_run_at, ''), COALESCE(t.last_result, ''), COALESCE(t.last_reply, ''), t.created_at, t.updated_at
+          FROM tg_auto_send_tasks t
+          LEFT JOIN tg_dialogs d
+            ON d.account_id = t.account_id AND d.dialog_id = t.dialog_id
+         WHERE t.owner = ?
+         ORDER BY t.id DESC`,
 		owner,
 	)
 	if err != nil {
@@ -47,6 +51,7 @@ func ListAutoSendTasks(dbConn *sql.DB, owner string) ([]AutoSendTask, error) {
 			&t.Owner,
 			&t.AccountID,
 			&t.DialogID,
+			&t.DialogTitle,
 			&t.Message,
 			&t.IntervalSeconds,
 			&t.JitterSeconds,
@@ -56,6 +61,7 @@ func ListAutoSendTasks(dbConn *sql.DB, owner string) ([]AutoSendTask, error) {
 			&t.NextRunAt,
 			&t.LastRunAt,
 			&t.LastResult,
+			&t.LastReply,
 			&t.CreatedAt,
 			&t.UpdatedAt,
 		); err != nil {
@@ -72,7 +78,7 @@ func GetAutoSendTaskByID(dbConn *sql.DB, owner string, taskID int64) (AutoSendTa
 	var enabledInt int
 	err := dbConn.QueryRow(
 		`SELECT id, owner, account_id, dialog_id, message, interval_seconds, jitter_seconds, schedule_type, time_of_day,
-               enabled, next_run_at, COALESCE(last_run_at, ''), COALESCE(last_result, ''), created_at, updated_at
+               enabled, next_run_at, COALESCE(last_run_at, ''), COALESCE(last_result, ''), COALESCE(last_reply, ''), created_at, updated_at
           FROM tg_auto_send_tasks
          WHERE owner = ? AND id = ?`,
 		owner,
@@ -91,6 +97,7 @@ func GetAutoSendTaskByID(dbConn *sql.DB, owner string, taskID int64) (AutoSendTa
 		&t.NextRunAt,
 		&t.LastRunAt,
 		&t.LastResult,
+		&t.LastReply,
 		&t.CreatedAt,
 		&t.UpdatedAt,
 	)
@@ -180,12 +187,13 @@ func UpdateAutoSendTaskDialogID(dbConn *sql.DB, owner string, taskID int64, dial
 	return nil
 }
 
-func UpdateAutoSendAfterRun(dbConn *sql.DB, owner string, taskID int64, nextRunAt, lastRunAt, lastResult string) error {
+func UpdateAutoSendAfterRun(dbConn *sql.DB, owner string, taskID int64, nextRunAt, lastRunAt, lastResult, lastReply string) error {
 	if _, err := dbConn.Exec(
-		"UPDATE tg_auto_send_tasks SET next_run_at = ?, last_run_at = ?, last_result = ?, updated_at = ? WHERE id = ? AND owner = ?",
+		"UPDATE tg_auto_send_tasks SET next_run_at = ?, last_run_at = ?, last_result = ?, last_reply = ?, updated_at = ? WHERE id = ? AND owner = ?",
 		nextRunAt,
 		lastRunAt,
 		lastResult,
+		lastReply,
 		time.Now().Format(time.RFC3339),
 		taskID,
 		owner,
@@ -198,7 +206,7 @@ func UpdateAutoSendAfterRun(dbConn *sql.DB, owner string, taskID int64, nextRunA
 func ListDueAutoSendTasks(dbConn *sql.DB, nowRFC3339 string) ([]AutoSendTask, error) {
 	rows, err := dbConn.Query(
 		`SELECT id, owner, account_id, dialog_id, message, interval_seconds, jitter_seconds, schedule_type, time_of_day,
-               enabled, next_run_at, COALESCE(last_run_at, ''), COALESCE(last_result, ''), created_at, updated_at
+               enabled, next_run_at, COALESCE(last_run_at, ''), COALESCE(last_result, ''), COALESCE(last_reply, ''), created_at, updated_at
           FROM tg_auto_send_tasks
          WHERE enabled = 1 AND next_run_at <= ?
          ORDER BY next_run_at ASC
@@ -228,6 +236,7 @@ func ListDueAutoSendTasks(dbConn *sql.DB, nowRFC3339 string) ([]AutoSendTask, er
 			&t.NextRunAt,
 			&t.LastRunAt,
 			&t.LastResult,
+			&t.LastReply,
 			&t.CreatedAt,
 			&t.UpdatedAt,
 		); err != nil {

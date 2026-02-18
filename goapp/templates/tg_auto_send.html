@@ -50,7 +50,7 @@
                         <th>目标</th>
                         <th>计划</th>
                         <th>状态</th>
-                        <th>上次</th>
+                        <th>结果</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -59,7 +59,7 @@
                     <tr>
                         <td>{{ .ID }}</td>
                         <td>{{ .AccountID }}</td>
-                        <td>{{ .DialogID }}</td>
+                        <td>{{ if .DialogTitle }}{{ .DialogTitle }}{{ else }}{{ .DialogID }}{{ end }}</td>
                         <td>
                             <div class="muted">type={{ .ScheduleType }} interval={{ .IntervalSeconds }}s jitter={{ .JitterSeconds }}s</div>
                             {{ if .TimeOfDay }}<div class="muted">time={{ .TimeOfDay }}</div>{{ end }}
@@ -68,7 +68,7 @@
                         <td>{{ if .Enabled }}启用{{ else }}停用{{ end }}</td>
                         <td>
                             <div class="muted">{{ .LastRunAt }}</div>
-                            <div class="muted">{{ .LastResult }}</div>
+                            <div class="muted">{{ if .LastReply }}{{ .LastReply }}{{ else }}（无回复）{{ end }}</div>
                         </td>
                         <td>
                             <form method="post" action="/tg/auto/send" style="display:flex; gap:8px; flex-wrap:wrap;">

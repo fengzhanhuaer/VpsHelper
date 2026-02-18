@@ -142,7 +142,7 @@ func findInputPeerByTarget(ctx context.Context, api *tg.Client, target string) (
 	offsetDate := 0
 
 	for page := 0; page < 30; page++ {
-		res, err := api.MessagesGetDialogs(ctx, &tg.MessagesGetDialogsRequest{
+		res, err := messagesGetDialogsWithRetry(ctx, api, &tg.MessagesGetDialogsRequest{
 			OffsetPeer: offsetPeer,
 			OffsetID:   offsetID,
 			OffsetDate: offsetDate,

@@ -33,7 +33,7 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 		seen := map[string]bool{}
 
 		for {
-			res, err := api.MessagesGetDialogs(ctx, &tg.MessagesGetDialogsRequest{
+			res, err := messagesGetDialogsWithRetry(ctx, api, &tg.MessagesGetDialogsRequest{
 				OffsetPeer: offsetPeer,
 				OffsetID:   offsetID,
 				OffsetDate: offsetDate,
@@ -80,6 +80,9 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 		return nil
 	})
 	if err != nil {
+		if waitSeconds, ok := parseFloodWaitSeconds(err); ok {
+			return 0, fmt.Sprintf("Telegram 限流，请 %d 秒后重试", waitSeconds)
+		}
 		return 0, err.Error()
 	}
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gotd/td/telegram"
+	"github.com/gotd/td/tg"
 
 	"vpshelper-go/internal/store"
 )
@@ -55,14 +56,14 @@ func RunAutoSendTaskNow(ctx context.Context, dbConn *sql.DB, owner string, taskI
 		ctx = context.Background()
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-	errMsg, resolvedDialogID := runAutoSendTask(callCtx, dbConn, task, cfg)
+	errMsg, resolvedDialogID, lastReply := runAutoSendTask(callCtx, dbConn, task, cfg)
 	cancel()
 	if resolvedDialogID != "" && resolvedDialogID != strings.TrimSpace(task.DialogID) {
 		_ = store.UpdateAutoSendTaskDialogID(dbConn, task.Owner, task.ID, resolvedDialogID)
 		task.DialogID = resolvedDialogID
 	}
 
-	_ = store.UpdateAutoSendAfterRun(dbConn, task.Owner, task.ID, nextRunAt(runAt, task), lastRun, truncate(errMsg, 500))
+	_ = store.UpdateAutoSendAfterRun(dbConn, task.Owner, task.ID, nextRunAt(runAt, task), lastRun, truncate(errMsg, 500), truncate(lastReply, 1000))
 	if errMsg != "ok" {
 		return false, errMsg
 	}
@@ -96,7 +97,7 @@ func runAutoSendTick(dbConn *sql.DB) {
 		runAt := time.Now()
 		lastRun := runAt.Format(time.RFC3339)
 		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
-		errMsg, resolvedDialogID := runAutoSendTask(ctx, dbConn, t, cfg)
+		errMsg, resolvedDialogID, lastReply := runAutoSendTask(ctx, dbConn, t, cfg)
 		cancel()
 		if resolvedDialogID != "" && resolvedDialogID != strings.TrimSpace(t.DialogID) {
 			_ = store.UpdateAutoSendTaskDialogID(dbConn, t.Owner, t.ID, resolvedDialogID)
@@ -104,7 +105,7 @@ func runAutoSendTick(dbConn *sql.DB) {
 		}
 
 		next := nextRunAt(runAt, t)
-		_ = store.UpdateAutoSendAfterRun(dbConn, t.Owner, t.ID, next, lastRun, truncate(errMsg, 500))
+		_ = store.UpdateAutoSendAfterRun(dbConn, t.Owner, t.ID, next, lastRun, truncate(errMsg, 500), truncate(lastReply, 1000))
 	}
 }
 
@@ -128,30 +129,126 @@ func loadAutoSendConfig(dbConn *sql.DB) (autoSendConfig, error) {
 	return autoSendConfig{apiID: apiID, apiHash: apiHash, allProxy: allProxy}, nil
 }
 
-func runAutoSendTask(ctx context.Context, dbConn *sql.DB, t store.AutoSendTask, cfg autoSendConfig) (string, string) {
+func runAutoSendTask(ctx context.Context, dbConn *sql.DB, t store.AutoSendTask, cfg autoSendConfig) (string, string, string) {
 	storage := NewAccountSessionStorage(dbConn, t.Owner, t.AccountID)
 	opts, err := buildOptions(storage, cfg.allProxy)
 	if err != nil {
-		return "client options error", ""
+		return "client options error", "", ""
 	}
 
 	client := telegram.NewClient(cfg.apiID, cfg.apiHash, opts)
 	resolvedDialogID := ""
+	lastReply := ""
 	err = client.Run(ctx, func(ctx context.Context) error {
-		usedDialogID, err := SendMessageToTarget(ctx, client, t.DialogID, t.Message)
+		api := client.API()
+		resolved, err := resolveTarget(ctx, api, t.DialogID)
 		if err != nil {
 			return err
 		}
-		resolvedDialogID = strings.TrimSpace(usedDialogID)
+		resolvedDialogID = strings.TrimSpace(resolved.dialogID)
+		baselineID := latestPeerMessageID(ctx, api, resolved.peer)
+		sendAt := time.Now()
+		if err := sendMessageToPeer(ctx, api, resolved.peer, t.Message); err != nil {
+			return err
+		}
+		lastReply = waitAutoSendReply(ctx, api, resolved.peer, sendAt, baselineID)
 		return nil
 	})
 	if err != nil {
-		return err.Error(), resolvedDialogID
+		return err.Error(), resolvedDialogID, ""
 	}
 	if normalized, ok := NormalizeDialogID(resolvedDialogID); ok {
 		resolvedDialogID = normalized
 	}
-	return "ok", resolvedDialogID
+	return "ok", resolvedDialogID, lastReply
+}
+
+func waitAutoSendReply(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, sendAt time.Time, minMessageID int) string {
+	startUnix := int(sendAt.Unix()) - 1
+
+	waitCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+
+	deadlineReached := false
+	for !deadlineReached {
+		resp, err := messagesGetHistoryWithRetry(waitCtx, api, &tg.MessagesGetHistoryRequest{
+			Peer:  peer,
+			Limit: 10,
+		})
+		if err == nil {
+			if reply := extractAutoSendReply(resp, startUnix, minMessageID); reply != "" {
+				return reply
+			}
+		}
+
+		select {
+		case <-waitCtx.Done():
+			deadlineReached = true
+		case <-time.After(1500 * time.Millisecond):
+		}
+	}
+
+	return ""
+}
+
+func extractAutoSendReply(res tg.MessagesMessagesClass, startUnix int, minMessageID int) string {
+	messages := historyMessagesFromResponse(res)
+	bestDate := 0
+	bestID := 0
+	bestText := ""
+
+	for _, mc := range messages {
+		m, ok := mc.(*tg.Message)
+		if !ok || m.Out {
+			continue
+		}
+		if m.ID <= minMessageID {
+			continue
+		}
+		if m.Date < startUnix {
+			continue
+		}
+		text := strings.TrimSpace(m.Message)
+		if text == "" {
+			continue
+		}
+		if m.Date > bestDate || (m.Date == bestDate && m.ID > bestID) {
+			bestDate = m.Date
+			bestID = m.ID
+			bestText = text
+		}
+	}
+
+	return bestText
+}
+
+func latestPeerMessageID(ctx context.Context, api *tg.Client, peer tg.InputPeerClass) int {
+	res, err := messagesGetHistoryWithRetry(ctx, api, &tg.MessagesGetHistoryRequest{
+		Peer:  peer,
+		Limit: 1,
+	})
+	if err != nil {
+		return 0
+	}
+	for _, mc := range historyMessagesFromResponse(res) {
+		if m, ok := mc.(*tg.Message); ok {
+			return m.ID
+		}
+	}
+	return 0
+}
+
+func historyMessagesFromResponse(res tg.MessagesMessagesClass) []tg.MessageClass {
+	switch v := res.(type) {
+	case *tg.MessagesMessages:
+		return v.Messages
+	case *tg.MessagesMessagesSlice:
+		return v.Messages
+	case *tg.MessagesChannelMessages:
+		return v.Messages
+	default:
+		return nil
+	}
 }
 
 func buildOptions(storage telegram.SessionStorage, allProxy string) (telegram.Options, error) {
