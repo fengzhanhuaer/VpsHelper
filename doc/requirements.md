@@ -1,72 +1,25 @@
-# 需求草案
+﻿# Requirements
 
-## 迁移说明（Go 版）
+## Target
 
-当前仓库正在从 Python/Flask 迁移至 Go/Gin 全栈实现（见 goapp/）。迁移目标：
-- 所有现有 Web 功能与任务能力在 Go 版对齐
-- SQLite 数据库结构尽量保持兼容（userdata/VpsHelper.db）
-- 运行与更新逻辑逐步切换到 Go 版（/system/update）
+VpsHelper is implemented and maintained in Go only.
 
-## 背景与目标
-- 个人用户管理约 50 台 VPS。
-- 核心目标：转发能力（隧道/链式），监视与升级作为保障手段。
-- 管理形态：公网 Web 中心统一管理并远程部署探针。
+- Backend: Go (Gin)
+- Storage: SQLite (`userdata/VpsHelper.db`)
+- Optional cloud DB: Cloudflare D1 (`VpsHelper.db`)
 
-## 目标系统与部署约束
-- 目标系统：Debian 与 Alpine。
-- 探针仅运行在用户目录，无需 root。
-- 探针形态：单一二进制包。
-- 升级包来源：GitHub 下载。
+## Functional scope
 
-## 核心能力
-### 转发能力（核心）
-- 支持单跳与链式转发。
-- 转发链路可视化、可配置、可一键启停。
-- 转发隧道支持正向与反向两种形态。
-- 正向：客户端或节点主动连接目标服务，适用于本地访问远端服务。
-- 反向：远端节点主动连接回本地或中心，适用于内网服务暴露。
-- 转发能力不局限在客户端，每个 VPS 节点都需要具备。
+- User auth and session management
+- TG account login and task management
+- Auto send / auto reply / sign tasks
+- Server status, shell tools, firewall, SSH settings
+- Local/Cloud DB sync and scheduled backup
+- Program update and restart
 
-### 远程部署与一键升级（核心）
-- Web 中心可一键部署探针到多台 VPS。
-- Web 中心可批量升级探针，支持灰度发布。
-- 升级失败可回滚，进度与结果可视。
+## Non-functional requirements
 
-### 远程指令执行（新增）
-- Web 中心可远程下发 Shell 指令到指定探针。
-- 执行结果需回传并可在 Web 端查看。
-- 支持批量下发与失败重试。
-- 执行日志纳入审计记录。
-
-### 监视与告警（手段）
-- 设备在线状态、心跳与关键指标可见。
-- 告警用于保障转发稳定。
-
-## 通信与扩展性（非技术）
-- 探针主动连接中心，复用单一双向通道。
-- 通道可扩展，支持后续新增业务类型。
-- 每种业务类型在通信中需有独特标识，用于路由、权限、审计与兼容。
-- 新增业务类型不影响既有业务通信。
-
-## 数据存储要求（新增）
-- VPS 地址与密钥等核心信息写入现有 VpsHelper 数据库。
-- 运行期业务数据（任务队列、回执、临时日志）仅在中心本地临时存储。
-- 无需长期持久化历史任务数据（除非后续新增需求）。
-
-## Web 管理端最小能力
-- 资产管理：设备列表、分组/标签、在线状态、版本。
-- 部署向导：选择目标、执行部署、结果汇总。
-- 升级中心：版本选择、灰度/批量、进度与回执。
-- 日志审计：部署/升级/任务执行记录。
-
-## 客户端形态（新增）
-- 转发功能面向 Windows 客户端使用，定位为全新的客户端形态。
-## Windows 客户端核心功能
-- 建立与 VPS 或其他客户端的正向/反向隧道。
-- 内网暴露：对外提供本地局域网访问能力（类似 Tailscale 的 exit node）。
-- 网络代理：为本机或指定流量提供代理转发能力。
-
-## 验收标准（建议）
-- 50 台规模下批量部署成功率 >= 98%。
-- 探针升级成功率 >= 98%，失败可回滚。
-- 批量升级具备进度可视与失败原因可追溯。
+- Single-binary deployment supported
+- Linux service deployment with systemd (`install-go.sh`)
+- Backward-compatible local DB schema where possible
+- Configurable listen addr, data dir, timezone, session key via environment variables

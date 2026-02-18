@@ -1251,7 +1251,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		return
 	}
 
-	const dbName = "TgHelper"
+	const dbName = "VpsHelper.db"
 
 	keys := []string{
 		"cf_api_token",

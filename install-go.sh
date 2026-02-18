@@ -106,7 +106,7 @@ backup_unit_if_exists() {
   fi
 }
 
-# Replace legacy Python service by default.
+# Replace legacy service by default.
 if [[ "${SERVICE_NAME}" == "vpshelper" ]]; then
   disable_service_if_exists "vpshelper-go"
 else
@@ -135,8 +135,8 @@ url="https://github.com/${REPO_SLUG}/releases/latest/download/${asset}"
 
 mkdir -p "${INSTALL_DIR}/bin" "${INSTALL_DIR}/userdata"
 
-if [[ -d "${INSTALL_DIR}/.venv" || -f "${INSTALL_DIR}/VpsHelper.py" ]]; then
-  echo "检测到旧版 Python 安装内容位于 ${INSTALL_DIR}，将保留文件不删除（仅替换 systemd 服务与 Go 二进制）。"
+if [[ -d "${INSTALL_DIR}/.venv" ]]; then
+  echo "Detected legacy runtime files under ${INSTALL_DIR}. Existing files are kept, service will be switched to Go binary."
 fi
 
 bin_path="${INSTALL_DIR}/bin/vpshelper"
