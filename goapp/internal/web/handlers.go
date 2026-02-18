@@ -1251,11 +1251,12 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		return
 	}
 
-	const dbName = "VpsHelper.db"
+	dbName := config.UnifiedDBName
 
 	keys := []string{
 		"cf_api_token",
 		"cf_account_id",
+		"cf_d1_database_name",
 		"cf_d1_database_id",
 		"db_auto_backup_enabled",
 		"db_auto_backup_time",
@@ -1269,6 +1270,9 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 
 	cfToken := settings["cf_api_token"]
 	accountID := settings["cf_account_id"]
+	if settings["cf_d1_database_name"] != dbName {
+		_ = store.SetSetting(h.dbConn, "cf_d1_database_name", dbName)
+	}
 	dbID := settings["cf_d1_database_id"]
 	autoEnabled := settings["db_auto_backup_enabled"] == "1"
 	autoTime := settings["db_auto_backup_time"]

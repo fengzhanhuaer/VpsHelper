@@ -16,6 +16,8 @@ type Config struct {
     ReadHeaderTimeout time.Duration
 }
 
+const UnifiedDBName = "VpsHelper.db"
+
 func Load() Config {
     baseDir, _ := os.Getwd()
 
@@ -42,7 +44,7 @@ func Load() Config {
     return Config{
         BaseDir:           baseDir,
         DataDir:           dataDir,
-        DBPath:            filepath.Join(dataDir, "VpsHelper.db"),
+        DBPath:            filepath.Join(dataDir, UnifiedDBName),
         TemplatesDir:      templatesDir,
         ListenAddr:        listenAddr,
         SessionKey:        sessionKey,
