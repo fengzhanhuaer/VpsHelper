@@ -3,13 +3,12 @@ package tg
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/gotd/td/session"
 )
 
-// AccountSessionStorage stores gotd session bytes in tg_accounts.session_text (base64).
+// AccountSessionStorage stores gotd session bytes in tg_accounts.session_text (base64 text).
 //
 // It is compatible with current schema and allows long-lived sessions for sending tasks.
 type AccountSessionStorage struct {
@@ -39,7 +38,7 @@ func (s *AccountSessionStorage) LoadSession(ctx context.Context) ([]byte, error)
 	if sessionText == "" {
 		return nil, session.ErrNotFound
 	}
-	b, err := base64.StdEncoding.DecodeString(sessionText)
+	b, err := decodeSessionText(sessionText)
 	if err != nil {
 		return nil, fmt.Errorf("decode account session: %w", err)
 	}
@@ -47,7 +46,7 @@ func (s *AccountSessionStorage) LoadSession(ctx context.Context) ([]byte, error)
 }
 
 func (s *AccountSessionStorage) StoreSession(ctx context.Context, data []byte) error {
-	encoded := base64.StdEncoding.EncodeToString(data)
+	encoded := encodeSessionText(data)
 	if _, err := s.dbConn.ExecContext(
 		ctx,
 		"UPDATE tg_accounts SET session_text = ? WHERE id = ? AND owner = ?",
