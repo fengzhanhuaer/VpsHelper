@@ -80,3 +80,42 @@ func TestDecodeSessionText_AcceptsTelethonStringSession(t *testing.T) {
 		t.Fatalf("unexpected auth key len: %d", len(data.AuthKey))
 	}
 }
+
+func TestDecodeSessionText_AcceptsTelethonStringSessionWithoutPadding(t *testing.T) {
+	payload := make([]byte, 263)
+	payload[0] = 2 // dc id
+	copy(payload[1:5], []byte{149, 154, 167, 51})
+	binary.BigEndian.PutUint16(payload[5:7], 443)
+	for i := 7; i < len(payload); i++ {
+		payload[i] = byte(i)
+	}
+
+	telethon := "1" + base64.RawURLEncoding.EncodeToString(payload)
+	got, err := decodeSessionText(telethon)
+	if err != nil {
+		t.Fatalf("decode telethon string without padding failed: %v", err)
+	}
+
+	loader := gotdsession.Loader{Storage: staticSessionStorage{data: got}}
+	data, err := loader.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load converted gotd payload failed: %v", err)
+	}
+
+	if data.DC != 2 {
+		t.Fatalf("unexpected dc: %d", data.DC)
+	}
+}
+
+func TestDecodeSessionText_AcceptsQuotedValue(t *testing.T) {
+	original := []byte("session-binary-\x00-\x01-\x02")
+	encoded := "\"" + base64.RawURLEncoding.EncodeToString(original) + "\""
+
+	got, err := decodeSessionText(encoded)
+	if err != nil {
+		t.Fatalf("decode quoted value failed: %v", err)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("decoded mismatch")
+	}
+}

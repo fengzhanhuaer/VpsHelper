@@ -42,6 +42,10 @@ func (s *AccountSessionStorage) LoadSession(ctx context.Context) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("decode account session: %w", err)
 	}
+	// Auto-migrate legacy/python session text to the current canonical format.
+	if shouldRewriteSessionText(sessionText, b) {
+		_ = s.StoreSession(ctx, b)
+	}
 	return b, nil
 }
 

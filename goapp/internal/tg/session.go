@@ -37,6 +37,10 @@ func (s *LoginFlowSessionStorage) LoadSession(ctx context.Context) ([]byte, erro
 	if err != nil {
 		return nil, fmt.Errorf("decode session: %w", err)
 	}
+	// Auto-migrate legacy session text to the current canonical format.
+	if shouldRewriteSessionText(sessionText, data) {
+		_ = s.StoreSession(ctx, data)
+	}
 	return data, nil
 }
 
