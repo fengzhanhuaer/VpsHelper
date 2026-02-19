@@ -63,6 +63,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/tg/proxy", h.tgProxy)
 	router.GET("/tg/dialogs", h.tgDialogs)
 	router.POST("/tg/dialogs", h.tgDialogs)
+	router.POST("/tg/dialogs/refresh/stream", h.tgDialogsRefreshStream)
 	router.GET("/tg/sign", h.tgSign)
 	router.POST("/tg/sign", h.tgSign)
 	router.GET("/tg/auto/reply", h.tgAutoReply)
@@ -831,6 +832,81 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 		"AccountID": accountID,
 		"Dialogs":   dialogs,
 	})
+}
+
+func (h *Handler) tgDialogsRefreshStream(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	flusher, ok := dbStreamHeaders(c)
+	if !ok {
+		return
+	}
+
+	send := func(percent int, msg string, done bool, success bool) bool {
+		return dbStreamSend(c, flusher, percent, msg, done, success)
+	}
+	fail := func(msg string) { _ = send(0, msg, true, false) }
+
+	// Parse account_id from POST body.
+	accountIDText := strings.TrimSpace(c.PostForm("account_id"))
+	accountID, err := strconv.ParseInt(accountIDText, 10, 64)
+	if err != nil || accountID <= 0 {
+		fail("account_id 无效。")
+		return
+	}
+
+	if !send(5, "正在读取 API 配置...", false, false) {
+		return
+	}
+
+	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+	if err != nil {
+		fail("读取 API 配置失败：" + err.Error())
+		return
+	}
+	apiIDText := strings.TrimSpace(settings["telegram_api_id"])
+	apiHash := strings.TrimSpace(settings["telegram_api_hash"])
+	allProxy := strings.TrimSpace(settings["tg_all_proxy"])
+	apiID, err := strconv.Atoi(apiIDText)
+	if err != nil || apiHash == "" {
+		fail("请先在 API 设置里配置 Telegram API ID/Hash。")
+		return
+	}
+
+	if !send(15, "正在连接 Telegram，拉取会话列表...", false, false) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
+	defer cancel()
+
+	n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, accountID, apiID, apiHash, allProxy)
+	if msg != "ok" {
+		fail("刷新失败：" + msg)
+		return
+	}
+
+	if !send(80, fmt.Sprintf("已获取 %d 条会话，正在迁移旧任务目标...", n), false, false) {
+		return
+	}
+
+	migrated, migrateErr := tg.NormalizeStoredTargetsByDialogs(h.dbConn, username, accountID)
+	if migrateErr != nil {
+		_ = send(100, fmt.Sprintf("已刷新 %d 条会话，任务迁移失败：%s", n, migrateErr.Error()), true, false)
+		return
+	}
+
+	var finalMsg string
+	if migrated > 0 {
+		finalMsg = fmt.Sprintf("刷新完成：%d 条会话，已迁移 %d 条任务目标为会话ID。", n, migrated)
+	} else {
+		finalMsg = fmt.Sprintf("刷新完成：%d 条会话（已保存会话ID）。", n)
+	}
+	_ = send(100, finalMsg, true, true)
 }
 
 func (h *Handler) tgSign(c *gin.Context) {
