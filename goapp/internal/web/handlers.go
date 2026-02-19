@@ -818,6 +818,17 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 		return
 	}
 
+	// JSON branch: called by client-side after SSE refresh to reload just the table.
+	if c.Query("_json") == "1" {
+		dialogs, err := store.ListTGDialogs(h.dbConn, accountID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "dialogs": dialogs})
+		return
+	}
+
 	dialogs, err := store.ListTGDialogs(h.dbConn, accountID)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "load dialogs failed")
