@@ -6,11 +6,53 @@
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css" />
     <style>
-        /* page-specific: update progress */
-        .progress-card { display:none; margin-top:14px; padding:12px; border-radius:12px; border:1px solid #ecd7cb; background:#fff8f3; }
-        .progress-bar { width:100%; height:10px; border-radius:999px; background:#f1dfd2; overflow:hidden; margin:8px 0 6px; }
-        .progress-fill { height:100%; width:0; background:linear-gradient(90deg,#ff9f66 0%,#d9480f 100%); transition:width 0.2s ease; }
-        .progress-log { margin:8px 0 0; padding:8px 10px; max-height:180px; overflow:auto; border-radius:10px; border:1px solid #f0dccc; background:#fff; font-size:12px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+        /* Two-column layout: controls left, progress right */
+        .update-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 700px) {
+            .update-layout { grid-template-columns: 1fr; }
+        }
+
+        /* Release info strips */
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid #f3ece7;
+            font-size: 14px;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-row strong { color: #5e4f42; font-weight: 500; }
+
+        /* Progress card always visible on the right */
+        .progress-card {
+            background: #fff8f3;
+            border: 1px solid #ecd7cb;
+            border-radius: 12px;
+            padding: 14px;
+        }
+        .progress-bar { width:100%; height:10px; border-radius:999px; background:#f1dfd2; overflow:hidden; margin:8px 0 4px; }
+        .progress-fill { height:100%; width:0; background:linear-gradient(90deg,#ff9f66 0%,#d9480f 100%); transition:width 0.3s ease; }
+        .progress-log {
+            margin-top: 8px;
+            padding: 8px 10px;
+            height: 220px;
+            overflow-y: auto;
+            border-radius: 10px;
+            border: 1px solid #f0dccc;
+            background: #fff;
+            font-size: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #3a3028;
+        }
+        .progress-idle { color: #b0a090; font-style: italic; }
     </style>
 </head>
 <body>
@@ -24,109 +66,96 @@
 
     <main>
         <section class="panel">
-            <h1>程序更新（Go）</h1>
-            <p class="muted">当前版本：{{ .CurrentVersion }}</p>
-            <p class="muted">更新来源：GitHub Release（不再使用 git 拉取/构建）。</p>
+            <h1 style="margin-bottom:4px;">程序更新</h1>
+            <p class="muted" style="margin:0 0 16px;">当前版本：<strong>{{ .CurrentVersion }}</strong> &nbsp;|&nbsp; 仓库：<code>fengzhanhuaer/VpsHelper</code></p>
 
             {{ if .Message }}
-            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom:14px;">{{ .Message }}</div>
             {{ end }}
 
-            <form method="post" action="/system/update" style="display:grid; gap:8px;">
-                <button class="ghost" type="submit" name="action" value="restart">重启服务</button>
-            </form>
+            <div class="update-layout">
+                <!-- Left column: controls -->
+                <div>
+                    <!-- Release info -->
+                    {{ if .GH.Note }}
+                    <div class="error" style="margin-bottom:10px;">{{ .GH.Note }}</div>
+                    {{ end }}
 
-            <hr style="margin:18px 0; border:none; border-top:1px solid #eee;" />
+                    <div style="margin-bottom:14px;">
+                        <div class="info-row"><strong>最新 Release</strong><span>{{ .GH.TagName }}</span></div>
+                        <div class="info-row"><strong>名称</strong><span>{{ .GH.Name }}</span></div>
+                        <div class="info-row"><strong>发布时间</strong><span>{{ .GH.PublishedAt }}</span></div>
+                        <div class="info-row"><strong>Asset</strong><span>{{ if .GH.AssetName }}{{ .GH.AssetName }}{{ else }}<span class="muted">自动匹配</span>{{ end }}</span></div>
+                    </div>
 
-            <h2 style="margin:0 0 10px;">GitHub Release 更新</h2>
-            <p class="muted" style="margin-top:0;">适用于不在服务器上构建：从 GitHub Release 下载已编译二进制并重启切换。</p>
-
-            {{ if .GH.Note }}
-            <div class="error">{{ .GH.Note }}</div>
-            {{ end }}
-
-            <div style="display:grid; gap:8px; margin-bottom:14px;">
-                <div><strong>更新仓库：</strong><code>fengzhanhuaer/VpsHelper</code></div>
-                <div><strong>最新 Release：</strong>{{ .GH.TagName }}</div>
-                <div><strong>Release 名称：</strong>{{ .GH.Name }}</div>
-                <div><strong>发布时间：</strong>{{ .GH.PublishedAt }}</div>
-                <div><strong>选择的 Asset：</strong>{{ .GH.AssetName }}</div>
-            </div>
-
-            <form id="gh-release-form" method="post" action="/system/update" style="display:grid; gap:8px;">
-                <div class="field">
-                    <label for="gh_token">Token（可选，私有仓库需要）</label>
-                    <input id="gh_token" name="gh_token" value="{{ .GHToken }}" />
-                </div>
-                <div class="field">
-                    <label for="gh_asset">Asset 名称（可选，不填则自动匹配当前系统）</label>
-                    <input id="gh_asset" name="gh_asset" value="{{ .GHAsset }}" />
+                    <!-- Action buttons -->
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button id="btn-update" class="btn" type="button">⬆ 从 Release 更新并重启</button>
+                        <form method="post" action="/system/update" style="display:inline;">
+                            <button class="ghost" type="submit" name="action" value="gh_check">检查最新 Release</button>
+                        </form>
+                        <form method="post" action="/system/update" style="display:inline;">
+                            <button id="btn-restart" class="ghost" type="submit" name="action" value="restart">↺ 仅重启服务</button>
+                        </form>
+                    </div>
                 </div>
 
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="ghost" type="submit" name="action" value="gh_save">保存配置</button>
-                    <button class="ghost" type="submit" name="action" value="gh_check">检查最新 Release</button>
-                    <button class="btn" type="button" id="gh-update-btn">从 Release 更新并重启</button>
+                <!-- Right column: live progress -->
+                <div class="progress-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <strong style="font-size:14px;">更新进度</strong>
+                        <span id="update-progress-percent" class="muted" style="font-size:13px;">—</span>
+                    </div>
+                    <div class="progress-bar"><div id="update-progress-fill" class="progress-fill"></div></div>
+                    <div id="update-progress-text" class="muted" style="font-size:13px; margin-bottom:6px;">点击「从 Release 更新并重启」开始</div>
+                    <div id="update-progress-log" class="progress-log"><span class="progress-idle">尚未执行任何操作</span></div>
                 </div>
-            </form>
-
-            <div id="update-progress-card" class="progress-card">
-                <div id="update-progress-text" class="muted">准备开始...</div>
-                <div class="progress-bar">
-                    <div id="update-progress-fill" class="progress-fill"></div>
-                </div>
-                <div id="update-progress-percent" class="muted">0%</div>
-                <div id="update-progress-log" class="progress-log"></div>
             </div>
         </section>
     </main>
 
     <script>
         (function () {
-            const form = document.getElementById("gh-release-form");
-            const updateBtn = document.getElementById("gh-update-btn");
-            const card = document.getElementById("update-progress-card");
-            const textEl = document.getElementById("update-progress-text");
-            const fillEl = document.getElementById("update-progress-fill");
-            const percentEl = document.getElementById("update-progress-percent");
-            const logEl = document.getElementById("update-progress-log");
-            const saveBtn = form.querySelector('button[value="gh_save"]');
-            const checkBtn = form.querySelector('button[value="gh_check"]');
+            var updateBtn = document.getElementById("btn-update");
+            var fillEl    = document.getElementById("update-progress-fill");
+            var pctEl     = document.getElementById("update-progress-percent");
+            var textEl    = document.getElementById("update-progress-text");
+            var logEl     = document.getElementById("update-progress-log");
 
-            function setBusy(busy) {
-                saveBtn.disabled = busy;
-                checkBtn.disabled = busy;
-                updateBtn.disabled = busy;
-            }
-
-            function setProgress(percent, message) {
-                const p = Math.max(0, Math.min(100, Number(percent) || 0));
+            function setProgress(pct, msg) {
+                var p = Math.max(0, Math.min(100, Number(pct) || 0));
                 fillEl.style.width = p + "%";
-                percentEl.textContent = p + "%";
-                if (message) {
-                    textEl.textContent = message;
-                }
+                pctEl.textContent  = p + "%";
+                if (msg) textEl.textContent = msg;
             }
 
-            function appendLog(message) {
-                if (!message) return;
-                const now = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-                logEl.textContent += "[" + now + "] " + message + "\n";
+            function appendLog(msg) {
+                if (!msg) return;
+                // Remove idle placeholder on first real entry
+                var idle = logEl.querySelector(".progress-idle");
+                if (idle) logEl.innerHTML = "";
+                var now = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+                logEl.textContent += "[" + now + "] " + msg + "\n";
                 logEl.scrollTop = logEl.scrollHeight;
             }
 
+            function setBusy(busy) {
+                updateBtn.disabled = busy;
+                updateBtn.textContent = busy ? "更新中..." : "⬆ 从 Release 更新并重启";
+            }
+
             async function runUpdate() {
-                card.style.display = "block";
-                logEl.textContent = "";
+                logEl.innerHTML = "";
                 setProgress(0, "准备启动更新...");
+                pctEl.textContent = "0%";
                 appendLog("开始执行更新流程");
                 setBusy(true);
 
-                const fd = new FormData(form);
+                var fd = new FormData();
                 fd.set("action", "gh_update");
 
                 try {
-                    const res = await fetch("/system/update/stream", {
+                    var res = await fetch("/system/update/stream", {
                         method: "POST",
                         body: fd,
                         credentials: "same-origin",
@@ -136,63 +165,47 @@
                         throw new Error("更新请求失败（HTTP " + res.status + "）");
                     }
 
-                    const reader = res.body.getReader();
-                    const decoder = new TextDecoder();
-                    let buffer = "";
-                    let finished = false;
+                    var reader   = res.body.getReader();
+                    var decoder  = new TextDecoder();
+                    var buffer   = "";
+                    var finished = false;
 
                     while (true) {
-                        const part = await reader.read();
-                        if (part.done) {
-                            break;
-                        }
+                        var part = await reader.read();
+                        if (part.done) break;
                         buffer += decoder.decode(part.value, { stream: true });
-                        const lines = buffer.split("\n");
+                        var lines = buffer.split("\n");
                         buffer = lines.pop() || "";
-                        for (const line of lines) {
-                            const row = line.trim();
+                        for (var i = 0; i < lines.length; i++) {
+                            var row = lines[i].trim();
                             if (!row) continue;
-                            let event;
-                            try {
-                                event = JSON.parse(row);
-                            } catch (_e) {
-                                continue;
-                            }
-                            setProgress(event.percent, event.message);
-                            appendLog(event.message);
-
-                            if (event.done) {
+                            var ev;
+                            try { ev = JSON.parse(row); } catch (_) { continue; }
+                            setProgress(ev.percent, ev.message);
+                            appendLog(ev.message);
+                            if (ev.done) {
                                 finished = true;
-                                if (event.ok) {
-                                    appendLog("更新完成，等待服务重启...");
-                                    setTimeout(function () {
-                                        window.location.reload();
-                                    }, 4500);
+                                if (ev.ok) {
+                                    appendLog("更新完成，4 秒后自动刷新...");
+                                    setTimeout(function () { window.location.reload(); }, 4500);
                                 } else {
-                                    appendLog("更新失败，请根据日志检查配置或网络。");
+                                    appendLog("更新失败，请检查配置或网络。");
                                 }
                                 break;
                             }
                         }
-                        if (finished) {
-                            break;
-                        }
+                        if (finished) break;
                     }
-
-                    if (!finished) {
-                        appendLog("连接已结束，请刷新页面确认版本是否已更新。");
-                    }
+                    if (!finished) appendLog("连接已结束，请刷新页面确认版本。");
                 } catch (err) {
-                    appendLog((err && err.message) ? err.message : "更新执行失败");
-                    setProgress(0, "更新执行失败");
+                    appendLog(err && err.message ? err.message : "请求出错");
+                    setProgress(0, "执行失败");
                 } finally {
                     setBusy(false);
                 }
             }
 
-            updateBtn.addEventListener("click", function () {
-                runUpdate();
-            });
+            updateBtn.addEventListener("click", function () { runUpdate(); });
         })();
     </script>
 </body>
