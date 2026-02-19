@@ -242,6 +242,7 @@ func (h *Handler) changePassword(c *gin.Context) {
 	confirmPassword := strings.TrimSpace(c.PostForm("confirm_password"))
 
 	var msg string
+	msgOK := false
 	if oldPassword == "" || newPassword == "" || confirmPassword == "" {
 		msg = "请完整填写旧密码、新密码和确认密码。"
 	} else if newPassword != confirmPassword {
@@ -258,6 +259,7 @@ func (h *Handler) changePassword(c *gin.Context) {
 				msg = "保存失败。"
 			} else {
 				msg = "密码已修改。"
+				msgOK = true
 			}
 		}
 	}
@@ -266,6 +268,7 @@ func (h *Handler) changePassword(c *gin.Context) {
 		"Title":    "修改密码",
 		"Username": username,
 		"Message":  msg,
+		"MsgOK":    msgOK,
 	})
 }
 
@@ -581,6 +584,7 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 	}
 
 	message := strings.TrimSpace(c.Query("message"))
+	msgOK := c.Query("status") == "ok"
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
 		if action == "" {
@@ -602,6 +606,7 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 				message = "删除失败。"
 			} else {
 				message = "已删除账号。"
+				msgOK = true
 			}
 		case "refresh_dialogs":
 			if selectedAccountID <= 0 {
@@ -641,8 +646,10 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 			}
 			if migrated > 0 {
 				message = fmt.Sprintf("已刷新会话列表：%d 条，已迁移 %d 条任务目标为会话ID。", n, migrated)
+				msgOK = true
 			} else {
 				message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。", n)
+				msgOK = true
 			}
 		default:
 			message = "未知操作。"
@@ -650,6 +657,9 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 		redirectURL := fmt.Sprintf("/tg/accounts?account_id=%d", selectedAccountID)
 		if message != "" {
 			redirectURL += "&message=" + url.QueryEscape(message)
+			if msgOK {
+				redirectURL += "&status=ok"
+			}
 		}
 		c.Redirect(http.StatusSeeOther, redirectURL)
 		return
@@ -665,6 +675,7 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 	c.HTML(http.StatusOK, "tg_accounts.html", gin.H{
 		"Title":             "TG 账号管理",
 		"Message":           message,
+		"MsgOK":             msgOK,
 		"Accounts":          accounts,
 		"HasAccounts":       len(accounts) > 0,
 		"SelectedAccountID": selectedAccountID,
@@ -688,6 +699,7 @@ func (h *Handler) tgProxy(c *gin.Context) {
 	}
 	allProxy := settings["tg_all_proxy"]
 	message := ""
+	msgOK := false
 
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
@@ -696,10 +708,12 @@ func (h *Handler) tgProxy(c *gin.Context) {
 			allProxy = strings.TrimSpace(c.PostForm("all_proxy"))
 			_ = store.SetSetting(h.dbConn, "tg_all_proxy", allProxy)
 			message = "已保存。"
+			msgOK = true
 		case "clear":
 			allProxy = ""
 			_ = store.SetSetting(h.dbConn, "tg_all_proxy", "")
 			message = "已清空。"
+			msgOK = true
 		default:
 			message = "未知操作。"
 		}
@@ -708,6 +722,7 @@ func (h *Handler) tgProxy(c *gin.Context) {
 	c.HTML(http.StatusOK, "tg_proxy.html", gin.H{
 		"Title":    "TG 代理设置",
 		"Message":  message,
+		"MsgOK":    msgOK,
 		"AllProxy": allProxy,
 	})
 }
@@ -749,6 +764,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 	}
 
 	message := strings.TrimSpace(c.Query("message"))
+	msgOK := c.Query("status") == "ok"
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
 		if action == "" && strings.TrimSpace(c.PostForm("account_id")) != "" {
@@ -777,8 +793,10 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 							message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。任务迁移失败：%s", n, migrateErr.Error())
 						} else if migrated > 0 {
 							message = fmt.Sprintf("已刷新会话列表：%d 条，已迁移 %d 条任务目标为会话ID。", n, migrated)
+							msgOK = true
 						} else {
 							message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。", n)
+							msgOK = true
 						}
 					}
 				}
@@ -789,6 +807,9 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 		redirectURL := fmt.Sprintf("/tg/dialogs?account_id=%d", accountID)
 		if message != "" {
 			redirectURL += "&message=" + url.QueryEscape(message)
+			if msgOK {
+				redirectURL += "&status=ok"
+			}
 		}
 		c.Redirect(http.StatusSeeOther, redirectURL)
 		return
@@ -803,6 +824,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 	c.HTML(http.StatusOK, "tg_dialogs.html", gin.H{
 		"Title":     "会话列表",
 		"Message":   message,
+		"MsgOK":     msgOK,
 		"Accounts":  accounts,
 		"AccountID": accountID,
 		"Dialogs":   dialogs,
@@ -861,6 +883,7 @@ func (h *Handler) tgSign(c *gin.Context) {
 	}
 
 	message := ""
+	msgOK := false
 	autoLast := ""
 	if s, err := store.GetSettings(h.dbConn, []string{"tg_sign_auto_last_result"}); err == nil {
 		autoLast = s["tg_sign_auto_last_result"]
@@ -894,12 +917,14 @@ func (h *Handler) tgSign(c *gin.Context) {
 				message = "保存失败。"
 			} else {
 				message = "已保存。"
+				msgOK = true
 			}
 		case "delete":
 			if err := store.DeleteSignTask(h.dbConn, username, accountID); err != nil {
 				message = "删除失败。"
 			} else {
 				message = "已删除。"
+				msgOK = true
 				dialogID = ""
 				signMsg = ""
 				createdAt = ""
@@ -915,6 +940,7 @@ func (h *Handler) tgSign(c *gin.Context) {
 			ok, msg, resolvedDialogID := tg.SendOnceWithResolvedDialogID(ctx, h.dbConn, username, accountID, dialogID, signMsg)
 			if ok {
 				message = msg
+				msgOK = true
 				if resolvedDialogID != "" {
 					dialogID = resolvedDialogID
 					if savedTask, okSavedNow, _ := store.GetSignTask(h.dbConn, username, accountID); okSavedNow {
@@ -942,6 +968,7 @@ func (h *Handler) tgSign(c *gin.Context) {
 	c.HTML(http.StatusOK, "tg_sign.html", gin.H{
 		"Title":       "签到任务",
 		"Message":     message,
+		"MsgOK":       msgOK,
 		"AutoLast":    autoLast,
 		"Accounts":    accounts,
 		"AccountID":   accountID,
@@ -960,6 +987,7 @@ func (h *Handler) tgAutoReply(c *gin.Context) {
 	}
 
 	message := ""
+	msgOK := false
 	accounts, err := store.ListTGAccounts(h.dbConn, username)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "load accounts failed")
@@ -997,6 +1025,7 @@ func (h *Handler) tgAutoReply(c *gin.Context) {
 				message = "创建失败。"
 			} else {
 				message = "已创建并启用。"
+				msgOK = true
 			}
 		case "enable", "disable", "delete":
 			idText := strings.TrimSpace(c.PostForm("id"))
@@ -1011,18 +1040,21 @@ func (h *Handler) tgAutoReply(c *gin.Context) {
 					message = "启用失败。"
 				} else {
 					message = "已启用。"
+					msgOK = true
 				}
 			case "disable":
 				if err := store.SetAutoReplyRuleEnabled(h.dbConn, username, id, false); err != nil {
 					message = "停用失败。"
 				} else {
 					message = "已停用。"
+					msgOK = true
 				}
 			case "delete":
 				if err := store.DeleteAutoReplyRule(h.dbConn, username, id); err != nil {
 					message = "删除失败。"
 				} else {
 					message = "已删除。"
+					msgOK = true
 				}
 			}
 		default:
@@ -1043,6 +1075,7 @@ func (h *Handler) tgAutoReply(c *gin.Context) {
 	c.HTML(http.StatusOK, "tg_auto_reply.html", gin.H{
 		"Title":     "自动回复",
 		"Message":   message,
+		"MsgOK":     msgOK,
 		"HasAPI":    hasAPI,
 		"Accounts":  accounts,
 		"AccountID": accountID,
@@ -1058,6 +1091,7 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 	}
 
 	message := ""
+	msgOK := false
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
 		idText := strings.TrimSpace(c.PostForm("id"))
@@ -1071,18 +1105,21 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 					message = "启用失败。"
 				} else {
 					message = "已启用。"
+					msgOK = true
 				}
 			case "disable":
 				if err := store.SetAutoSendTaskEnabled(h.dbConn, username, id, false); err != nil {
 					message = "停用失败。"
 				} else {
 					message = "已停用。"
+					msgOK = true
 				}
 			case "delete":
 				if err := store.DeleteAutoSendTask(h.dbConn, username, id); err != nil {
 					message = "删除失败。"
 				} else {
 					message = "已删除。"
+					msgOK = true
 				}
 			case "run":
 				runCtx, cancel := context.WithTimeout(c.Request.Context(), 50*time.Second)
@@ -1090,6 +1127,7 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 				ok, msg := tg.RunAutoSendTaskNow(runCtx, h.dbConn, username, id)
 				if ok {
 					message = "已立即执行。"
+					msgOK = true
 				} else {
 					message = "立即执行失败: " + msg
 				}
@@ -1108,6 +1146,7 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 	c.HTML(http.StatusOK, "tg_auto_send.html", gin.H{
 		"Title":   "自动发送",
 		"Message": message,
+		"MsgOK":   msgOK,
 		"Tasks":   tasks,
 	})
 }
@@ -1332,6 +1371,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 	lastAuto := settings["db_auto_backup_last_result"]
 
 	message := strings.TrimSpace(c.Query("message"))
+	msgOK := c.Query("status") == "ok"
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
 		if action == "" {
@@ -1355,6 +1395,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			}
 			_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
 			message = "已保存 Token。"
+			msgOK = true
 		case "create":
 			cfToken = strings.TrimSpace(c.PostForm("cf_api_token"))
 			if cfToken == "" {
@@ -1379,6 +1420,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 				dbID = foundID
 				_ = store.SetSetting(h.dbConn, "cf_d1_database_id", dbID)
 				message = "已绑定云端 D1 数据库。"
+				msgOK = true
 				break
 			}
 
@@ -1390,6 +1432,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			dbID = createdID
 			_ = store.SetSetting(h.dbConn, "cf_d1_database_id", dbID)
 			message = "已创建并绑定云端 D1 数据库。"
+			msgOK = true
 		case "backup":
 			if cfToken == "" || accountID == "" || dbID == "" {
 				message = "请先保存 Token 并执行“自动创建并绑定”。"
@@ -1399,11 +1442,8 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			defer cancel()
 			cf := d1.Client{Token: cfToken}
 			ok, msg := d1.BackupLocalToD1(ctx, cf, accountID, dbID, h.dbConn)
-			if ok {
-				message = msg
-			} else {
-				message = msg
-			}
+			message = msg
+			msgOK = ok
 		case "pull":
 			if cfToken == "" || accountID == "" || dbID == "" {
 				message = "请先保存 Token 并执行“自动创建并绑定”。"
@@ -1413,11 +1453,8 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			defer cancel()
 			cf := d1.Client{Token: cfToken}
 			ok, msg := d1.PullD1ToLocal(ctx, cf, accountID, dbID, h.dbConn)
-			if ok {
-				message = msg
-			} else {
-				message = msg
-			}
+			message = msg
+			msgOK = ok
 		case "auto_backup":
 			autoEnabled = c.PostForm("db_auto_backup_enabled") == "on"
 			autoTime = strings.TrimSpace(c.PostForm("db_auto_backup_time"))
@@ -1431,12 +1468,16 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			}
 			_ = store.SetSetting(h.dbConn, "db_auto_backup_time", autoTime)
 			message = "已保存自动备份设置。"
+			msgOK = true
 		default:
 			message = "未知操作。"
 		}
 		redirectURL := "/settings/database"
 		if message != "" {
 			redirectURL += "?message=" + url.QueryEscape(message)
+			if msgOK {
+				redirectURL += "&status=ok"
+			}
 		}
 		c.Redirect(http.StatusSeeOther, redirectURL)
 		return
@@ -1445,6 +1486,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 	c.HTML(http.StatusOK, "database_settings.html", gin.H{
 		"Title":                "数据库管理",
 		"Message":              message,
+		"MsgOK":                msgOK,
 		"CFToken":              cfToken,
 		"DBName":               dbName,
 		"DBID":                 dbID,
@@ -1462,6 +1504,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 	}
 
 	message := ""
+	msgOK := false
 
 	ghInfo := update.GitHubReleaseInfo{OK: false, TagName: "-", Name: "-", PublishedAt: "-", AssetName: "-", Note: ""}
 	ghOwner := ""
@@ -1483,6 +1526,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 		switch action {
 		case "restart":
 			message = "服务将在 1 秒后自动重启，请稍后刷新页面。"
+			msgOK = true
 			update.RestartDelayed(1 * time.Second)
 		case "gh_save":
 			ghOwner = strings.TrimSpace(c.PostForm("gh_owner"))
@@ -1495,6 +1539,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			_ = store.SetSetting(h.dbConn, "github_release_token", ghToken)
 			_ = store.SetSetting(h.dbConn, "github_release_asset", ghAsset)
 			message = "已保存 GitHub Release 配置。"
+			msgOK = true
 		case "gh_check", "gh_update":
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 			defer cancel()
@@ -1528,6 +1573,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			ghInfo.AssetName = asset.Name
 			if action == "gh_check" {
 				message = "已获取最新 Release 信息。"
+				msgOK = true
 				break
 			}
 
@@ -1568,6 +1614,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 				}
 			}
 			message = "已下载 Release(" + ghInfo.TagName + " / " + ghInfo.AssetName + "), 服务将在 1 秒后自动重启。"
+			msgOK = true
 			update.RestartToDelayed(bin, os.Args[1:], 1*time.Second)
 		default:
 			message = "未知操作。"
@@ -1582,6 +1629,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 	c.HTML(http.StatusOK, "update_manager.html", gin.H{
 		"Title":          "程序更新",
 		"Message":        message,
+		"MsgOK":          msgOK,
 		"CurrentVersion": version.Version,
 		"GH":             ghInfo,
 		"GHOwner":        ghOwner,
@@ -1813,6 +1861,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 	_ = username
 
 	message := ""
+	msgOK := false
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
 		switch action {
@@ -1822,6 +1871,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 			ok, msg := ssh.InstallFail2ban(ctx)
 			if ok {
 				message = msg
+				msgOK = true
 			} else {
 				message = "安装失败: " + msg
 			}
@@ -1850,6 +1900,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 			ok, msg := ssh.ApplySettings(ctx, p, allowPass, allowKey, pub)
 			if ok {
 				message = "SSH 设置已保存，并已自动应用到系统。"
+				msgOK = true
 			} else {
 				message = "SSH 设置已保存，但系统应用失败：" + msg
 			}
@@ -1878,6 +1929,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 	c.HTML(http.StatusOK, "ssh_settings.html", gin.H{
 		"Title":              "SSH 设置",
 		"Message":            message,
+		"MsgOK":              msgOK,
 		"SSHPort":            sshPort,
 		"SSHPublicKey":       settings["ssh_public_key"],
 		"AllowPasswordLogin": allowPass == "1",
@@ -2069,6 +2121,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 	}
 
 	message := ""
+	msgOK := false
 	fwType := firewall.DetectType()
 
 	if c.Request.Method == http.MethodPost {
@@ -2078,6 +2131,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 			ok, msg := firewall.Enable(fwType)
 			if ok {
 				message = msg
+				msgOK = true
 			} else {
 				message = "操作失败: " + msg
 			}
@@ -2092,6 +2146,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 			ok, msg := firewall.OpenPort(fwType, port, proto)
 			if ok {
 				message = msg
+				msgOK = true
 			} else {
 				message = "操作失败: " + msg
 			}
@@ -2127,6 +2182,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 	c.HTML(http.StatusOK, "firewall.html", gin.H{
 		"Title":          "防火墙",
 		"Message":        message,
+		"MsgOK":          msgOK,
 		"FirewallType":   fwType,
 		"FirewallStatus": fwStatus,
 		"Note":           note,

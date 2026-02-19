@@ -13,6 +13,7 @@
         .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
         .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
         .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
+        .success { background:#d3f9d8; color:#2b8a3e; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; font-weight:600; }
         .field { display:grid; gap:6px; margin-bottom:12px; }
         .field input { padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
         .muted { color:#5e4f42; font-size:12px; }
@@ -34,7 +35,7 @@
             <p class="muted">该设置会写入本地数据库，并在 TG 登录/任务发送时作为 ALL_PROXY 生效（socks5/http 取决于你的 URL）。</p>
 
             {{ if .Message }}
-            <div class="error">{{ .Message }}</div>
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
             <form method="post" action="/tg/proxy" style="display:grid; gap:8px;">

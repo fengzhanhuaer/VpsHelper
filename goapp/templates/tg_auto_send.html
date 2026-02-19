@@ -13,6 +13,7 @@
         .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
         .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
         .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; }
+        .success { background:#d3f9d8; color:#2b8a3e; padding:10px 12px; border-radius:10px; margin:12px 0; white-space:pre-wrap; font-weight:600; }
         table { width:100%; border-collapse: collapse; }
         th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eee; vertical-align: top; }
         .muted { color:#5e4f42; font-size:12px; }
@@ -35,7 +36,7 @@
             <p class="muted">任务目标优先使用会话ID；若历史任务仍是 @username，执行成功后会自动转换并保存为会话ID。</p>
 
             {{ if .Message }}
-            <div class="error">{{ .Message }}</div>
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">

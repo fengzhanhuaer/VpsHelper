@@ -15,6 +15,7 @@
         .field { display:grid; gap:6px; margin-bottom:12px; }
         .field input { padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
         .error { background:#ffe3e3; color:#9b1c1c; padding:10px 12px; border-radius:10px; margin-bottom:12px; white-space: pre-wrap; }
+        .success { background:#d3f9d8; color:#2b8a3e; padding:10px 12px; border-radius:10px; margin-bottom:12px; white-space: pre-wrap; font-weight:600; }
         .muted { color: var(--muted); font-size:12px; }
     </style>
 </head>
@@ -33,7 +34,7 @@
             <p class="muted">默认使用本地 sqlite。可创建云端私有 D1，并手动备份/拉取。</p>
 
             {{ if .Message }}
-            <div class="error">{{ .Message }}</div>
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
             <form id="db-settings-form" method="post" action="/settings/database">

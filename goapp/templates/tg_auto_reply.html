@@ -36,7 +36,7 @@
             {{ end }}
 
             {{ if .Message }}
-            <p style="margin:10px 0; padding:10px 12px; border:1px solid #ddd; background:#fafafa; border-radius:12px;">{{ .Message }}</p>
+            <p style="margin:10px 0; padding:10px 12px; border:1px solid {{ if .MsgOK }}#b2f2bb{{ else }}#ddd{{ end }}; background:{{ if .MsgOK }}#d3f9d8{{ else }}#fafafa{{ end }}; border-radius:12px; {{ if .MsgOK }}color:#2b8a3e; font-weight:600;{{ end }}">{{ .Message }}</p>
             {{ end }}
 
             <form method="GET" action="/tg/auto/reply" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin:16px 0 8px;">

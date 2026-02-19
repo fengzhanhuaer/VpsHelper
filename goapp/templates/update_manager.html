@@ -64,6 +64,14 @@
             border-radius: 10px;
             margin: 12px 0;
         }
+        .success {
+            background: #d3f9d8;
+            color: #2b8a3e;
+            padding: 10px 12px;
+            border-radius: 10px;
+            margin: 12px 0;
+            font-weight: 600;
+        }
         .muted {
             color: #5e4f42;
         }
@@ -125,7 +133,7 @@
             <p class="muted" style="font-size:12px;">更新来源：GitHub Release（不再使用 git 拉取/构建）。</p>
 
             {{ if .Message }}
-            <div class="error">{{ .Message }}</div>
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
             <form method="post" action="/system/update" style="display:grid; gap:8px;">
                 <button class="ghost" type="submit" name="action" value="restart">重启服务</button>
