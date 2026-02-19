@@ -127,8 +127,12 @@
         var btn = document.getElementById('refresh-dialogs-btn');
         var status = document.getElementById('refresh-dialogs-status');
         if (!form || !btn || !status) return;
-        form.addEventListener('submit', function () {
-            btn.disabled = true;
+        form.addEventListener('submit', function (event) {
+            if (form.dataset.submitting === '1') {
+                event.preventDefault();
+                return;
+            }
+            form.dataset.submitting = '1';
             btn.textContent = '刷新中...';
             status.style.display = 'inline';
         });

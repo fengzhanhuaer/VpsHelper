@@ -92,8 +92,12 @@
         var backupBtn = document.getElementById('db-backup-btn');
         var backupStatus = document.getElementById('db-backup-status');
         if (backupForm && backupBtn && backupStatus) {
-            backupForm.addEventListener('submit', function () {
-                backupBtn.disabled = true;
+            backupForm.addEventListener('submit', function (event) {
+                if (backupForm.dataset.submitting === '1') {
+                    event.preventDefault();
+                    return;
+                }
+                backupForm.dataset.submitting = '1';
                 backupBtn.textContent = '备份中...';
                 backupStatus.style.display = 'inline';
             });
@@ -103,8 +107,12 @@
         var pullBtn = document.getElementById('db-pull-btn');
         var pullStatus = document.getElementById('db-pull-status');
         if (pullForm && pullBtn && pullStatus) {
-            pullForm.addEventListener('submit', function () {
-                pullBtn.disabled = true;
+            pullForm.addEventListener('submit', function (event) {
+                if (pullForm.dataset.submitting === '1') {
+                    event.preventDefault();
+                    return;
+                }
+                pullForm.dataset.submitting = '1';
                 pullBtn.textContent = '拉取中...';
                 pullStatus.style.display = 'inline';
             });

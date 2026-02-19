@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -579,7 +580,7 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 		}
 	}
 
-	message := ""
+	message := strings.TrimSpace(c.Query("message"))
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
 		if action == "" {
@@ -646,6 +647,12 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 		default:
 			message = "未知操作。"
 		}
+		redirectURL := fmt.Sprintf("/tg/accounts?account_id=%d", selectedAccountID)
+		if message != "" {
+			redirectURL += "&message=" + url.QueryEscape(message)
+		}
+		c.Redirect(http.StatusSeeOther, redirectURL)
+		return
 	}
 
 	dialogs := []store.TGDialog{}
@@ -741,7 +748,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 		}
 	}
 
-	message := ""
+	message := strings.TrimSpace(c.Query("message"))
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
 		if action == "" && strings.TrimSpace(c.PostForm("account_id")) != "" {
@@ -779,6 +786,12 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 		} else {
 			message = "未知操作。"
 		}
+		redirectURL := fmt.Sprintf("/tg/dialogs?account_id=%d", accountID)
+		if message != "" {
+			redirectURL += "&message=" + url.QueryEscape(message)
+		}
+		c.Redirect(http.StatusSeeOther, redirectURL)
+		return
 	}
 
 	dialogs, err := store.ListTGDialogs(h.dbConn, accountID)
@@ -1318,7 +1331,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 	}
 	lastAuto := settings["db_auto_backup_last_result"]
 
-	message := ""
+	message := strings.TrimSpace(c.Query("message"))
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
 		if action == "" {
@@ -1421,6 +1434,12 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		default:
 			message = "未知操作。"
 		}
+		redirectURL := "/settings/database"
+		if message != "" {
+			redirectURL += "?message=" + url.QueryEscape(message)
+		}
+		c.Redirect(http.StatusSeeOther, redirectURL)
+		return
 	}
 
 	c.HTML(http.StatusOK, "database_settings.html", gin.H{
