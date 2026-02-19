@@ -1321,6 +1321,18 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 	message := ""
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
+		if action == "" {
+			switch {
+			case strings.TrimSpace(c.PostForm("do_backup")) == "1":
+				action = "backup"
+			case strings.TrimSpace(c.PostForm("do_pull")) == "1":
+				action = "pull"
+			case c.PostForm("db_auto_backup_enabled") == "on" || strings.TrimSpace(c.PostForm("db_auto_backup_time")) != "":
+				action = "auto_backup"
+			case strings.TrimSpace(c.PostForm("cf_api_token")) != "":
+				action = "save"
+			}
+		}
 		switch action {
 		case "save":
 			cfToken = strings.TrimSpace(c.PostForm("cf_api_token"))

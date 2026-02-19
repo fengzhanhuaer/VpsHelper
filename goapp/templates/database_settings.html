@@ -36,7 +36,7 @@
             <div class="error">{{ .Message }}</div>
             {{ end }}
 
-            <form method="post" action="/settings/database">
+            <form id="db-settings-form" method="post" action="/settings/database">
                 <div class="field">
                     <label for="cf_api_token">Cloudflare API Token</label>
                     <input id="cf_api_token" name="cf_api_token" value="{{ .CFToken }}" />
@@ -52,9 +52,21 @@
                 <div style="display:grid; gap:8px;">
                     <button class="btn" type="submit" name="action" value="save">保存 Token</button>
                     <button class="ghost" type="submit" name="action" value="create">自动创建/绑定 {{ .DBName }} 数据库</button>
-                    <button class="ghost" type="submit" name="action" value="backup">备份本地数据库到云端</button>
-                    <button class="ghost" type="submit" name="action" value="pull">将云端数据库拉取到本地</button>
                 </div>
+            </form>
+
+            <form id="db-backup-form" method="post" action="/settings/database" style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <input type="hidden" name="action" value="backup" />
+                <input type="hidden" name="do_backup" value="1" />
+                <button id="db-backup-btn" class="ghost" type="submit">备份本地数据库到云端 D1</button>
+                <span id="db-backup-status" class="muted" style="display:none;">正在备份到 D1，可能需要 10-120 秒，请勿重复点击。</span>
+            </form>
+
+            <form id="db-pull-form" method="post" action="/settings/database" style="margin-top:8px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <input type="hidden" name="action" value="pull" />
+                <input type="hidden" name="do_pull" value="1" />
+                <button id="db-pull-btn" class="ghost" type="submit">将云端 D1 数据库拉取到本地</button>
+                <span id="db-pull-status" class="muted" style="display:none;">正在从 D1 拉取数据，可能需要 10-120 秒，请勿重复点击。</span>
             </form>
 
             <form method="post" action="/settings/database" style="margin-top:14px;">
@@ -74,5 +86,30 @@
             {{ end }}
         </section>
     </main>
+    <script>
+    (function () {
+        var backupForm = document.getElementById('db-backup-form');
+        var backupBtn = document.getElementById('db-backup-btn');
+        var backupStatus = document.getElementById('db-backup-status');
+        if (backupForm && backupBtn && backupStatus) {
+            backupForm.addEventListener('submit', function () {
+                backupBtn.disabled = true;
+                backupBtn.textContent = '备份中...';
+                backupStatus.style.display = 'inline';
+            });
+        }
+
+        var pullForm = document.getElementById('db-pull-form');
+        var pullBtn = document.getElementById('db-pull-btn');
+        var pullStatus = document.getElementById('db-pull-status');
+        if (pullForm && pullBtn && pullStatus) {
+            pullForm.addEventListener('submit', function () {
+                pullBtn.disabled = true;
+                pullBtn.textContent = '拉取中...';
+                pullStatus.style.display = 'inline';
+            });
+        }
+    })();
+    </script>
 </body>
 </html>
