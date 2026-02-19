@@ -48,6 +48,10 @@ func BackupLocalToD1(ctx context.Context, cf Client, accountID, dbID string, loc
 // ProgressFunc receives (percent 0-100, message). Called after each table.
 type ProgressFunc func(pct int, msg string)
 
+// d1MaxParams is the safe bound-parameter limit per D1 query.
+// Cloudflare D1 allows up to 100 parameters; we stay under that.
+const d1MaxParams = 90
+
 func BackupLocalToD1WithProgress(ctx context.Context, cf Client, accountID, dbID string, local *sql.DB, progress ProgressFunc) (bool, string) {
     ok, msg := EnsureSchema(ctx, cf, accountID, dbID, local)
     if !ok {
@@ -90,30 +94,54 @@ func BackupLocalToD1WithProgress(ctx context.Context, cf Client, accountID, dbID
             return false, fmt.Sprintf("清空云端表失败(%s)：%s", table, emsg)
         }
 
+        pct := func() int { return 40 + (idx+1)*55/total }
+
         if len(localRows) == 0 {
             if progress != nil {
-                pct := 40 + (idx+1)*55/total
-                progress(pct, fmt.Sprintf("表 %s：空表，已跳过 (%d/%d)", table, idx+1, total))
+                progress(pct(), fmt.Sprintf("表 %s：空表，已跳过 (%d/%d)", table, idx+1, total))
             }
             continue
         }
 
-        placeholders := make([]string, len(cols))
-        for i := range placeholders {
-            placeholders[i] = "?"
+        // Build multi-row INSERT batches.
+        // Max rows per batch = floor(d1MaxParams / len(cols)), at least 1.
+        rowsPerBatch := d1MaxParams / len(cols)
+        if rowsPerBatch < 1 {
+            rowsPerBatch = 1
         }
 
-        sqlText := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", table, join(cols, ","), join(placeholders, ","))
-        for _, row := range localRows {
-            okIns, _, emsg := cf.D1Query(ctx, accountID, dbID, sqlText, row)
+        colNames := join(cols, ",")
+        rowPlaceholder := "(" + join(makePlaceholders(len(cols)), ",") + ")"
+
+        inserted := 0
+        for start := 0; start < len(localRows); start += rowsPerBatch {
+            end := start + rowsPerBatch
+            if end > len(localRows) {
+                end = len(localRows)
+            }
+            batch := localRows[start:end]
+
+            // Build "VALUES (?,?,...), (?,?,...), ..."
+            valueSets := make([]string, len(batch))
+            params := make([]any, 0, len(batch)*len(cols))
+            for r, row := range batch {
+                valueSets[r] = rowPlaceholder
+                params = append(params, row...)
+            }
+            sqlText := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+                table, colNames, join(valueSets, ","))
+
+            okIns, _, emsg := cf.D1Query(ctx, accountID, dbID, sqlText, params)
             if !okIns {
                 return false, fmt.Sprintf("写入云端失败(%s)：%s", table, emsg)
             }
-        }
+            inserted += len(batch)
 
-        if progress != nil {
-            pct := 40 + (idx+1)*55/total
-            progress(pct, fmt.Sprintf("表 %s：已备份 %d 行 (%d/%d)", table, len(localRows), idx+1, total))
+            // Fire progress after every chunk to keep SSE alive.
+            if progress != nil {
+                progress(pct(), fmt.Sprintf("表 %s：已写入 %d/%d 行 (%d/%d)",
+                    table, inserted, len(localRows), idx+1, total))
+            }
         }
     }
 
@@ -224,6 +252,14 @@ func join(items []string, sep string) string {
         out += sep + items[i]
     }
     return out
+}
+
+func makePlaceholders(n int) []string {
+    ps := make([]string, n)
+    for i := range ps {
+        ps[i] = "?"
+    }
+    return ps
 }
 
 func containsInsensitive(s, sub string) bool {
