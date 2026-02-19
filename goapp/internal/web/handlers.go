@@ -143,15 +143,15 @@ func (h *Handler) register(c *gin.Context) {
 
 	var errMsg string
 	if username == "" || password == "" {
-		errMsg = "鐢ㄦ埛鍚嶅拰瀵嗙爜涓嶈兘涓虹┖銆?"
+		errMsg = "用户名和密码不能为空。"
 	} else if password != confirm {
-		errMsg = "涓ゆ杈撳叆鐨勫瘑鐮佷笉涓€鑷淬€?"
+		errMsg = "两次输入的密码不一致。"
 	} else {
 		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {
-			errMsg = "瀵嗙爜澶勭悊澶辫触銆?"
+			errMsg = "密码处理失败。"
 		} else if err := store.CreateUser(h.dbConn, username, string(hash)); err != nil {
-			errMsg = "鐢ㄦ埛鍚嶅凡瀛樺湪銆?"
+			errMsg = "用户名已存在。"
 		}
 	}
 
@@ -194,7 +194,7 @@ func (h *Handler) login(c *gin.Context) {
 	if username == "" || password == "" {
 		c.HTML(http.StatusOK, "login.html", gin.H{
 			"Title": "Login",
-			"Error": "鐢ㄦ埛鍚嶅拰瀵嗙爜涓嶈兘涓虹┖銆?",
+			"Error": "用户名和密码不能为空。",
 		})
 		return
 	}
@@ -203,7 +203,7 @@ func (h *Handler) login(c *gin.Context) {
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
 		c.HTML(http.StatusOK, "login.html", gin.H{
 			"Title": "Login",
-			"Error": "璐﹀彿鎴栧瘑鐮侀敊璇€?",
+			"Error": "账号或密码错误。",
 		})
 		return
 	}
@@ -230,7 +230,7 @@ func (h *Handler) changePassword(c *gin.Context) {
 
 	if c.Request.Method == http.MethodGet {
 		c.HTML(http.StatusOK, "change_password.html", gin.H{
-			"Title":    "淇敼瀵嗙爜",
+			"Title":    "修改密码",
 			"Username": username,
 		})
 		return
@@ -242,27 +242,27 @@ func (h *Handler) changePassword(c *gin.Context) {
 
 	var msg string
 	if oldPassword == "" || newPassword == "" || confirmPassword == "" {
-		msg = "璇峰畬鏁村～鍐欐棫瀵嗙爜銆佹柊瀵嗙爜鍜岀‘璁ゅ瘑鐮併€?"
+		msg = "请完整填写旧密码、新密码和确认密码。"
 	} else if newPassword != confirmPassword {
-		msg = "涓ゆ杈撳叆鐨勬柊瀵嗙爜涓嶄竴鑷淬€?"
+		msg = "两次输入的新密码不一致。"
 	} else {
 		hash, err := store.GetPasswordHash(h.dbConn, username)
 		if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(oldPassword)) != nil {
-			msg = "鏃у瘑鐮侀敊璇€?"
+			msg = "旧密码错误。"
 		} else {
 			newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 			if err != nil {
-				msg = "瀵嗙爜澶勭悊澶辫触銆?"
+				msg = "密码处理失败。"
 			} else if err := store.UpdatePasswordHash(h.dbConn, username, string(newHash)); err != nil {
-				msg = "淇濆瓨澶辫触銆?"
+				msg = "保存失败。"
 			} else {
-				msg = "瀵嗙爜宸蹭慨鏀广€?"
+				msg = "密码已修改。"
 			}
 		}
 	}
 
 	c.HTML(http.StatusOK, "change_password.html", gin.H{
-		"Title":    "淇敼瀵嗙爜",
+		"Title":    "修改密码",
 		"Username": username,
 		"Message":  msg,
 	})
@@ -308,7 +308,7 @@ func (h *Handler) tgLoginStart(c *gin.Context) {
 	if apiIDText == "" || apiHash == "" {
 		c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
 			"Title": "TG Login",
-			"Error": "璇峰厛閰嶇疆 Telegram API ID 涓?Hash銆?",
+			"Error": "请先配置 Telegram API ID 和 Hash。",
 		})
 		return
 	}
@@ -325,7 +325,7 @@ func (h *Handler) tgLoginStart(c *gin.Context) {
 	if phone == "" {
 		c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
 			"Title":       "TG Login",
-			"Error":       "鎵嬫満鍙蜂笉鑳戒负绌恒€?",
+			"Error":       "手机号不能为空。",
 			"Phone":       phone,
 			"AccountName": accountName,
 		})
@@ -336,7 +336,7 @@ func (h *Handler) tgLoginStart(c *gin.Context) {
 	if err != nil {
 		c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
 			"Title":       "TG Login",
-			"Error":       "API ID 鏍煎紡涓嶆纭€?",
+			"Error":       "API ID 格式不正确。",
 			"Phone":       phone,
 			"AccountName": accountName,
 		})
@@ -347,7 +347,7 @@ func (h *Handler) tgLoginStart(c *gin.Context) {
 	if err != nil {
 		c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
 			"Title":       "TG Login",
-			"Error":       "鍒涘缓鐧诲綍娴佺▼澶辫触銆?",
+			"Error":       "创建登录流程失败。",
 			"Phone":       phone,
 			"AccountName": accountName,
 		})
@@ -362,7 +362,7 @@ func (h *Handler) tgLoginStart(c *gin.Context) {
 		_ = store.DeleteLoginFlow(h.dbConn, flowID, username)
 		c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
 			"Title":       "TG Login",
-			"Error":       "鍙戦€侀獙璇佺爜澶辫触銆?",
+			"Error":       "发送验证码失败。",
 			"Phone":       phone,
 			"AccountName": accountName,
 		})
@@ -373,7 +373,7 @@ func (h *Handler) tgLoginStart(c *gin.Context) {
 		_ = store.DeleteLoginFlow(h.dbConn, flowID, username)
 		c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
 			"Title":       "TG Login",
-			"Error":       "淇濆瓨楠岃瘉鐮佷俊鎭け璐ャ€?",
+			"Error":       "保存验证码信息失败。",
 			"Phone":       phone,
 			"AccountName": accountName,
 		})
@@ -437,7 +437,7 @@ func (h *Handler) tgLoginVerify(c *gin.Context) {
 			"Title":  "TG Verify",
 			"FlowID": flowID,
 			"Phone":  flow.Phone,
-			"Error":  "楠岃瘉鐮佷笉鑳戒负绌恒€?",
+			"Error":  "验证码不能为空。",
 		})
 		return
 	}
@@ -447,9 +447,9 @@ func (h *Handler) tgLoginVerify(c *gin.Context) {
 	storage := tg.NewLoginFlowSessionStorage(h.dbConn, flowID)
 	self, err := tg.SignIn(ctx, apiID, apiHash, flow.Phone, code, flow.PhoneCodeHash, password, storage, allProxy)
 	if err != nil {
-		errMsg := "鐧诲綍澶辫触銆?"
+		errMsg := "登录失败。"
 		if errors.Is(err, auth.ErrPasswordNotProvided) {
-			errMsg = "闇€瑕佷袱姝ラ獙璇佸瘑鐮併€?"
+			errMsg = "需要两步验证密码。"
 		}
 		c.HTML(http.StatusOK, "tg_login_verify.html", gin.H{
 			"Title":  "TG Verify",
@@ -466,7 +466,7 @@ func (h *Handler) tgLoginVerify(c *gin.Context) {
 			"Title":  "TG Verify",
 			"FlowID": flowID,
 			"Phone":  flow.Phone,
-			"Error":  "璇诲彇浼氳瘽澶辫触銆?",
+			"Error":  "读取会话失败。",
 		})
 		return
 	}
@@ -487,7 +487,7 @@ func (h *Handler) tgLoginVerify(c *gin.Context) {
 			"Title":  "TG Verify",
 			"FlowID": flowID,
 			"Phone":  flow.Phone,
-			"Error":  "淇濆瓨璐﹀彿澶辫触銆?",
+			"Error":  "保存账号失败。",
 		})
 		return
 	}
@@ -522,17 +522,17 @@ func (h *Handler) tgSettings(c *gin.Context) {
 
 	var errMsg string
 	if apiID == "" || apiHash == "" {
-		errMsg = "API ID 鍜?API Hash 涓嶈兘涓虹┖銆?"
+		errMsg = "API ID 和 API Hash 不能为空。"
 	}
 
 	if errMsg == "" {
 		if err := store.SetSetting(h.dbConn, "telegram_api_id", apiID); err != nil {
-			errMsg = "淇濆瓨 API ID 澶辫触銆?"
+			errMsg = "保存 API ID 失败。"
 		}
 	}
 	if errMsg == "" {
 		if err := store.SetSetting(h.dbConn, "telegram_api_hash", apiHash); err != nil {
-			errMsg = "淇濆瓨 API Hash 澶辫触銆?"
+			errMsg = "保存 API Hash 失败。"
 		}
 	}
 
@@ -681,18 +681,18 @@ func (h *Handler) tgProxy(c *gin.Context) {
 		case "save":
 			allProxy = strings.TrimSpace(c.PostForm("all_proxy"))
 			_ = store.SetSetting(h.dbConn, "tg_all_proxy", allProxy)
-			message = "宸蹭繚瀛樸€?"
+			message = "已保存。"
 		case "clear":
 			allProxy = ""
 			_ = store.SetSetting(h.dbConn, "tg_all_proxy", "")
-			message = "宸叉竻绌恒€?"
+			message = "已清空。"
 		default:
-			message = "鏈煡鎿嶄綔銆?"
+			message = "未知操作。"
 		}
 	}
 
 	c.HTML(http.StatusOK, "tg_proxy.html", gin.H{
-		"Title":    "TG 浠ｇ悊璁剧疆",
+		"Title":    "TG 代理设置",
 		"Message":  message,
 		"AllProxy": allProxy,
 	})
@@ -712,8 +712,8 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 	}
 	if len(accounts) == 0 {
 		c.HTML(http.StatusOK, "tg_dialogs.html", gin.H{
-			"Title":     "浼氳瘽鍒楄〃",
-			"Message":   "璇峰厛鐧诲綍娣诲姞涓€涓?TG 璐﹀彿銆?",
+			"Title":     "会话列表",
+			"Message":   "请先登录添加一个 TG 账号。",
 			"Accounts":  accounts,
 			"AccountID": int64(0),
 			"Dialogs":   []store.TGDialog{},
@@ -740,14 +740,14 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 		if action == "refresh" {
 			settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
 			if err != nil {
-				message = "璇诲彇 API 閰嶇疆澶辫触銆?"
+				message = "读取 API 配置失败。"
 			} else {
 				apiIDText := strings.TrimSpace(settings["telegram_api_id"])
 				apiHash := strings.TrimSpace(settings["telegram_api_hash"])
 				allProxy := strings.TrimSpace(settings["tg_all_proxy"])
 				apiID, err := strconv.Atoi(apiIDText)
 				if err != nil || apiHash == "" {
-					message = "璇峰厛鍦?API 璁剧疆閲岄厤缃?Telegram API ID/Hash銆?"
+					message = "请先在 API 设置里配置 Telegram API ID/Hash。"
 				} else {
 					ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 					defer cancel()
@@ -757,17 +757,17 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 					} else {
 						migrated, migrateErr := tg.NormalizeStoredTargetsByDialogs(h.dbConn, username, accountID)
 						if migrateErr != nil {
-							message = fmt.Sprintf("宸插埛鏂颁細璇濆垪琛細%d 鏉★紙宸蹭繚瀛樹細璇滻D锛夈€備换鍔¤縼绉诲け璐ワ細%s", n, migrateErr.Error())
+							message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。任务迁移失败：%s", n, migrateErr.Error())
 						} else if migrated > 0 {
-							message = fmt.Sprintf("宸插埛鏂颁細璇濆垪琛細%d 鏉★紝宸茶縼绉?%d 鏉′换鍔＄洰鏍囦负浼氳瘽ID銆?", n, migrated)
+							message = fmt.Sprintf("已刷新会话列表：%d 条，已迁移 %d 条任务目标为会话ID。", n, migrated)
 						} else {
-							message = fmt.Sprintf("宸插埛鏂颁細璇濆垪琛細%d 鏉★紙宸蹭繚瀛樹細璇滻D锛夈€?", n)
+							message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。", n)
 						}
 					}
 				}
 			}
 		} else {
-			message = "鏈煡鎿嶄綔銆?"
+			message = "未知操作。"
 		}
 	}
 
@@ -778,7 +778,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "tg_dialogs.html", gin.H{
-		"Title":     "浼氳瘽鍒楄〃",
+		"Title":     "会话列表",
 		"Message":   message,
 		"Accounts":  accounts,
 		"AccountID": accountID,
@@ -800,8 +800,8 @@ func (h *Handler) tgSign(c *gin.Context) {
 	}
 	if len(accounts) == 0 {
 		c.HTML(http.StatusOK, "tg_sign.html", gin.H{
-			"Title":       "绛惧埌浠诲姟",
-			"Message":     "璇峰厛鐧诲綍娣诲姞涓€涓?TG 璐﹀彿銆?",
+			"Title":       "签到任务",
+			"Message":     "请先登录添加一个 TG 账号。",
 			"Accounts":    accounts,
 			"AccountID":   int64(0),
 			"Dialogs":     []store.TGDialog{},
@@ -856,7 +856,7 @@ func (h *Handler) tgSign(c *gin.Context) {
 		switch action {
 		case "save":
 			if dialogID == "" {
-				message = "璇烽€夋嫨/濉啓鐩爣銆?"
+				message = "请选择/填写目标。"
 				break
 			}
 			resolveCtx, resolveCancel := context.WithTimeout(c.Request.Context(), 35*time.Second)
@@ -868,22 +868,22 @@ func (h *Handler) tgSign(c *gin.Context) {
 			}
 			dialogID = resolvedDialogID
 			if err := store.UpsertSignTask(h.dbConn, username, accountID, dialogID, signMsg); err != nil {
-				message = "淇濆瓨澶辫触銆?"
+				message = "保存失败。"
 			} else {
-				message = "宸蹭繚瀛樸€?"
+				message = "已保存。"
 			}
 		case "delete":
 			if err := store.DeleteSignTask(h.dbConn, username, accountID); err != nil {
-				message = "鍒犻櫎澶辫触銆?"
+				message = "删除失败。"
 			} else {
-				message = "宸插垹闄ゃ€?"
+				message = "已删除。"
 				dialogID = ""
 				signMsg = ""
 				createdAt = ""
 			}
 		case "run":
 			if dialogID == "" {
-				message = "璇烽€夋嫨/濉啓鐩爣銆?"
+				message = "请选择/填写目标。"
 				break
 			}
 			submittedDialogID := dialogID
@@ -906,7 +906,7 @@ func (h *Handler) tgSign(c *gin.Context) {
 				message = "执行失败: " + msg
 			}
 		default:
-			message = "鏈煡鎿嶄綔銆?"
+			message = "未知操作。"
 		}
 
 		// reload saved
@@ -917,7 +917,7 @@ func (h *Handler) tgSign(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "tg_sign.html", gin.H{
-		"Title":       "绛惧埌浠诲姟",
+		"Title":       "签到任务",
 		"Message":     message,
 		"AutoLast":    autoLast,
 		"Accounts":    accounts,
@@ -967,43 +967,43 @@ func (h *Handler) tgAutoReply(c *gin.Context) {
 			matchText := strings.TrimSpace(c.PostForm("match_text"))
 			replyText := strings.TrimSpace(c.PostForm("reply_text"))
 			if accountID <= 0 {
-				message = "璇峰厛閫夋嫨璐﹀彿銆?"
+				message = "请先选择账号。"
 			} else if matchText == "" || replyText == "" {
-				message = "鍖归厤鏂囨湰鍜屽洖澶嶅唴瀹逛笉鑳戒负绌恒€?"
+				message = "匹配文本和回复内容不能为空。"
 			} else if err := store.CreateAutoReplyRule(h.dbConn, username, accountID, matchText, replyText, true); err != nil {
-				message = "鍒涘缓澶辫触銆?"
+				message = "创建失败。"
 			} else {
-				message = "宸插垱寤哄苟鍚敤銆?"
+				message = "已创建并启用。"
 			}
 		case "enable", "disable", "delete":
 			idText := strings.TrimSpace(c.PostForm("id"))
 			id, err := strconv.ParseInt(idText, 10, 64)
 			if err != nil || id <= 0 {
-				message = "鍙傛暟閿欒銆?"
+				message = "参数错误。"
 				break
 			}
 			switch action {
 			case "enable":
 				if err := store.SetAutoReplyRuleEnabled(h.dbConn, username, id, true); err != nil {
-					message = "鍚敤澶辫触銆?"
+					message = "启用失败。"
 				} else {
-					message = "宸插惎鐢ㄣ€?"
+					message = "已启用。"
 				}
 			case "disable":
 				if err := store.SetAutoReplyRuleEnabled(h.dbConn, username, id, false); err != nil {
-					message = "鍋滅敤澶辫触銆?"
+					message = "停用失败。"
 				} else {
-					message = "宸插仠鐢ㄣ€?"
+					message = "已停用。"
 				}
 			case "delete":
 				if err := store.DeleteAutoReplyRule(h.dbConn, username, id); err != nil {
-					message = "鍒犻櫎澶辫触銆?"
+					message = "删除失败。"
 				} else {
-					message = "宸插垹闄ゃ€?"
+					message = "已删除。"
 				}
 			}
 		default:
-			message = "鏈煡鎿嶄綔銆?"
+			message = "未知操作。"
 		}
 	}
 
@@ -1018,7 +1018,7 @@ func (h *Handler) tgAutoReply(c *gin.Context) {
 	hasAPI := strings.TrimSpace(settings["telegram_api_id"]) != "" && strings.TrimSpace(settings["telegram_api_hash"]) != ""
 
 	c.HTML(http.StatusOK, "tg_auto_reply.html", gin.H{
-		"Title":     "鑷姩鍥炲",
+		"Title":     "自动回复",
 		"Message":   message,
 		"HasAPI":    hasAPI,
 		"Accounts":  accounts,
@@ -1040,38 +1040,38 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 		idText := strings.TrimSpace(c.PostForm("id"))
 		id, err := strconv.ParseInt(idText, 10, 64)
 		if err != nil || id <= 0 {
-			message = "鍙傛暟閿欒銆?"
+			message = "参数错误。"
 		} else {
 			switch action {
 			case "enable":
 				if err := store.SetAutoSendTaskEnabled(h.dbConn, username, id, true); err != nil {
-					message = "鍚敤澶辫触銆?"
+					message = "启用失败。"
 				} else {
-					message = "宸插惎鐢ㄣ€?"
+					message = "已启用。"
 				}
 			case "disable":
 				if err := store.SetAutoSendTaskEnabled(h.dbConn, username, id, false); err != nil {
-					message = "鍋滅敤澶辫触銆?"
+					message = "停用失败。"
 				} else {
-					message = "宸插仠鐢ㄣ€?"
+					message = "已停用。"
 				}
 			case "delete":
 				if err := store.DeleteAutoSendTask(h.dbConn, username, id); err != nil {
-					message = "鍒犻櫎澶辫触銆?"
+					message = "删除失败。"
 				} else {
-					message = "宸插垹闄ゃ€?"
+					message = "已删除。"
 				}
 			case "run":
 				runCtx, cancel := context.WithTimeout(c.Request.Context(), 50*time.Second)
 				defer cancel()
 				ok, msg := tg.RunAutoSendTaskNow(runCtx, h.dbConn, username, id)
 				if ok {
-					message = "宸茬珛鍗虫墽琛屻€?"
+					message = "已立即执行。"
 				} else {
 					message = "立即执行失败: " + msg
 				}
 			default:
-				message = "鏈煡鎿嶄綔銆?"
+				message = "未知操作。"
 			}
 		}
 	}
@@ -1083,7 +1083,7 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "tg_auto_send.html", gin.H{
-		"Title":   "鑷姩鍙戦€?",
+		"Title":   "自动发送",
 		"Message": message,
 		"Tasks":   tasks,
 	})
@@ -1139,7 +1139,7 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 	}
 
 	view := gin.H{
-		"Title":           "鏂板缓鑷姩鍙戦€佷换鍔?",
+		"Title":           "新建自动发送任务",
 		"Error":           "",
 		"Accounts":        accounts,
 		"AccountID":       selectedAccountID,
@@ -1176,23 +1176,23 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 	view["Enabled"] = enabled
 
 	if len(accounts) == 0 {
-		view["Error"] = "璇峰厛娣诲姞 TG 璐﹀彿銆?"
+		view["Error"] = "请先添加 TG 账号。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
 	if !accountOwned || selectedAccountID <= 0 {
-		view["Error"] = "璐﹀彿涓嶅瓨鍦ㄦ垨涓嶅睘浜庡綋鍓嶇敤鎴枫€?"
+		view["Error"] = "账号不存在或不属于当前用户。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
 	if _, err := store.GetTGAccountByID(h.dbConn, username, selectedAccountID); err != nil {
-		view["Error"] = "璐﹀彿涓嶅瓨鍦ㄦ垨涓嶅睘浜庡綋鍓嶇敤鎴枫€?"
+		view["Error"] = "账号不存在或不属于当前用户。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
 
 	if dialogID == "" {
-		view["Error"] = "璇烽€夋嫨浼氳瘽ID銆?"
+		view["Error"] = "请选择会话ID。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
@@ -1215,12 +1215,12 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 		}
 	}
 	if !dialogOwned {
-		view["Error"] = "浼氳瘽ID涓嶅瓨鍦ㄦ垨涓嶅睘浜庡綋鍓嶈处鍙枫€?"
+		view["Error"] = "会话ID不存在或不属于当前账号。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
 	if msg == "" {
-		view["Error"] = "娑堟伅鍐呭涓嶈兘涓虹┖銆?"
+		view["Error"] = "消息内容不能为空。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
@@ -1239,14 +1239,14 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 
 	if scheduleType == "daily" {
 		if _, err := time.Parse("15:04", timeOfDay); err != nil {
-			view["Error"] = "daily 妯″紡涓?time_of_day 蹇呴』鏄?HH:MM銆?"
+			view["Error"] = "daily 模式下 time_of_day 必须是 HH:MM。"
 			c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 			return
 		}
 	} else {
 		scheduleType = "interval"
 		if intervalSeconds <= 0 {
-			view["Error"] = "interval 妯″紡涓?interval_seconds 蹇呴』 > 0銆?"
+			view["Error"] = "interval 模式下 interval_seconds 必须 > 0。"
 			c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 			return
 		}
@@ -1254,7 +1254,7 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 
 	next := time.Now().Format(time.RFC3339)
 	if err := store.CreateAutoSendTask(h.dbConn, username, selectedAccountID, dialogID, msg, intervalSeconds, jitterSeconds, scheduleType, timeOfDay, enabled, next); err != nil {
-		view["Error"] = "鍒涘缓澶辫触銆?"
+		view["Error"] = "创建失败。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
@@ -1315,15 +1315,15 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		case "save":
 			cfToken = strings.TrimSpace(c.PostForm("cf_api_token"))
 			if cfToken == "" {
-				message = "Token 涓嶈兘涓虹┖銆?"
+				message = "Token 不能为空。"
 				break
 			}
 			_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
-			message = "宸蹭繚瀛?Token銆?"
+			message = "已保存 Token。"
 		case "create":
 			cfToken = strings.TrimSpace(c.PostForm("cf_api_token"))
 			if cfToken == "" {
-				message = "Token 涓嶈兘涓虹┖銆?"
+				message = "Token 不能为空。"
 				break
 			}
 			_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
@@ -1343,7 +1343,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			if okFind && foundID != "" {
 				dbID = foundID
 				_ = store.SetSetting(h.dbConn, "cf_d1_database_id", dbID)
-				message = "宸茬粦瀹氫簯绔?D1 鏁版嵁搴撱€?"
+				message = "已绑定云端 D1 数据库。"
 				break
 			}
 
@@ -1354,10 +1354,10 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			}
 			dbID = createdID
 			_ = store.SetSetting(h.dbConn, "cf_d1_database_id", dbID)
-			message = "宸插垱寤哄苟缁戝畾浜戠 D1 鏁版嵁搴撱€?"
+			message = "已创建并绑定云端 D1 数据库。"
 		case "backup":
 			if cfToken == "" || accountID == "" || dbID == "" {
-				message = "璇峰厛淇濆瓨 Token 骞舵墽琛屸€滆嚜鍔ㄥ垱寤?缁戝畾鈥濄€?"
+				message = "请先保存 Token 并执行“自动创建并绑定”。"
 				break
 			}
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Minute)
@@ -1371,7 +1371,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			}
 		case "pull":
 			if cfToken == "" || accountID == "" || dbID == "" {
-				message = "璇峰厛淇濆瓨 Token 骞舵墽琛屸€滆嚜鍔ㄥ垱寤?缁戝畾鈥濄€?"
+				message = "请先保存 Token 并执行“自动创建并绑定”。"
 				break
 			}
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Minute)
@@ -1395,14 +1395,14 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 				_ = store.SetSetting(h.dbConn, "db_auto_backup_enabled", "0")
 			}
 			_ = store.SetSetting(h.dbConn, "db_auto_backup_time", autoTime)
-			message = "宸蹭繚瀛樿嚜鍔ㄥ浠借缃€?"
+			message = "已保存自动备份设置。"
 		default:
-			message = "鏈煡鎿嶄綔銆?"
+			message = "未知操作。"
 		}
 	}
 
 	c.HTML(http.StatusOK, "database_settings.html", gin.H{
-		"Title":                "鏁版嵁搴撶鐞?",
+		"Title":                "数据库管理",
 		"Message":              message,
 		"CFToken":              cfToken,
 		"DBName":               dbName,
@@ -1441,7 +1441,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 		action := c.PostForm("action")
 		switch action {
 		case "restart":
-			message = "鏈嶅姟灏嗗湪 1 绉掑悗鑷姩閲嶅惎锛岃绋嶅悗鍒锋柊椤甸潰銆?"
+			message = "服务将在 1 秒后自动重启，请稍后刷新页面。"
 			update.RestartDelayed(1 * time.Second)
 		case "gh_save":
 			ghOwner = strings.TrimSpace(c.PostForm("gh_owner"))
@@ -1453,7 +1453,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			_ = store.SetSetting(h.dbConn, "github_release_repo", ghRepo)
 			_ = store.SetSetting(h.dbConn, "github_release_token", ghToken)
 			_ = store.SetSetting(h.dbConn, "github_release_asset", ghAsset)
-			message = "宸蹭繚瀛?GitHub Release 閰嶇疆銆?"
+			message = "已保存 GitHub Release 配置。"
 		case "gh_check", "gh_update":
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 			defer cancel()
@@ -1469,7 +1469,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			if err != nil {
 				ghInfo = info
 				if ghInfo.Note == "" {
-					ghInfo.Note = "妫€鏌?Release 澶辫触銆?"
+					ghInfo.Note = "检查 Release 失败。"
 				}
 				message = ghInfo.Note
 				break
@@ -1486,7 +1486,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			ghInfo = info
 			ghInfo.AssetName = asset.Name
 			if action == "gh_check" {
-				message = "宸茶幏鍙栨渶鏂?Release 淇℃伅銆?"
+				message = "已获取最新 Release 信息。"
 				break
 			}
 
@@ -1518,7 +1518,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 					if filepath.Clean(bin) != filepath.Clean(currentExe) {
 						_ = os.Remove(currentExe)
 						if err := os.Rename(bin, currentExe); err != nil {
-							message = "鏇挎崲鍙墽琛屾枃浠跺け璐ワ細" + err.Error()
+							message = "替换可执行文件失败：" + err.Error()
 							break
 						}
 						_ = os.Chmod(currentExe, 0o755)
@@ -1529,17 +1529,17 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			message = "已下载 Release(" + ghInfo.TagName + " / " + ghInfo.AssetName + "), 服务将在 1 秒后自动重启。"
 			update.RestartToDelayed(bin, os.Args[1:], 1*time.Second)
 		default:
-			message = "鏈煡鎿嶄綔銆?"
+			message = "未知操作。"
 		}
 	}
 
 	// If user didn't click gh_check, still show a hint.
 	if ghOwner == "" || ghRepo == "" {
-		ghInfo.Note = "鏈厤缃?GitHub owner/repo銆?"
+		ghInfo.Note = "未配置 GitHub owner/repo。"
 	}
 
 	c.HTML(http.StatusOK, "update_manager.html", gin.H{
-		"Title":          "绋嬪簭鏇存柊",
+		"Title":          "程序更新",
 		"Message":        message,
 		"CurrentVersion": version.Version,
 		"GH":             ghInfo,
@@ -1626,7 +1626,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		_ = send(percent, message, true, false)
 	}
 
-	if !send(3, "寮€濮嬫鏌ユ洿鏂伴厤缃?..", false, false) {
+	if !send(3, "开始检查更新配置...", false, false) {
 		return
 	}
 
@@ -1637,13 +1637,13 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
-	if !send(10, "姝ｅ湪鑾峰彇鏈€鏂?Release 淇℃伅...", false, false) {
+	if !send(10, "正在获取最新 Release 信息...", false, false) {
 		return
 	}
 
 	info, rel, err := update.FetchLatestGitHubRelease(ctx, ghOwner, ghRepo, ghToken)
 	if err != nil && strings.TrimSpace(ghToken) != "" {
-		if !send(12, "Token 閴存潈澶辫触锛屽皾璇曞尶鍚嶈幏鍙?Release...", false, false) {
+		if !send(12, "Token 鉴权失败，尝试匿名获取 Release...", false, false) {
 			return
 		}
 		if info2, rel2, err2 := update.FetchLatestGitHubRelease(ctx, ghOwner, ghRepo, ""); err2 == nil {
@@ -1652,7 +1652,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		}
 	}
 	if err != nil {
-		msg := "妫€鏌?Release 澶辫触"
+		msg := "检查 Release 失败"
 		if info.Note != "" {
 			msg = info.Note
 		}
@@ -1685,7 +1685,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		}
 	}
 
-	if !send(35, "寮€濮嬩笅杞芥洿鏂板寘...", false, false) {
+	if !send(35, "开始下载更新包...", false, false) {
 		return
 	}
 
@@ -1694,7 +1694,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 
 	bin, err := update.DownloadReleaseAssetWithProgress(dlCtx, asset, ghToken, dest, func(p update.DownloadProgress) {
 		percent := 70
-		progressText := "涓嬭浇涓?"
+		progressText := "下载中..."
 		if p.Total > 0 {
 			delta := int((p.Received * 55) / p.Total)
 			if delta < 0 {
@@ -1704,9 +1704,9 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 				delta = 55
 			}
 			percent = 35 + delta
-			progressText = "涓嬭浇涓細" + formatSize(p.Received) + " / " + formatSize(p.Total)
+			progressText = "下载中：" + formatSize(p.Received) + " / " + formatSize(p.Total)
 		} else {
-			progressText = "涓嬭浇涓細" + formatSize(p.Received)
+			progressText = "下载中：" + formatSize(p.Received)
 		}
 		_ = send(percent, progressText, false, false)
 	})
@@ -1715,7 +1715,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		return
 	}
 
-	if !send(92, "涓嬭浇瀹屾垚锛屾鍦ㄦ浛鎹㈠彲鎵ц鏂囦欢...", false, false) {
+	if !send(92, "下载完成，正在替换可执行文件...", false, false) {
 		return
 	}
 
@@ -1724,7 +1724,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 			if filepath.Clean(bin) != filepath.Clean(currentExe) {
 				_ = os.Remove(currentExe)
 				if err := os.Rename(bin, currentExe); err != nil {
-					fail(94, "鏇挎崲鍙墽琛屾枃浠跺け璐ワ細"+err.Error())
+					fail(94, "替换可执行文件失败："+err.Error())
 					return
 				}
 				_ = os.Chmod(currentExe, 0o755)
@@ -1795,7 +1795,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 			allowKey := c.PostForm("allow_key_login") == "on"
 			p, err := strconv.Atoi(portText)
 			if err != nil || p < 1 || p > 65535 {
-				message = "SSH 绔彛鑼冨洿蹇呴』鍦?1-65535銆?"
+				message = "SSH 端口范围必须在 1-65535。"
 				break
 			}
 
@@ -1808,9 +1808,9 @@ func (h *Handler) sshSettings(c *gin.Context) {
 			defer cancel()
 			ok, msg := ssh.ApplySettings(ctx, p, allowPass, allowKey, pub)
 			if ok {
-				message = "SSH 璁剧疆宸蹭繚瀛橈紝骞跺凡鑷姩搴旂敤鍒扮郴缁熴€?"
+				message = "SSH 设置已保存，并已自动应用到系统。"
 			} else {
-				message = "SSH 璁剧疆宸蹭繚瀛橈紝浣嗙郴缁熷簲鐢ㄥけ璐ワ細" + msg
+				message = "SSH 设置已保存，但系统应用失败：" + msg
 			}
 		}
 	}
@@ -1835,7 +1835,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "ssh_settings.html", gin.H{
-		"Title":              "SSH璁剧疆",
+		"Title":              "SSH 设置",
 		"Message":            message,
 		"SSHPort":            sshPort,
 		"SSHPublicKey":       settings["ssh_public_key"],
@@ -1859,7 +1859,7 @@ func (h *Handler) serverStatus(c *gin.Context) {
 
 	data := status.Collect()
 	c.HTML(http.StatusOK, "server_status.html", gin.H{
-		"Title":  "鏈嶅姟鍣ㄧ姸鎬?",
+		"Title":  "服务器状态",
 		"Status": data,
 	})
 }
@@ -1899,7 +1899,7 @@ func (h *Handler) shellConsole(c *gin.Context) {
 	shortcutsJSON, _ := json.Marshal(shortcuts)
 
 	c.HTML(http.StatusOK, "shell_console.html", gin.H{
-		"Title":         "Shell 浜や簰",
+		"Title":         "Shell 交互",
 		"CWD":           cwd,
 		"HistoryJSON":   string(historyJSON),
 		"ShortcutsJSON": string(shortcutsJSON),
@@ -1909,7 +1909,7 @@ func (h *Handler) shellConsole(c *gin.Context) {
 func (h *Handler) shellExec(c *gin.Context) {
 	username := h.currentUser(c)
 	if username == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "output": "鏈櫥褰曟垨浼氳瘽宸茶繃鏈熴€?", "cwd": ""})
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "output": "未登录或会话已过期。", "cwd": ""})
 		return
 	}
 
@@ -1919,7 +1919,7 @@ func (h *Handler) shellExec(c *gin.Context) {
 	cwd = shell.ResolveCWD(cwd)
 
 	if command == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "output": "鍛戒护涓嶈兘涓虹┖銆?", "cwd": cwd})
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "output": "命令不能为空。", "cwd": cwd})
 		return
 	}
 
@@ -2045,7 +2045,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 			proto := strings.TrimSpace(c.PostForm("protocol"))
 			port, err := strconv.Atoi(portText)
 			if err != nil {
-				message = "绔彛蹇呴』鏄暟瀛椼€?"
+				message = "端口必须是数字。"
 				break
 			}
 			ok, msg := firewall.OpenPort(fwType, port, proto)
@@ -2073,7 +2073,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 			bindIPs = []string{"未监听"}
 		}
 		if len(procNames) == 0 {
-			procNames = []string{"鏈煡"}
+			procNames = []string{"未知"}
 		}
 		portRows = append(portRows, map[string]any{
 			"port":          port,
@@ -2084,7 +2084,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "firewall.html", gin.H{
-		"Title":          "闃茬伀澧?",
+		"Title":          "防火墙",
 		"Message":        message,
 		"FirewallType":   fwType,
 		"FirewallStatus": fwStatus,

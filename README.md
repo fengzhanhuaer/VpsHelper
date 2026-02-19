@@ -1,4 +1,4 @@
-﻿# VpsHelper
+# VpsHelper
 
 VpsHelper is now **Go-only** (Gin + SQLite). All legacy Python code has been removed.
 

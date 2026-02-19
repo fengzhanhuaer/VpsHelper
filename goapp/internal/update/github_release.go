@@ -81,7 +81,7 @@ func FetchLatestGitHubRelease(ctx context.Context, owner, repo, token string) (G
 
 	var rel ghRelease
 	if err := json.Unmarshal(body, &rel); err != nil {
-		info.Note = "解析 GitHub API 返回失败。"
+		info.Note = "解析 GitHub API 返回数据失败。"
 		return info, nil, err
 	}
 

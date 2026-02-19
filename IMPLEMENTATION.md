@@ -1,4 +1,4 @@
-﻿# VpsHelper Implementation
+# VpsHelper Implementation
 
 ## Status
 
