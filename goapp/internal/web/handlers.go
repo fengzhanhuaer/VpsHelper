@@ -1566,24 +1566,20 @@ func (h *Handler) databaseBackupStream(c *gin.Context) {
 		return
 	}
 
-	if !send(15, "开始备份，正在同步表结构...", false, false) {
+	if !send(10, "开始备份，正在同步表结构...", false, false) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
 	cf := d1.Client{Token: cfToken}
 
-	okSchema, schemaMsg := d1.EnsureSchema(ctx, cf, accountID, dbID, h.dbConn)
-	if !okSchema {
-		fail("同步表结构失败：" + schemaMsg)
-		return
-	}
-	if !send(40, "表结构同步完成，正在写入数据...", false, false) {
-		return
-	}
+	// progress callback — called after every table, keeps SSE alive
+	progFn := d1.ProgressFunc(func(pct int, msg string) {
+		_ = send(pct, msg, false, false)
+	})
 
-	okBackup, backupMsg := d1.BackupLocalToD1(ctx, cf, accountID, dbID, h.dbConn)
+	okBackup, backupMsg := d1.BackupLocalToD1WithProgress(ctx, cf, accountID, dbID, h.dbConn, progFn)
 	if !okBackup {
 		fail("备份失败：" + backupMsg)
 		return
@@ -1626,15 +1622,20 @@ func (h *Handler) databasePullStream(c *gin.Context) {
 		return
 	}
 
-	if !send(15, "开始从云端拉取数据...", false, false) {
+	if !send(10, "开始从云端拉取数据...", false, false) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
 	cf := d1.Client{Token: cfToken}
 
-	okPull, pullMsg := d1.PullD1ToLocal(ctx, cf, accountID, dbID, h.dbConn)
+	// progress callback — called after every table, keeps SSE alive
+	progFn := d1.ProgressFunc(func(pct int, msg string) {
+		_ = send(pct, msg, false, false)
+	})
+
+	okPull, pullMsg := d1.PullD1ToLocalWithProgress(ctx, cf, accountID, dbID, h.dbConn, progFn)
 	if !okPull {
 		fail("拉取失败：" + pullMsg)
 		return

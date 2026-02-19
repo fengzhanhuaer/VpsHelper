@@ -1,11 +1,11 @@
 package d1
 
 import (
-    "context"
-    "database/sql"
-    "fmt"
-    "sort"
-    "strings"
+	"context"
+	"database/sql"
+	"fmt"
+	"sort"
+	"strings"
 )
 
 var TGTables = []string{
@@ -42,12 +42,20 @@ func EnsureSchema(ctx context.Context, cf Client, accountID, dbID string, local 
 }
 
 func BackupLocalToD1(ctx context.Context, cf Client, accountID, dbID string, local *sql.DB) (bool, string) {
+    return BackupLocalToD1WithProgress(ctx, cf, accountID, dbID, local, nil)
+}
+
+// ProgressFunc receives (percent 0-100, message). Called after each table.
+type ProgressFunc func(pct int, msg string)
+
+func BackupLocalToD1WithProgress(ctx context.Context, cf Client, accountID, dbID string, local *sql.DB, progress ProgressFunc) (bool, string) {
     ok, msg := EnsureSchema(ctx, cf, accountID, dbID, local)
     if !ok {
         return false, msg
     }
 
-    for _, table := range TGTables {
+    total := len(TGTables)
+    for idx, table := range TGTables {
         // Load all local rows.
         rows, err := local.QueryContext(ctx, "SELECT * FROM "+table)
         if err != nil {
@@ -83,6 +91,10 @@ func BackupLocalToD1(ctx context.Context, cf Client, accountID, dbID string, loc
         }
 
         if len(localRows) == 0 {
+            if progress != nil {
+                pct := 40 + (idx+1)*55/total
+                progress(pct, fmt.Sprintf("表 %s：空表，已跳过 (%d/%d)", table, idx+1, total))
+            }
             continue
         }
 
@@ -98,18 +110,28 @@ func BackupLocalToD1(ctx context.Context, cf Client, accountID, dbID string, loc
                 return false, fmt.Sprintf("写入云端失败(%s)：%s", table, emsg)
             }
         }
+
+        if progress != nil {
+            pct := 40 + (idx+1)*55/total
+            progress(pct, fmt.Sprintf("表 %s：已备份 %d 行 (%d/%d)", table, len(localRows), idx+1, total))
+        }
     }
 
     return true, "本地数据库已备份到云端 D1。"
 }
 
 func PullD1ToLocal(ctx context.Context, cf Client, accountID, dbID string, local *sql.DB) (bool, string) {
+    return PullD1ToLocalWithProgress(ctx, cf, accountID, dbID, local, nil)
+}
+
+func PullD1ToLocalWithProgress(ctx context.Context, cf Client, accountID, dbID string, local *sql.DB, progress ProgressFunc) (bool, string) {
     ok, msg := EnsureSchema(ctx, cf, accountID, dbID, local)
     if !ok {
         return false, msg
     }
 
-    for _, table := range TGTables {
+    total := len(TGTables)
+    for idx, table := range TGTables {
         okSel, rows, emsg := cf.D1Query(ctx, accountID, dbID, "SELECT * FROM "+table, nil)
         if !okSel {
             return false, fmt.Sprintf("读取云端失败(%s)：%s", table, emsg)
@@ -120,12 +142,15 @@ func PullD1ToLocal(ctx context.Context, cf Client, accountID, dbID string, local
         }
 
         if len(rows) == 0 {
+            if progress != nil {
+                pct := 15 + (idx+1)*80/total
+                progress(pct, fmt.Sprintf("表 %s：云端为空，已跳过 (%d/%d)", table, idx+1, total))
+            }
             continue
         }
 
         colOrder := tableColumns(local, table)
         if len(colOrder) == 0 {
-            // fallback to keys of first row (sorted)
             for k := range rows[0] {
                 colOrder = append(colOrder, k)
             }
@@ -146,6 +171,11 @@ func PullD1ToLocal(ctx context.Context, cf Client, accountID, dbID string, local
             if _, err := local.ExecContext(ctx, sqlText, params...); err != nil {
                 return false, fmt.Sprintf("写入本地失败(%s)：%s", table, err)
             }
+        }
+
+        if progress != nil {
+            pct := 15 + (idx+1)*80/total
+            progress(pct, fmt.Sprintf("表 %s：已拉取 %d 行 (%d/%d)", table, len(rows), idx+1, total))
         }
     }
 
