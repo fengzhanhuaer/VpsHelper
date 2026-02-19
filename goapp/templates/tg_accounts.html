@@ -58,7 +58,8 @@
 
             <form id="refresh-dialogs-form" method="post" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; align-items:center;">
                 <input type="hidden" name="account_id" value="{{ .SelectedAccountID }}" />
-                <button id="refresh-dialogs-btn" class="ghost" type="submit" name="action" value="refresh_dialogs">刷新会话列表</button>
+                <input type="hidden" name="action" value="refresh_dialogs" />
+                <button id="refresh-dialogs-btn" class="ghost" type="submit">刷新会话列表</button>
                 <span id="refresh-dialogs-status" class="muted" style="display:none;">正在刷新会话列表，可能需要 10-120 秒，请勿重复点击。</span>
             </form>
 

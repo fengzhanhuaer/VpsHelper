@@ -582,6 +582,13 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 	message := ""
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
+		if action == "" {
+			if strings.TrimSpace(c.PostForm("id")) != "" {
+				action = "delete"
+			} else if strings.TrimSpace(c.PostForm("account_id")) != "" {
+				action = "refresh_dialogs"
+			}
+		}
 		switch action {
 		case "delete":
 			idText := strings.TrimSpace(c.PostForm("id"))
@@ -737,6 +744,9 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 	message := ""
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
+		if action == "" && strings.TrimSpace(c.PostForm("account_id")) != "" {
+			action = "refresh"
+		}
 		if action == "refresh" {
 			settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
 			if err != nil {
