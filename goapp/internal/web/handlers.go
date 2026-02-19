@@ -73,6 +73,8 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/tg/auto/send/new", h.tgAutoSendNew)
 	router.GET("/settings/database", h.databaseSettings)
 	router.POST("/settings/database", h.databaseSettings)
+	router.POST("/settings/database/backup/stream", h.databaseBackupStream)
+	router.POST("/settings/database/pull/stream", h.databasePullStream)
 	router.GET("/settings/ssh", h.sshSettings)
 	router.POST("/settings/ssh", h.sshSettings)
 	router.GET("/system/update", h.systemUpdate)
@@ -1494,6 +1496,150 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		"AutoBackupTime":       autoTime,
 		"LastAutoBackupResult": lastAuto,
 	})
+}
+
+// dbStreamHeaders writes the NDJSON streaming response headers.
+func dbStreamHeaders(c *gin.Context) (http.Flusher, bool) {
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "streaming not supported"})
+		return nil, false
+	}
+	c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	return flusher, true
+}
+
+// dbStreamSend sends a single NDJSON progress event.
+func dbStreamSend(c *gin.Context, flusher http.Flusher, percent int, message string, done bool, ok bool) bool {
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	b, err := json.Marshal(updateStreamEvent{Percent: percent, Message: message, Done: done, OK: ok})
+	if err != nil {
+		return false
+	}
+	if _, err := c.Writer.Write(append(b, '\n')); err != nil {
+		return false
+	}
+	flusher.Flush()
+	return true
+}
+
+func (h *Handler) databaseBackupStream(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	flusher, ok := dbStreamHeaders(c)
+	if !ok {
+		return
+	}
+
+	send := func(percent int, msg string, done bool, success bool) bool {
+		return dbStreamSend(c, flusher, percent, msg, done, success)
+	}
+	fail := func(msg string) { _ = send(0, msg, true, false) }
+
+	keys := []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"}
+	settings, err := store.GetSettings(h.dbConn, keys)
+	if err != nil {
+		fail("读取配置失败：" + err.Error())
+		return
+	}
+	cfToken := settings["cf_api_token"]
+	accountID := settings["cf_account_id"]
+	dbID := settings["cf_d1_database_id"]
+
+	if !send(5, "正在验证配置...", false, false) {
+		return
+	}
+	if cfToken == "" || accountID == "" || dbID == "" {
+		fail("请先保存 Token 并执行「自动创建/绑定」数据库。")
+		return
+	}
+
+	if !send(15, "开始备份，正在同步表结构...", false, false) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	defer cancel()
+	cf := d1.Client{Token: cfToken}
+
+	okSchema, schemaMsg := d1.EnsureSchema(ctx, cf, accountID, dbID, h.dbConn)
+	if !okSchema {
+		fail("同步表结构失败：" + schemaMsg)
+		return
+	}
+	if !send(40, "表结构同步完成，正在写入数据...", false, false) {
+		return
+	}
+
+	okBackup, backupMsg := d1.BackupLocalToD1(ctx, cf, accountID, dbID, h.dbConn)
+	if !okBackup {
+		fail("备份失败：" + backupMsg)
+		return
+	}
+	_ = send(100, backupMsg, true, true)
+}
+
+func (h *Handler) databasePullStream(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	flusher, ok := dbStreamHeaders(c)
+	if !ok {
+		return
+	}
+
+	send := func(percent int, msg string, done bool, success bool) bool {
+		return dbStreamSend(c, flusher, percent, msg, done, success)
+	}
+	fail := func(msg string) { _ = send(0, msg, true, false) }
+
+	keys := []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"}
+	settings, err := store.GetSettings(h.dbConn, keys)
+	if err != nil {
+		fail("读取配置失败：" + err.Error())
+		return
+	}
+	cfToken := settings["cf_api_token"]
+	accountID := settings["cf_account_id"]
+	dbID := settings["cf_d1_database_id"]
+
+	if !send(5, "正在验证配置...", false, false) {
+		return
+	}
+	if cfToken == "" || accountID == "" || dbID == "" {
+		fail("请先保存 Token 并执行「自动创建/绑定」数据库。")
+		return
+	}
+
+	if !send(15, "开始从云端拉取数据...", false, false) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	defer cancel()
+	cf := d1.Client{Token: cfToken}
+
+	okPull, pullMsg := d1.PullD1ToLocal(ctx, cf, accountID, dbID, h.dbConn)
+	if !okPull {
+		fail("拉取失败：" + pullMsg)
+		return
+	}
+	_ = send(100, pullMsg, true, true)
 }
 
 func (h *Handler) systemUpdate(c *gin.Context) {

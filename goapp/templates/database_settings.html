@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css" />
+    <style>
+        .progress-card { display:none; margin-top:14px; padding:12px; border-radius:12px; border:1px solid #ecd7cb; background:#fff8f3; }
+        .progress-bar { width:100%; height:10px; border-radius:999px; background:#f1dfd2; overflow:hidden; margin:8px 0 6px; }
+        .progress-fill { height:100%; width:0; background:linear-gradient(90deg,#ff9f66 0%,#d9480f 100%); transition:width 0.3s ease; }
+        .progress-log { margin:8px 0 0; padding:8px 10px; max-height:160px; overflow:auto; border-radius:10px; border:1px solid #f0dccc; background:#fff; font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+    </style>
 </head>
 <body>
     <header>
@@ -43,21 +49,25 @@
                 </div>
             </form>
 
-            <form id="db-backup-form" method="post" action="/settings/database" style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                <input type="hidden" name="action" value="backup" />
-                <input type="hidden" name="do_backup" value="1" />
-                <button id="db-backup-btn" class="ghost" type="submit">备份本地数据库到云端 D1</button>
-                <span id="db-backup-status" class="muted" style="display:none;">正在备份到 D1，可能需要 10-120 秒，请勿重复点击。</span>
-            </form>
+            <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
 
-            <form id="db-pull-form" method="post" action="/settings/database" style="margin-top:8px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                <input type="hidden" name="action" value="pull" />
-                <input type="hidden" name="do_pull" value="1" />
-                <button id="db-pull-btn" class="ghost" type="submit">将云端 D1 数据库拉取到本地</button>
-                <span id="db-pull-status" class="muted" style="display:none;">正在从 D1 拉取数据，可能需要 10-120 秒，请勿重复点击。</span>
-            </form>
+            <h2 style="margin:0 0 10px; font-size:16px;">手动备份 / 拉取</h2>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button id="db-backup-btn" class="ghost" type="button">备份本地 → 云端 D1</button>
+                <button id="db-pull-btn" class="ghost" type="button">云端 D1 → 拉取到本地</button>
+            </div>
 
-            <form method="post" action="/settings/database" style="margin-top:14px;">
+            <div id="db-progress-card" class="progress-card">
+                <div id="db-progress-text" class="muted">准备中...</div>
+                <div class="progress-bar"><div id="db-progress-fill" class="progress-fill"></div></div>
+                <div id="db-progress-percent" class="muted">0%</div>
+                <div id="db-progress-log" class="progress-log"></div>
+            </div>
+
+            <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
+
+            <h2 style="margin:0 0 10px; font-size:16px;">自动备份</h2>
+            <form method="post" action="/settings/database">
                 <div class="field" style="display:flex; align-items:center; gap:8px;">
                     <input id="db_auto_backup_enabled" name="db_auto_backup_enabled" type="checkbox" {{ if .AutoBackupEnabled }}checked{{ end }} style="width:auto;" />
                     <label for="db_auto_backup_enabled" style="margin:0;">启用每天自动备份</label>
@@ -77,35 +87,93 @@
 
     <script>
     (function () {
-        var backupForm = document.getElementById('db-backup-form');
+        var card    = document.getElementById('db-progress-card');
+        var textEl  = document.getElementById('db-progress-text');
+        var fillEl  = document.getElementById('db-progress-fill');
+        var pctEl   = document.getElementById('db-progress-percent');
+        var logEl   = document.getElementById('db-progress-log');
         var backupBtn = document.getElementById('db-backup-btn');
-        var backupStatus = document.getElementById('db-backup-status');
-        if (backupForm && backupBtn && backupStatus) {
-            backupForm.addEventListener('submit', function (event) {
-                if (backupForm.dataset.submitting === '1') {
-                    event.preventDefault();
-                    return;
-                }
-                backupForm.dataset.submitting = '1';
-                backupBtn.textContent = '备份中...';
-                backupStatus.style.display = 'inline';
-            });
+        var pullBtn   = document.getElementById('db-pull-btn');
+
+        function setProgress(pct, msg) {
+            var p = Math.max(0, Math.min(100, Number(pct) || 0));
+            fillEl.style.width = p + '%';
+            pctEl.textContent  = p + '%';
+            if (msg) textEl.textContent = msg;
         }
 
-        var pullForm = document.getElementById('db-pull-form');
-        var pullBtn = document.getElementById('db-pull-btn');
-        var pullStatus = document.getElementById('db-pull-status');
-        if (pullForm && pullBtn && pullStatus) {
-            pullForm.addEventListener('submit', function (event) {
-                if (pullForm.dataset.submitting === '1') {
-                    event.preventDefault();
-                    return;
-                }
-                pullForm.dataset.submitting = '1';
-                pullBtn.textContent = '拉取中...';
-                pullStatus.style.display = 'inline';
-            });
+        function appendLog(msg) {
+            if (!msg) return;
+            var now = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            logEl.textContent += '[' + now + '] ' + msg + '\n';
+            logEl.scrollTop = logEl.scrollHeight;
         }
+
+        function setBusy(busy) {
+            backupBtn.disabled = busy;
+            pullBtn.disabled   = busy;
+            backupBtn.textContent = busy ? '操作中...' : '备份本地 → 云端 D1';
+            pullBtn.textContent   = busy ? '操作中...' : '云端 D1 → 拉取到本地';
+        }
+
+        async function runStream(url, startLabel) {
+            card.style.display = 'block';
+            logEl.textContent  = '';
+            setProgress(0, startLabel);
+            appendLog(startLabel);
+            setBusy(true);
+
+            try {
+                var res = await fetch(url, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/x-ndjson' }
+                });
+                if (!res.ok || !res.body) {
+                    throw new Error('请求失败（HTTP ' + res.status + '）');
+                }
+
+                var reader  = res.body.getReader();
+                var decoder = new TextDecoder();
+                var buffer  = '';
+                var finished = false;
+
+                while (true) {
+                    var part = await reader.read();
+                    if (part.done) break;
+                    buffer += decoder.decode(part.value, { stream: true });
+                    var lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (var i = 0; i < lines.length; i++) {
+                        var row = lines[i].trim();
+                        if (!row) continue;
+                        var ev;
+                        try { ev = JSON.parse(row); } catch (_) { continue; }
+                        setProgress(ev.percent, ev.message);
+                        appendLog(ev.message);
+                        if (ev.done) {
+                            finished = true;
+                            if (!ev.ok) appendLog('操作失败，请根据日志检查配置。');
+                            break;
+                        }
+                    }
+                    if (finished) break;
+                }
+                if (!finished) appendLog('连接已结束，请刷新页面。');
+            } catch (err) {
+                appendLog(err && err.message ? err.message : '请求出错');
+                setProgress(0, '请求出错');
+            } finally {
+                setBusy(false);
+            }
+        }
+
+        backupBtn.addEventListener('click', function () {
+            runStream('/settings/database/backup/stream', '开始备份到云端 D1...');
+        });
+        pullBtn.addEventListener('click', function () {
+            runStream('/settings/database/pull/stream', '开始从云端 D1 拉取...');
+        });
     })();
     </script>
 </body>
