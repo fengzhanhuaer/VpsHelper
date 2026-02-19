@@ -4,123 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css" />
     <style>
-        :root {
-            color-scheme: light;
-            --bg: #f5f2ee;
-            --panel: #ffffff;
-            --ink: #1f1b16;
-            --accent: #d9480f;
-        }
-        body {
-            margin: 0;
-            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-            background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%);
-            color: var(--ink);
-        }
-        header {
-            padding: 24px 32px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        main {
-            padding: 24px 32px 48px;
-            max-width: 980px;
-            margin: 0 auto;
-        }
-        .panel {
-            background: var(--panel);
-            padding: 24px;
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(31, 27, 22, 0.08);
-        }
-        .btn {
-            display: inline-block;
-            padding: 10px 18px;
-            border-radius: 999px;
-            background: var(--accent);
-            color: white;
-            text-decoration: none;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-        }
-        .ghost {
-            display: inline-block;
-            padding: 10px 18px;
-            border-radius: 999px;
-            background: transparent;
-            color: var(--ink);
-            text-decoration: none;
-            font-weight: 600;
-            border: 1px solid #ddd;
-            cursor: pointer;
-        }
-        .error {
-            background: #ffe3e3;
-            color: #9b1c1c;
-            padding: 10px 12px;
-            border-radius: 10px;
-            margin: 12px 0;
-        }
-        .success {
-            background: #d3f9d8;
-            color: #2b8a3e;
-            padding: 10px 12px;
-            border-radius: 10px;
-            margin: 12px 0;
-            font-weight: 600;
-        }
-        .muted {
-            color: #5e4f42;
-        }
-        .grid {
-            display: grid;
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-        .progress-card {
-            display: none;
-            margin-top: 14px;
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid #ecd7cb;
-            background: #fff8f3;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 10px;
-            border-radius: 999px;
-            background: #f1dfd2;
-            overflow: hidden;
-            margin: 8px 0 6px;
-        }
-        .progress-fill {
-            height: 100%;
-            width: 0;
-            background: linear-gradient(90deg, #ff9f66 0%, #d9480f 100%);
-            transition: width 0.2s ease;
-        }
-        .progress-log {
-            margin: 8px 0 0;
-            padding: 8px 10px;
-            max-height: 180px;
-            overflow: auto;
-            border-radius: 10px;
-            border: 1px solid #f0dccc;
-            background: #fff;
-            font-size: 12px;
-            line-height: 1.45;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
+        /* page-specific: update progress */
+        .progress-card { display:none; margin-top:14px; padding:12px; border-radius:12px; border:1px solid #ecd7cb; background:#fff8f3; }
+        .progress-bar { width:100%; height:10px; border-radius:999px; background:#f1dfd2; overflow:hidden; margin:8px 0 6px; }
+        .progress-fill { height:100%; width:0; background:linear-gradient(90deg,#ff9f66 0%,#d9480f 100%); transition:width 0.2s ease; }
+        .progress-log { margin:8px 0 0; padding:8px 10px; max-height:180px; overflow:auto; border-radius:10px; border:1px solid #f0dccc; background:#fff; font-size:12px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
     </style>
 </head>
 <body>
     <header>
         <strong>VpsHelper</strong>
-        <nav style="display:flex; gap: 10px;">
+        <nav>
             <a class="ghost" href="/home">返回主页</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
@@ -130,11 +26,12 @@
         <section class="panel">
             <h1>程序更新（Go）</h1>
             <p class="muted">当前版本：{{ .CurrentVersion }}</p>
-            <p class="muted" style="font-size:12px;">更新来源：GitHub Release（不再使用 git 拉取/构建）。</p>
+            <p class="muted">更新来源：GitHub Release（不再使用 git 拉取/构建）。</p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
+
             <form method="post" action="/system/update" style="display:grid; gap:8px;">
                 <button class="ghost" type="submit" name="action" value="restart">重启服务</button>
             </form>
@@ -148,7 +45,8 @@
             <div class="error">{{ .GH.Note }}</div>
             {{ end }}
 
-            <div class="grid">
+            <div style="display:grid; gap:8px; margin-bottom:14px;">
+                <div><strong>更新仓库：</strong><code>fengzhanhuaer/VpsHelper</code></div>
                 <div><strong>最新 Release：</strong>{{ .GH.TagName }}</div>
                 <div><strong>Release 名称：</strong>{{ .GH.Name }}</div>
                 <div><strong>发布时间：</strong>{{ .GH.PublishedAt }}</div>
@@ -156,10 +54,14 @@
             </div>
 
             <form id="gh-release-form" method="post" action="/system/update" style="display:grid; gap:8px;">
-                <label>Owner：<input name="gh_owner" value="{{ .GHOwner }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
-                <label>Repo：<input name="gh_repo" value="{{ .GHRepo }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
-                <label>Token（可选，私有仓库需要）：<input name="gh_token" value="{{ .GHToken }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
-                <label>Asset 名称（可选，不填则自动匹配当前系统）：<input name="gh_asset" value="{{ .GHAsset }}" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd;" /></label>
+                <div class="field">
+                    <label for="gh_token">Token（可选，私有仓库需要）</label>
+                    <input id="gh_token" name="gh_token" value="{{ .GHToken }}" />
+                </div>
+                <div class="field">
+                    <label for="gh_asset">Asset 名称（可选，不填则自动匹配当前系统）</label>
+                    <input id="gh_asset" name="gh_asset" value="{{ .GHAsset }}" />
+                </div>
 
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="ghost" type="submit" name="action" value="gh_save">保存配置</button>

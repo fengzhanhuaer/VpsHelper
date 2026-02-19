@@ -4,25 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css" />
     <style>
-        :root { color-scheme: light; --panel:#fff; --ink:#1f1b16; --accent:#d9480f; --muted:#5e4f42; }
-        body { margin:0; font-family:"IBM Plex Sans","Segoe UI",sans-serif; background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%); color: var(--ink); }
-        header { padding:24px 32px; display:flex; align-items:center; justify-content:space-between; }
-        main { padding:24px 32px 48px; max-width:980px; margin:0 auto; }
-        .panel { background:var(--panel); padding:24px; border-radius:16px; box-shadow:0 10px 30px rgba(31,27,22,0.08); }
-        .btn { display:inline-block; padding:10px 18px; border-radius:999px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; border:none; cursor:pointer; }
-        .ghost { display:inline-block; padding:10px 18px; border-radius:999px; background:transparent; color:var(--ink); text-decoration:none; font-weight:600; border:1px solid #ddd; cursor:pointer; }
-        .terminal { background:#111827; color:#e5e7eb; border-radius:10px; padding:12px; min-height:280px; max-height:420px; overflow:auto; font-family:Consolas,"Courier New",monospace; font-size:13px; white-space:pre-wrap; word-break:break-word; }
-        .command-area { width:100%; min-height:90px; resize:vertical; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; font-size:14px; font-family:Consolas,"Courier New",monospace; }
-        .shortcut-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:8px; margin-top:8px; }
-        .shortcut-item { border:1px solid #e5e7eb; border-radius:10px; padding:8px; display:grid; gap:6px; }
-        .muted { color: var(--muted); font-size:12px; }
+        /* page-specific: terminal */
+        #terminal { background:#111; color:#e2e8f0; font-family:"Courier New",Courier,monospace; font-size:13px; padding:12px; border-radius:10px; min-height:160px; max-height:400px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
+        #cmd-input { font-family:"Courier New",Courier,monospace; font-size:14px; flex:1; }
+        #cmd-bar { display:flex; gap:8px; margin-top:10px; }
     </style>
 </head>
 <body>
     <header>
         <strong>VpsHelper</strong>
-        <nav style="display:flex; gap:10px;">
+        <nav>
             <a class="ghost" href="/home">返回主菜单</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
@@ -31,237 +24,120 @@
     <main>
         <section class="panel">
             <h1>Shell 交互</h1>
-            <p>当前目录：<span id="cwd-text">{{ .CWD }}</span></p>
+            <p class="muted">输入 Shell 命令并在此查看输出（基于服务器执行）。</p>
 
-            <div id="terminal" class="terminal">欢迎使用 Shell 交互。输入命令后点击执行。</div>
+            <div id="terminal">等待命令...\n</div>
 
-            <form id="shell-form" style="margin-top: 10px; display:grid; gap:8px;">
-                <textarea id="command" class="command-area" placeholder="输入命令，可多行。Ctrl+Enter 执行" required></textarea>
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <button class="ghost" type="submit" style="white-space:nowrap;">执行</button>
-                    <span class="muted">支持上下键查看历史（服务端保存）</span>
+            <div id="cmd-bar">
+                <input id="cmd-input" class="field" style="margin:0;" type="text" placeholder="输入 Shell 命令" autocomplete="off" autofocus />
+                <button class="btn" id="run-btn" type="button">执行</button>
+                <button class="ghost" id="clear-btn" type="button">清空</button>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <h3 style="font-size: 15px; margin: 0 0 8px;">快捷命令</h3>
+                <div id="shortcut-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                    {{ range .Shortcuts }}
+                    <button class="ghost shortcut-btn" data-cmd="{{ .Command }}" title="{{ .Command }}" style="position:relative; padding-right:30px;">
+                        {{ .Name }}
+                        <form method="post" action="/shell" style="display:inline; position:absolute; right:4px; top:50%; transform:translateY(-50%);">
+                            <input type="hidden" name="action" value="delete_shortcut" />
+                            <input type="hidden" name="shortcut_id" value="{{ .ID }}" />
+                            <button type="submit" title="删除" style="background:none; border:none; cursor:pointer; color:#9b1c1c; font-size:14px; padding:0 2px; line-height:1;" onclick="event.stopPropagation(); return confirm('删除快捷命令？')">✕</button>
+                        </form>
+                    </button>
+                    {{ else }}
+                    <span class="muted">暂无快捷命令</span>
+                    {{ end }}
                 </div>
-            </form>
 
-            <div style="margin-top:12px;">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">快捷命令按钮</h3>
-                <div class="muted">自定义按钮数量与命令，保存在服务端。</div>
-
-                <form id="shortcut-form" style="margin-top:8px; display:grid; gap:8px;">
-                    <div style="display:grid; grid-template-columns: 160px 1fr; gap:8px;">
-                        <input id="shortcut-name" placeholder="按钮名称，如 查看日志" />
-                        <input id="shortcut-command" placeholder="按钮命令，如 journalctl -u ssh -n 50" />
+                <form method="post" action="/shell" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+                    <div class="field" style="margin:0; flex:1; min-width:160px;">
+                        <label for="sc-name">名称</label>
+                        <input id="sc-name" name="shortcut_name" placeholder="例如：查看内存" />
                     </div>
-                    <div style="display:flex; gap:8px;">
-                        <button class="ghost" type="submit">新增快捷按钮</button>
-                        <button class="ghost" id="clear-shortcuts" type="button">清空全部快捷按钮</button>
+                    <div class="field" style="margin:0; flex:2; min-width:200px;">
+                        <label for="sc-cmd">命令</label>
+                        <input id="sc-cmd" name="shortcut_cmd" placeholder="例如：free -h" />
                     </div>
+                    <input type="hidden" name="action" value="add_shortcut" />
+                    <button class="ghost" type="submit">添加快捷命令</button>
                 </form>
-
-                <div id="shortcut-list" class="shortcut-grid"></div>
             </div>
         </section>
     </main>
 
     <script>
-        const form = document.getElementById("shell-form");
-        const shortcutForm = document.getElementById("shortcut-form");
-        const shortcutNameInput = document.getElementById("shortcut-name");
-        const shortcutCommandInput = document.getElementById("shortcut-command");
-        const clearShortcutsBtn = document.getElementById("clear-shortcuts");
-        const shortcutList = document.getElementById("shortcut-list");
-        const commandInput = document.getElementById("command");
-        const terminal = document.getElementById("terminal");
-        const cwdText = document.getElementById("cwd-text");
-
-        const history = {{ .HistoryJSON }};
-        let shortcuts = {{ .ShortcutsJSON }};
-        let historyCursor = history.length;
-
-        function pushHistory(cmd) {
-            if (!cmd) return;
-            if (history.length === 0 || history[history.length - 1] !== cmd) {
-                history.push(cmd);
-            }
-            historyCursor = history.length;
-        }
+        var terminal = document.getElementById('terminal');
+        var cmdInput = document.getElementById('cmd-input');
+        var runBtn = document.getElementById('run-btn');
+        var clearBtn = document.getElementById('clear-btn');
+        var history = [];
+        var histIdx = -1;
 
         function appendLine(text) {
-            terminal.textContent += "\n" + text;
+            terminal.textContent += text;
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        function renderShortcuts() {
-            shortcutList.innerHTML = "";
-            shortcuts.forEach((item, idx) => {
-                const wrap = document.createElement("div");
-                wrap.className = "shortcut-item";
-
-                const title = document.createElement("div");
-                title.style.fontWeight = "600";
-                title.textContent = item.name || (`快捷命令 ${idx + 1}`);
-
-                const command = document.createElement("div");
-                command.className = "muted";
-                command.textContent = item.command || "";
-
-                const actions = document.createElement("div");
-                actions.style.display = "flex";
-                actions.style.gap = "6px";
-
-                const useBtn = document.createElement("button");
-                useBtn.type = "button";
-                useBtn.className = "ghost";
-                useBtn.textContent = "使用";
-                useBtn.addEventListener("click", () => {
-                    commandInput.value = item.command || "";
-                    commandInput.focus();
-                });
-
-                const runBtn = document.createElement("button");
-                runBtn.type = "button";
-                runBtn.className = "ghost";
-                runBtn.textContent = "执行";
-                runBtn.addEventListener("click", async () => {
-                    commandInput.value = item.command || "";
-                    await executeCurrentCommand();
-                });
-
-                const delBtn = document.createElement("button");
-                delBtn.type = "button";
-                delBtn.className = "ghost";
-                delBtn.textContent = "删除";
-                delBtn.addEventListener("click", async () => {
-                    try {
-                        const res = await fetch(`/shell/shortcuts/delete/${item.id}`, { method: "POST" });
-                        const data = await res.json();
-                        if (!data.ok) {
-                            appendLine("删除快捷命令失败：" + (data.message || "未知错误"));
-                            return;
-                        }
-                        shortcuts = shortcuts.filter((s) => s.id !== item.id);
-                        renderShortcuts();
-                    } catch (error) {
-                        appendLine("删除快捷命令失败：" + error);
-                    }
-                });
-
-                actions.appendChild(useBtn);
-                actions.appendChild(runBtn);
-                actions.appendChild(delBtn);
-                wrap.appendChild(title);
-                wrap.appendChild(command);
-                wrap.appendChild(actions);
-                shortcutList.appendChild(wrap);
-            });
-        }
-
-        async function executeCurrentCommand() {
-            const cmd = commandInput.value.trim();
-            if (!cmd) return;
-
-            appendLine("\n$ " + cmd);
-            pushHistory(cmd);
-            commandInput.value = "";
-
-            const body = new URLSearchParams();
-            body.set("command", cmd);
-
+        async function runCommand(cmd) {
+            if (!cmd.trim()) return;
+            appendLine('$ ' + cmd + '\n');
+            history.unshift(cmd);
+            histIdx = -1;
             try {
-                const response = await fetch("/shell/exec", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/x-www-form-urlencoded"},
-                    body: body.toString(),
+                const resp = await fetch('/shell', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'action=run&cmd=' + encodeURIComponent(cmd)
                 });
-                const data = await response.json();
-                cwdText.textContent = data.cwd || cwdText.textContent;
-                appendLine(data.output || "(无输出)");
-            } catch (error) {
-                appendLine("请求失败：" + error);
+                const data = await resp.json();
+                appendLine((data.output || '') + '\n');
+            } catch (e) {
+                appendLine('[网络错误] ' + e.message + '\n');
             }
         }
 
-        form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            await executeCurrentCommand();
+        runBtn.addEventListener('click', function () {
+            var cmd = cmdInput.value;
+            cmdInput.value = '';
+            runCommand(cmd);
         });
 
-        commandInput.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" && event.ctrlKey) {
-                event.preventDefault();
-                form.requestSubmit();
-                return;
-            }
-
-            if (event.key === "ArrowUp" && !event.shiftKey) {
-                event.preventDefault();
-                if (historyCursor > 0) {
-                    historyCursor -= 1;
-                    commandInput.value = history[historyCursor] || "";
+        cmdInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var cmd = cmdInput.value;
+                cmdInput.value = '';
+                runCommand(cmd);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (histIdx < history.length - 1) {
+                    histIdx += 1;
+                    cmdInput.value = history[histIdx];
                 }
-                return;
-            }
-
-            if (event.key === "ArrowDown" && !event.shiftKey) {
-                event.preventDefault();
-                if (historyCursor < history.length - 1) {
-                    historyCursor += 1;
-                    commandInput.value = history[historyCursor] || "";
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (histIdx > 0) {
+                    histIdx -= 1;
+                    cmdInput.value = history[histIdx];
                 } else {
-                    historyCursor = history.length;
-                    commandInput.value = "";
+                    histIdx = -1;
+                    cmdInput.value = '';
                 }
             }
         });
 
-        shortcutForm.addEventListener("submit", (event) => {
-            event.preventDefault();
-            const name = shortcutNameInput.value.trim();
-            const command = shortcutCommandInput.value.trim();
-            if (!name || !command) return;
-
-            (async () => {
-                const body = new URLSearchParams();
-                body.set("name", name);
-                body.set("command", command);
-
-                try {
-                    const response = await fetch("/shell/shortcuts/add", {
-                        method: "POST",
-                        headers: {"Content-Type": "application/x-www-form-urlencoded"},
-                        body: body.toString(),
-                    });
-                    const data = await response.json();
-                    if (!data.ok) {
-                        appendLine("新增快捷命令失败：" + (data.message || "未知错误"));
-                        return;
-                    }
-                    shortcuts.push(data.item);
-                    shortcutNameInput.value = "";
-                    shortcutCommandInput.value = "";
-                    renderShortcuts();
-                } catch (error) {
-                    appendLine("新增快捷命令失败：" + error);
-                }
-            })();
+        clearBtn.addEventListener('click', function () {
+            terminal.textContent = '';
         });
 
-        clearShortcutsBtn.addEventListener("click", async () => {
-            try {
-                const res = await fetch("/shell/shortcuts/clear", { method: "POST" });
-                const data = await res.json();
-                if (!data.ok) {
-                    appendLine("清空失败：" + (data.message || "未知错误"));
-                    return;
-                }
-                shortcuts = [];
-                renderShortcuts();
-            } catch (error) {
-                appendLine("清空失败：" + error);
-            }
+        document.querySelectorAll('.shortcut-btn').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                if (e.target && e.target.tagName === 'BUTTON' && e.target !== btn) return;
+                runCommand(btn.dataset.cmd);
+            });
         });
-
-        renderShortcuts();
     </script>
 </body>
 </html>

@@ -1507,14 +1507,12 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 	msgOK := false
 
 	ghInfo := update.GitHubReleaseInfo{OK: false, TagName: "-", Name: "-", PublishedAt: "-", AssetName: "-", Note: ""}
-	ghOwner := ""
-	ghRepo := ""
+	ghOwner := "fengzhanhuaer"
+	ghRepo := "VpsHelper"
 	ghToken := ""
 	ghAsset := ""
 
-	if settings, err := store.GetSettings(h.dbConn, []string{"github_release_owner", "github_release_repo", "github_release_token", "github_release_asset"}); err == nil {
-		ghOwner = settings["github_release_owner"]
-		ghRepo = settings["github_release_repo"]
+	if settings, err := store.GetSettings(h.dbConn, []string{"github_release_token", "github_release_asset"}); err == nil {
 		ghToken = settings["github_release_token"]
 		ghAsset = settings["github_release_asset"]
 	}
@@ -1529,16 +1527,12 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			msgOK = true
 			update.RestartDelayed(1 * time.Second)
 		case "gh_save":
-			ghOwner = strings.TrimSpace(c.PostForm("gh_owner"))
-			ghRepo = strings.TrimSpace(c.PostForm("gh_repo"))
 			ghToken = strings.TrimSpace(c.PostForm("gh_token"))
 			ghAsset = strings.TrimSpace(c.PostForm("gh_asset"))
 
-			_ = store.SetSetting(h.dbConn, "github_release_owner", ghOwner)
-			_ = store.SetSetting(h.dbConn, "github_release_repo", ghRepo)
 			_ = store.SetSetting(h.dbConn, "github_release_token", ghToken)
 			_ = store.SetSetting(h.dbConn, "github_release_asset", ghAsset)
-			message = "已保存 GitHub Release 配置。"
+			message = "已保存配置。"
 			msgOK = true
 		case "gh_check", "gh_update":
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
@@ -1621,22 +1615,14 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 		}
 	}
 
-	// If user didn't click gh_check, still show a hint.
-	if ghOwner == "" || ghRepo == "" {
-		ghInfo.Note = "未配置 GitHub owner/repo。"
-	}
-
 	c.HTML(http.StatusOK, "update_manager.html", gin.H{
 		"Title":          "程序更新",
 		"Message":        message,
 		"MsgOK":          msgOK,
 		"CurrentVersion": version.Version,
 		"GH":             ghInfo,
-		"GHOwner":        ghOwner,
-		"GHRepo":         ghRepo,
 		"GHToken":        ghToken,
 		"GHAsset":        ghAsset,
-		"User":           username,
 	})
 }
 
@@ -1660,21 +1646,13 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		return
 	}
 
-	ghOwner := ""
-	ghRepo := ""
+	ghOwner := "fengzhanhuaer"
+	ghRepo := "VpsHelper"
 	ghToken := ""
 	ghAsset := ""
-	if settings, err := store.GetSettings(h.dbConn, []string{"github_release_owner", "github_release_repo", "github_release_token", "github_release_asset"}); err == nil {
-		ghOwner = settings["github_release_owner"]
-		ghRepo = settings["github_release_repo"]
+	if settings, err := store.GetSettings(h.dbConn, []string{"github_release_token", "github_release_asset"}); err == nil {
 		ghToken = settings["github_release_token"]
 		ghAsset = settings["github_release_asset"]
-	}
-	if v, ok := c.GetPostForm("gh_owner"); ok {
-		ghOwner = strings.TrimSpace(v)
-	}
-	if v, ok := c.GetPostForm("gh_repo"); ok {
-		ghRepo = strings.TrimSpace(v)
 	}
 	if v, ok := c.GetPostForm("gh_token"); ok {
 		ghToken = strings.TrimSpace(v)

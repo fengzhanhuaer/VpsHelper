@@ -1,0 +1,151 @@
+/* VpsHelper – shared stylesheet */
+
+:root {
+    color-scheme: light;
+    --bg: #f5f2ee;
+    --panel: #ffffff;
+    --ink: #1f1b16;
+    --accent: #d9480f;
+    --muted: #5e4f42;
+}
+
+/* ── Reset / base ─────────────────────────────────────────────── */
+body {
+    margin: 0;
+    font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    background: radial-gradient(circle at top left, #fff2e6 0%, #f5f2ee 50%, #efe7df 100%);
+    color: var(--ink);
+}
+
+/* ── Layout ────────────────────────────────────────────────────── */
+header {
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+header nav {
+    display: flex;
+    gap: 10px;
+}
+
+main {
+    padding: 24px 32px 48px;
+    max-width: 980px;
+    margin: 0 auto;
+}
+
+/* ── Panel card ────────────────────────────────────────────────── */
+.panel {
+    background: var(--panel);
+    padding: 24px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(31, 27, 22, 0.08);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+}
+
+.ghost {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink);
+    text-decoration: none;
+    font-weight: 600;
+    border: 1px solid #ddd;
+    cursor: pointer;
+}
+
+.btn[disabled],
+.ghost[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ── Form fields ───────────────────────────────────────────────── */
+.field {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.field input,
+.field textarea,
+.field select {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    font: inherit;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* ── Alert banners ─────────────────────────────────────────────── */
+.error {
+    background: #ffe3e3;
+    color: #9b1c1c;
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin: 12px 0;
+    white-space: pre-wrap;
+}
+
+.success {
+    background: #d3f9d8;
+    color: #2b8a3e;
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin: 12px 0;
+    white-space: pre-wrap;
+    font-weight: 600;
+}
+
+/* ── Typography helpers ────────────────────────────────────────── */
+.muted {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+code {
+    background: #f6f6f6;
+    padding: 2px 6px;
+    border-radius: 8px;
+}
+
+.link a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+/* ── Tables ────────────────────────────────────────────────────── */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+th,
+td {
+    text-align: left;
+    padding: 10px 8px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+}
+
+th {
+    color: var(--muted);
+    font-weight: 600;
+}

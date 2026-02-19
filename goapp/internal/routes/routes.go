@@ -32,5 +32,9 @@ func LoadTemplates(cfg config.Config) (*template.Template, error) {
 }
 
 func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
+	// Serve the static asset directory (style.css etc.) at /static/.
+	staticDir := filepath.Join(cfg.BaseDir, "static")
+	router.Static("/static", staticDir)
+
 	web.Register(router, cfg, dbConn)
 }
