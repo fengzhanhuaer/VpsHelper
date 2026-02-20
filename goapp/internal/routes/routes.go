@@ -3,6 +3,7 @@ package routes
 import (
 	"database/sql"
 	"html/template"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"vpshelper-go/internal/config"
 	"vpshelper-go/internal/web"
+	"vpshelper-go/static"
 	"vpshelper-go/templates"
 )
 
@@ -32,9 +34,14 @@ func LoadTemplates(cfg config.Config) (*template.Template, error) {
 }
 
 func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
-	// Serve the static asset directory (style.css etc.) at /static/.
+	// Serve static assets: prefer disk directory when present (dev mode),
+	// fall back to embedded FS for production single-binary deployment.
 	staticDir := filepath.Join(cfg.BaseDir, "static")
-	router.Static("/static", staticDir)
+	if st, err := os.Stat(staticDir); err == nil && st.IsDir() {
+		router.Static("/static", staticDir)
+	} else {
+		router.StaticFS("/static", http.FS(static.FS))
+	}
 
 	web.Register(router, cfg, dbConn)
 }
