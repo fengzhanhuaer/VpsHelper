@@ -15,6 +15,7 @@ import (
 	"vpshelper-go/internal/db"
 	"vpshelper-go/internal/routes"
 	"vpshelper-go/internal/tg"
+	"vpshelper-go/internal/update"
 	"vpshelper-go/internal/version"
 )
 
@@ -36,6 +37,7 @@ func main() {
 	tg.StartAutoSend(context.Background(), database)
 	tg.StartAutoSign(context.Background(), database)
 	tg.StartAutoReply(context.Background(), database)
+	update.StartBackgroundChecker(context.Background(), database, cfg.BaseDir)
 
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())

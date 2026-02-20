@@ -73,6 +73,26 @@
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom:14px;">{{ .Message }}</div>
             {{ end }}
 
+            {{ if .PreDownload.Available }}
+            <div style="background:#e8f5e9; border:1px solid #a5d6a7; border-radius:10px; padding:12px 16px; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <strong style="color:#2e7d32;">🎉 发现新版本</strong>
+                        <span style="color:#388e3c; margin-left:8px;">{{ .PreDownload.TagName }}</span>
+                        <span class="muted" style="margin-left:8px; font-size:12px;">已预下载就绪</span>
+                    </div>
+                    <form method="post" action="/system/update" style="display:inline;">
+                        <button class="btn" type="submit" name="action" value="apply_predownload" style="background:#2e7d32;">⚡ 一键升级并重启</button>
+                    </form>
+                </div>
+            </div>
+            {{ else if .PreDownload.Downloading }}
+            <div style="background:#fff8e1; border:1px solid #ffe082; border-radius:10px; padding:12px 16px; margin-bottom:14px;">
+                <strong style="color:#f57f17;">⏳ 正在后台下载新版本...</strong>
+                <span class="muted" style="margin-left:8px; font-size:12px;">稍后刷新页面查看</span>
+            </div>
+            {{ end }}
+
             <div class="update-layout">
                 <!-- Left column: controls -->
                 <div>

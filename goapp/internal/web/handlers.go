@@ -1844,11 +1844,16 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			message = "已下载 Release(" + ghInfo.TagName + " / " + ghInfo.AssetName + "), 服务将在 1 秒后自动重启。"
 			msgOK = true
 			update.RestartToDelayed(bin, os.Args[1:], 1*time.Second)
+		case "apply_predownload":
+			msg, ok := update.ApplyPreDownload()
+			message = msg
+			msgOK = ok
 		default:
 			message = "未知操作。"
 		}
 	}
 
+	preState := update.GetPreDownloadState()
 	c.HTML(http.StatusOK, "update_manager.html", gin.H{
 		"Title":          "程序更新",
 		"Message":        message,
@@ -1857,6 +1862,7 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 		"GH":             ghInfo,
 		"GHToken":        ghToken,
 		"GHAsset":        ghAsset,
+		"PreDownload":    preState,
 	})
 }
 
