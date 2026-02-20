@@ -62,6 +62,7 @@
         </section>
     </main>
 
+    <script id="history-data" type="application/json">{{ .HistoryJSON }}</script>
     <script>
         var terminal = document.getElementById('terminal');
         var cmdInput = document.getElementById('cmd-input');
@@ -71,11 +72,8 @@
         var histIdx = -1;
         
         try {
-            // safely decode history
-            var div = document.createElement('div');
-            div.innerHTML = '{{ .HistoryJSON }}';
-            var jStr = div.textContent || div.innerText || "[]";
-            history = JSON.parse(jStr) || [];
+            var histEl = document.getElementById('history-data');
+            if (histEl) history = JSON.parse(histEl.textContent) || [];
         } catch(e) {}
 
         function appendLine(text) {
