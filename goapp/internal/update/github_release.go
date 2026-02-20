@@ -88,7 +88,7 @@ func FetchLatestGitHubRelease(ctx context.Context, owner, repo, token string) (G
 	info.OK = true
 	info.TagName = rel.TagName
 	info.Name = rel.Name
-	info.PublishedAt = rel.PublishedAt
+	info.PublishedAt = formatPublishedAt(rel.PublishedAt)
 	return info, &rel, nil
 }
 
@@ -514,4 +514,23 @@ func setGitHubHeaders(req *http.Request, token string, accept string) {
 	if t := strings.TrimSpace(token); t != "" {
 		req.Header.Set("Authorization", "Bearer "+t)
 	}
+}
+
+func formatPublishedAt(raw string) string {
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return raw
+	}
+	tz := os.Getenv("VPSHELPER_TZ")
+	if tz == "" {
+		tz = os.Getenv("TZ")
+	}
+	if tz == "" {
+		tz = "Asia/Shanghai"
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return t.Format("2006-01-02 15:04:05")
+	}
+	return t.In(loc).Format("2006-01-02 15:04:05")
 }
