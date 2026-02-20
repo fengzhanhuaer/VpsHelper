@@ -40,27 +40,22 @@
                     {{ range .Shortcuts }}
                     <button class="ghost shortcut-btn" data-cmd="{{ .Command }}" title="{{ .Command }}" style="position:relative; padding-right:30px;">
                         {{ .Name }}
-                        <form method="post" action="/shell" style="display:inline; position:absolute; right:4px; top:50%; transform:translateY(-50%);">
-                            <input type="hidden" name="action" value="delete_shortcut" />
-                            <input type="hidden" name="shortcut_id" value="{{ .ID }}" />
-                            <button type="submit" title="删除" style="background:none; border:none; cursor:pointer; color:#9b1c1c; font-size:14px; padding:0 2px; line-height:1;" onclick="event.stopPropagation(); return confirm('删除快捷命令？')">✕</button>
-                        </form>
+                        <span class="del-shortcut" data-id="{{ .ID }}" title="删除" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:#9b1c1c; font-size:14px; padding:0 2px; line-height:1;">✕</span>
                     </button>
                     {{ else }}
                     <span class="muted">暂无快捷命令</span>
                     {{ end }}
                 </div>
 
-                <form method="post" action="/shell" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+                <form id="add-shortcut-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
                     <div class="field" style="margin:0; flex:1; min-width:160px;">
                         <label for="sc-name">名称</label>
-                        <input id="sc-name" name="shortcut_name" placeholder="例如：查看内存" />
+                        <input id="sc-name" name="name" placeholder="例如：查看内存" required />
                     </div>
                     <div class="field" style="margin:0; flex:2; min-width:200px;">
                         <label for="sc-cmd">命令</label>
-                        <input id="sc-cmd" name="shortcut_cmd" placeholder="例如：free -h" />
+                        <input id="sc-cmd" name="command" placeholder="例如：free -h" required />
                     </div>
-                    <input type="hidden" name="action" value="add_shortcut" />
                     <button class="ghost" type="submit">添加快捷命令</button>
                 </form>
             </div>
@@ -74,6 +69,14 @@
         var clearBtn = document.getElementById('clear-btn');
         var history = [];
         var histIdx = -1;
+        
+        try {
+            // safely decode history
+            var div = document.createElement('div');
+            div.innerHTML = '{{ .HistoryJSON }}';
+            var jStr = div.textContent || div.innerText || "[]";
+            history = JSON.parse(jStr) || [];
+        } catch(e) {}
 
         function appendLine(text) {
             terminal.textContent += text;
@@ -86,10 +89,10 @@
             history.unshift(cmd);
             histIdx = -1;
             try {
-                const resp = await fetch('/shell', {
+                const resp = await fetch('/shell/exec', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: 'action=run&cmd=' + encodeURIComponent(cmd)
+                    body: 'command=' + encodeURIComponent(cmd)
                 });
                 const data = await resp.json();
                 appendLine((data.output || '') + '\n');
@@ -134,8 +137,38 @@
 
         document.querySelectorAll('.shortcut-btn').forEach(function (btn) {
             btn.addEventListener('click', function (e) {
-                if (e.target && e.target.tagName === 'BUTTON' && e.target !== btn) return;
+                if (e.target && e.target.classList.contains('del-shortcut')) return;
                 runCommand(btn.dataset.cmd);
+            });
+        });
+
+        document.getElementById('add-shortcut-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var name = document.getElementById('sc-name').value;
+            var cmd = document.getElementById('sc-cmd').value;
+            if (!name || !cmd) return;
+            try {
+                const resp = await fetch('/shell/shortcuts/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'name=' + encodeURIComponent(name) + '&command=' + encodeURIComponent(cmd)
+                });
+                const data = await resp.json();
+                if (data.ok) location.reload();
+                else alert(data.message || '添加失败');
+            } catch(e) { alert('网络错误: ' + e.message); }
+        });
+
+        document.querySelectorAll('.del-shortcut').forEach(function (btn) {
+            btn.addEventListener('click', async function(e) {
+                e.stopPropagation();
+                if (!confirm('删除快捷命令？')) return;
+                try {
+                    const resp = await fetch('/shell/shortcuts/delete/' + btn.dataset.id, { method: 'POST' });
+                    const data = await resp.json();
+                    if (data.ok) location.reload();
+                    else alert(data.message || '删除失败');
+                } catch(e) { alert('网络错误: ' + e.message); }
             });
         });
     </script>

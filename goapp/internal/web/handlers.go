@@ -2208,6 +2208,8 @@ func (h *Handler) shellConsole(c *gin.Context) {
 		"CWD":           cwd,
 		"HistoryJSON":   string(historyJSON),
 		"ShortcutsJSON": string(shortcutsJSON),
+		"Shortcuts":     shortcuts,
+		"History":       history,
 	})
 }
 
