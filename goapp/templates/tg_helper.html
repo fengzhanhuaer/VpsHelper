@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -10,26 +10,26 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="btn" href="/home">杩斿洖涓昏彍鍗?/a>
+            <a class="btn" href="/home">返回主菜单</a>
         </nav>
     </header>
     <main>
         <section class="panel panel--wide">
             <h1>TgHelper</h1>
-            <p class="muted">Telegram 鐧诲綍涓庝换鍔＄鐞嗐€?/p>
+            <p class="muted">Telegram 登录与任务管理。</p>
             {{ if .Configured }}
-            <p class="muted">API 宸查厤缃紝鍙互缁х画鎺ュ叆鐧诲綍涓庝細璇濄€?/p>
+            <p class="muted">API 已配置，可以继续接入登录与会话。</p>
             {{ else }}
-            <p class="muted">璇峰厛閰嶇疆 Telegram API ID 涓?Hash銆?/p>
+            <p class="muted">请先配置 Telegram API ID 与 Hash。</p>
             {{ end }}
             <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
-                <a class="btn" href="/tg/settings">API 璁剧疆</a>
-                <a class="btn" href="/tg/proxy">浠ｇ悊璁剧疆</a>
-                <a class="btn" href="/tg/login/start">璐﹀彿鐧诲綍</a>
-                <a class="btn" href="/tg/accounts">璐﹀彿绠＄悊</a>
-                <a class="btn" href="/tg/dialogs">浼氳瘽鍒楄〃</a>
-                <a class="btn" href="/tg/auto/send">鑷姩鍙戦€?/a>
-                <a class="btn" href="/tg/auto/reply">鑷姩鍥炲</a>
+                <a class="btn" href="/tg/settings">API 设置</a>
+                <a class="btn" href="/tg/proxy">代理设置</a>
+                <a class="btn" href="/tg/login/start">账号登录</a>
+                <a class="btn" href="/tg/accounts">账号管理</a>
+                <a class="btn" href="/tg/dialogs">会话列表</a>
+                <a class="btn" href="/tg/auto/send">自动发送</a>
+                <a class="btn" href="/tg/auto/reply">自动回复</a>
             </div>
         </section>
     </main>

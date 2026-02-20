@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -59,15 +59,15 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/home">杩斿洖涓婚〉</a>
-            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
+            <a class="ghost" href="/home">返回主页</a>
+            <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1 style="margin-bottom:4px;">绋嬪簭鏇存柊</h1>
-            <p class="muted" style="margin:0 0 16px;">褰撳墠鐗堟湰锛?strong>{{ .CurrentVersion }}</strong> &nbsp;|&nbsp; 浠撳簱锛?code>fengzhanhuaer/VpsHelper</code></p>
+            <h1 style="margin-bottom:4px;">程序更新</h1>
+            <p class="muted" style="margin:0 0 16px;">当前版本：<strong>{{ .CurrentVersion }}</strong> &nbsp;|&nbsp; 仓库：<code>fengzhanhuaer/VpsHelper</code></p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom:14px;">{{ .Message }}</div>
@@ -82,20 +82,20 @@
                     {{ end }}
 
                     <div style="margin-bottom:14px;">
-                        <div class="info-row"><strong>鏈€鏂?Release</strong><span>{{ .GH.TagName }}</span></div>
-                        <div class="info-row"><strong>鍚嶇О</strong><span>{{ .GH.Name }}</span></div>
-                        <div class="info-row"><strong>鍙戝竷鏃堕棿</strong><span>{{ .GH.PublishedAt }}</span></div>
-                        <div class="info-row"><strong>Asset</strong><span>{{ if .GH.AssetName }}{{ .GH.AssetName }}{{ else }}<span class="muted">鑷姩鍖归厤</span>{{ end }}</span></div>
+                        <div class="info-row"><strong>最新 Release</strong><span>{{ .GH.TagName }}</span></div>
+                        <div class="info-row"><strong>名称</strong><span>{{ .GH.Name }}</span></div>
+                        <div class="info-row"><strong>发布时间</strong><span>{{ .GH.PublishedAt }}</span></div>
+                        <div class="info-row"><strong>Asset</strong><span>{{ if .GH.AssetName }}{{ .GH.AssetName }}{{ else }}<span class="muted">自动匹配</span>{{ end }}</span></div>
                     </div>
 
                     <!-- Action buttons -->
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button id="btn-update" class="btn" type="button">猬?浠?Release 鏇存柊骞堕噸鍚?/button>
+                        <button id="btn-update" class="btn" type="button">⬆ 从 Release 更新并重启</button>
                         <form method="post" action="/system/update" style="display:inline;">
-                            <button class="ghost" type="submit" name="action" value="gh_check">妫€鏌ユ渶鏂?Release</button>
+                            <button class="ghost" type="submit" name="action" value="gh_check">检查最新 Release</button>
                         </form>
                         <form method="post" action="/system/update" style="display:inline;">
-                            <button id="btn-restart" class="ghost" type="submit" name="action" value="restart">鈫?浠呴噸鍚湇鍔?/button>
+                            <button id="btn-restart" class="ghost" type="submit" name="action" value="restart">↺ 仅重启服务</button>
                         </form>
                     </div>
                 </div>
@@ -103,12 +103,12 @@
                 <!-- Right column: live progress -->
                 <div class="progress-card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <strong style="font-size:14px;">鏇存柊杩涘害</strong>
-                        <span id="update-progress-percent" class="muted" style="font-size:13px;">鈥?/span>
+                        <strong style="font-size:14px;">更新进度</strong>
+                        <span id="update-progress-percent" class="muted" style="font-size:13px;">—</span>
                     </div>
                     <div class="progress-bar"><div id="update-progress-fill" class="progress-fill"></div></div>
-                    <div id="update-progress-text" class="muted" style="font-size:13px; margin-bottom:6px;">鐐瑰嚮銆屼粠 Release 鏇存柊骞堕噸鍚€嶅紑濮?/div>
-                    <div id="update-progress-log" class="progress-log"><span class="progress-idle">灏氭湭鎵ц浠讳綍鎿嶄綔</span></div>
+                    <div id="update-progress-text" class="muted" style="font-size:13px; margin-bottom:6px;">点击「从 Release 更新并重启」开始</div>
+                    <div id="update-progress-log" class="progress-log"><span class="progress-idle">尚未执行任何操作</span></div>
                 </div>
             </div>
         </section>
@@ -141,14 +141,14 @@
 
             function setBusy(busy) {
                 updateBtn.disabled = busy;
-                updateBtn.textContent = busy ? "鏇存柊涓?.." : "猬?浠?Release 鏇存柊骞堕噸鍚?;
+                updateBtn.textContent = busy ? "更新中..." : "⬆ 从 Release 更新并重启";
             }
 
             async function runUpdate() {
                 logEl.innerHTML = "";
-                setProgress(0, "鍑嗗鍚姩鏇存柊...");
+                setProgress(0, "准备启动更新...");
                 pctEl.textContent = "0%";
-                appendLog("寮€濮嬫墽琛屾洿鏂版祦绋?);
+                appendLog("开始执行更新流程");
                 setBusy(true);
 
                 var fd = new FormData();
@@ -162,7 +162,7 @@
                         headers: { "Accept": "application/x-ndjson" }
                     });
                     if (!res.ok || !res.body) {
-                        throw new Error("鏇存柊璇锋眰澶辫触锛圚TTP " + res.status + "锛?);
+                        throw new Error("更新请求失败（HTTP " + res.status + "）");
                     }
 
                     var reader   = res.body.getReader();
@@ -186,20 +186,20 @@
                             if (ev.done) {
                                 finished = true;
                                 if (ev.ok) {
-                                    appendLog("鏇存柊瀹屾垚锛? 绉掑悗鑷姩鍒锋柊...");
+                                    appendLog("更新完成，4 秒后自动刷新...");
                                     setTimeout(function () { window.location.reload(); }, 4500);
                                 } else {
-                                    appendLog("鏇存柊澶辫触锛岃妫€鏌ラ厤缃垨缃戠粶銆?);
+                                    appendLog("更新失败，请检查配置或网络。");
                                 }
                                 break;
                             }
                         }
                         if (finished) break;
                     }
-                    if (!finished) appendLog("杩炴帴宸茬粨鏉燂紝璇峰埛鏂伴〉闈㈢‘璁ょ増鏈€?);
+                    if (!finished) appendLog("连接已结束，请刷新页面确认版本。");
                 } catch (err) {
-                    appendLog(err && err.message ? err.message : "璇锋眰鍑洪敊");
-                    setProgress(0, "鎵ц澶辫触");
+                    appendLog(err && err.message ? err.message : "请求出错");
+                    setProgress(0, "执行失败");
                 } finally {
                     setBusy(false);
                 }

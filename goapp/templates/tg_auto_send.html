@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -10,35 +10,35 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/tg_helper">杩斿洖Tg鍔╂墜</a>
-            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
-            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>鑷姩鍙戦€佷换鍔?/h1>
-            <p class="muted">浠诲姟鐩爣浼樺厛浣跨敤浼氳瘽ID锛涜嫢鍘嗗彶浠诲姟浠嶆槸 @username锛屾墽琛屾垚鍔熷悗浼氳嚜鍔ㄨ浆鎹㈠苟淇濆瓨涓轰細璇滻D銆?/p>
+            <h1>自动发送任务</h1>
+            <p class="muted">任务目标优先使用会话ID；若历史任务仍是 @username，执行成功后会自动转换并保存为会话ID。</p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
-                <a class="btn" href="/tg/auto/send/new">鏂板缓浠诲姟</a>
+                <a class="btn" href="/tg/auto/send/new">新建任务</a>
             </div>
 
             <table>
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>璐﹀彿ID</th>
-                        <th>鐩爣</th>
-                        <th>璁″垝</th>
-                        <th>鐘舵€?/th>
-                        <th>缁撴灉</th>
-                        <th>鎿嶄綔</th>
+                        <th>账号ID</th>
+                        <th>目标</th>
+                        <th>计划</th>
+                        <th>状态</th>
+                        <th>结果</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -52,26 +52,26 @@
                             {{ if .TimeOfDay }}<div class="muted">time={{ .TimeOfDay }}</div>{{ end }}
                             <div class="muted">next={{ .NextRunAt }}</div>
                         </td>
-                        <td>{{ if .Enabled }}鍚敤{{ else }}鍋滅敤{{ end }}</td>
+                        <td>{{ if .Enabled }}启用{{ else }}停用{{ end }}</td>
                         <td>
                             <div class="muted">{{ .LastRunAt }}</div>
-                            <div class="muted">{{ if .LastReply }}{{ .LastReply }}{{ else }}锛堟棤鍥炲锛墈{ end }}</div>
+                            <div class="muted">{{ if .LastReply }}{{ .LastReply }}{{ else }}（无回复）{{ end }}</div>
                         </td>
                         <td>
                             <form method="post" action="/tg/auto/send" style="display:flex; gap:8px; flex-wrap:wrap;">
                                 <input type="hidden" name="id" value="{{ .ID }}" />
                                 {{ if .Enabled }}
-                                <button class="ghost" type="submit" name="action" value="disable">鍋滅敤</button>
+                                <button class="ghost" type="submit" name="action" value="disable">停用</button>
                                 {{ else }}
-                                <button class="ghost" type="submit" name="action" value="enable">鍚敤</button>
+                                <button class="ghost" type="submit" name="action" value="enable">启用</button>
                                 {{ end }}
-                                <button class="ghost" type="submit" name="action" value="run">绔嬪嵆鎵ц</button>
-                                <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('纭畾鍒犻櫎璇ヤ换鍔″悧锛?);">鍒犻櫎</button>
+                                <button class="ghost" type="submit" name="action" value="run">立即执行</button>
+                                <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除该任务吗？');">删除</button>
                             </form>
                         </td>
                     </tr>
                 {{ else }}
-                    <tr><td colspan="7" class="muted">鏆傛棤浠诲姟</td></tr>
+                    <tr><td colspan="7" class="muted">暂无任务</td></tr>
                 {{ end }}
                 </tbody>
             </table>

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -10,56 +10,56 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/tg_helper">杩斿洖 Tg 鍔╂墜</a>
-            <a class="ghost" href="/home">杩斿洖涓婚〉</a>
-            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
+            <a class="ghost" href="/tg_helper">返回 Tg 助手</a>
+            <a class="ghost" href="/home">返回主页</a>
+            <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>TG 璐﹀彿绠＄悊</h1>
-            <p class="muted">鏈〉鏀寔锛氬垹闄よ处鍙枫€佸埛鏂颁細璇濆垪琛ㄣ€?/p>
+            <h1>TG 账号管理</h1>
+            <p class="muted">本页支持：删除账号、刷新会话列表。</p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
-                <a class="btn" href="/tg/login/start">娣诲姞璐﹀彿锛堢櫥褰曪級</a>
-                <a class="ghost" href="/tg/dialogs">浼氳瘽鍒楄〃椤甸潰</a>
+                <a class="btn" href="/tg/login/start">添加账号（登录）</a>
+                <a class="ghost" href="/tg/dialogs">会话列表页面</a>
             </div>
 
             {{ if .HasAccounts }}
             <form method="get" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin:12px 0;">
                 <div class="field" style="min-width:320px;">
-                    <label for="account_id">閫夋嫨璐﹀彿</label>
+                    <label for="account_id">选择账号</label>
                     <select id="account_id" name="account_id">
                         {{ range .Accounts }}
                           <option value="{{ .ID }}" {{ if eq $.SelectedAccountID .ID }}selected{{ end }}>{{ .ID }} - {{ .AccountName }}</option>
                         {{ end }}
                     </select>
                 </div>
-                <button class="ghost" type="submit">鍒囨崲</button>
+                <button class="ghost" type="submit">切换</button>
             </form>
 
             <form id="refresh-dialogs-form" method="post" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; align-items:center;">
                 <input type="hidden" name="account_id" value="{{ .SelectedAccountID }}" />
                 <input type="hidden" name="action" value="refresh_dialogs" />
-                <button id="refresh-dialogs-btn" class="ghost" type="submit">鍒锋柊浼氳瘽鍒楄〃</button>
-                <span id="refresh-dialogs-status" class="muted" style="display:none;">姝ｅ湪鍒锋柊浼氳瘽鍒楄〃锛屽彲鑳介渶瑕?10-120 绉掞紝璇峰嬁閲嶅鐐瑰嚮銆?/span>
+                <button id="refresh-dialogs-btn" class="ghost" type="submit">刷新会话列表</button>
+                <span id="refresh-dialogs-status" class="muted" style="display:none;">正在刷新会话列表，可能需要 10-120 秒，请勿重复点击。</span>
             </form>
 
             <div style="display:grid; gap:10px; margin:12px 0;">
                 <div>
-                    <h2 style="font-size:16px; margin:0 0 8px;">浼氳瘽鍒楄〃锛堝綋鍓嶈处鍙凤級</h2>
-                    <p class="muted" style="margin:0 0 8px;">鍒楄〃涓殑鐩爣鍊煎潎涓轰細璇滻D銆?/p>
+                    <h2 style="font-size:16px; margin:0 0 8px;">会话列表（当前账号）</h2>
+                    <p class="muted" style="margin:0 0 8px;">列表中的目标值均为会话ID。</p>
                     <table>
                         <thead>
                             <tr>
-                                <th>鏍囬</th>
-                                <th>鐩爣</th>
-                                <th>鏇存柊鏃堕棿</th>
+                                <th>标题</th>
+                                <th>目标</th>
+                                <th>更新时间</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -70,7 +70,7 @@
                                 <td class="muted">{{ .UpdatedAt }}</td>
                             </tr>
                         {{ else }}
-                            <tr><td colspan="3" class="muted">鏆傛棤鏁版嵁锛堝厛鐐?鍒锋柊浼氳瘽鍒楄〃"锛?/td></tr>
+                            <tr><td colspan="3" class="muted">暂无数据（先点"刷新会话列表"）</td></tr>
                         {{ end }}
                         </tbody>
                     </table>
@@ -82,9 +82,9 @@
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>璐﹀彿鍚?/th>
-                        <th>鍒涘缓鏃堕棿</th>
-                        <th>鎿嶄綔</th>
+                        <th>账号名</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -96,12 +96,12 @@
                         <td>
                             <form method="post" action="/tg/accounts" style="display:inline;">
                                 <input type="hidden" name="id" value="{{ .ID }}" />
-                                <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('纭畾鍒犻櫎璇ヨ处鍙蜂細璇濆悧锛?);">鍒犻櫎</button>
+                                <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除该账号会话吗？');">删除</button>
                             </form>
                         </td>
                     </tr>
                 {{ else }}
-                    <tr><td colspan="4" class="muted">鏆傛棤璐﹀彿</td></tr>
+                    <tr><td colspan="4" class="muted">暂无账号</td></tr>
                 {{ end }}
                 </tbody>
             </table>
@@ -120,7 +120,7 @@
                 return;
             }
             form.dataset.submitting = '1';
-            btn.textContent = '鍒锋柊涓?..';
+            btn.textContent = '刷新中...';
             status.style.display = 'inline';
         });
     })();

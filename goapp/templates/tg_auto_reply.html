@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -10,19 +10,19 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/tg_helper">杩斿洖Tg鍔╂墜</a>
-            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
-            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>鑷姩鍥炲</h1>
-            <p class="muted">鍚庡彴浼氬"宸插惎鐢ㄨ鍒?鐨勮处鍙峰惎鍔ㄥ疄鏃?Updates 鐩戝惉锛屾敹鍒版柊娑堟伅鍚庢寜瑙勫垯鍖归厤骞跺洖澶嶏紙best-effort锛夈€?/p>
+            <h1>自动回复</h1>
+            <p class="muted">后台会对"已启用规则"的账号启动实时 Updates 监听，收到新消息后按规则匹配并回复（best-effort）。</p>
 
             {{ if not .HasAPI }}
-            <div class="error">鎻愮ず锛氳鍏堝湪"TG璁剧疆"閲岄厤缃?Telegram API ID/Hash锛屽惁鍒欏悗鍙版棤娉曞惎鍔ㄧ洃鍚€?/div>
+            <div class="error">提示：请先在"TG设置"里配置 Telegram API ID/Hash，否则后台无法启动监听。</div>
             {{ end }}
 
             {{ if .Message }}
@@ -31,7 +31,7 @@
 
             <form method="GET" action="/tg/auto/reply" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin:16px 0 8px;">
                 <div class="field" style="min-width:260px;">
-                    <label for="account_id">閫夋嫨璐﹀彿</label>
+                    <label for="account_id">选择账号</label>
                     <select id="account_id" name="account_id">
                         {{ range .Accounts }}
                         <option value="{{ .ID }}" {{ if eq $.AccountID .ID }}selected{{ end }}>
@@ -40,51 +40,51 @@
                         {{ end }}
                     </select>
                 </div>
-                <button class="ghost" type="submit">鍒囨崲</button>
+                <button class="ghost" type="submit">切换</button>
             </form>
 
             {{ if not .Accounts }}
-            <p class="muted">鏆傛棤 TG 璐﹀彿锛岃鍏堝幓"璐﹀彿绠＄悊"鐧诲綍骞朵繚瀛樿处鍙枫€?/p>
+            <p class="muted">暂无 TG 账号，请先去"账号管理"登录并保存账号。</p>
             {{ else }}
             <hr style="border:none; border-top:1px solid #eee; margin:16px 0;" />
-            <h2 style="margin:0 0 8px; font-size:16px;">鏂板瑙勫垯</h2>
+            <h2 style="margin:0 0 8px; font-size:16px;">新增规则</h2>
             <form method="POST" action="/tg/auto/reply" style="display:grid; gap:10px;">
                 <input type="hidden" name="action" value="add" />
                 <input type="hidden" name="account_id" value="{{ .AccountID }}" />
 
                 <div class="field">
-                    <label for="match_text">鍖归厤鏂囨湰锛堝寘鍚嵆鍛戒腑锛屽拷鐣ュぇ灏忓啓锛?/label>
-                    <input id="match_text" name="match_text" placeholder="渚嬪锛歨ello" />
+                    <label for="match_text">匹配文本（包含即命中，忽略大小写）</label>
+                    <input id="match_text" name="match_text" placeholder="例如：hello" />
                 </div>
 
                 <div class="field">
-                    <label for="reply_text">鍥炲鍐呭</label>
-                    <textarea id="reply_text" name="reply_text" rows="3" placeholder="渚嬪锛欻i~"></textarea>
+                    <label for="reply_text">回复内容</label>
+                    <textarea id="reply_text" name="reply_text" rows="3" placeholder="例如：Hi~"></textarea>
                 </div>
 
                 <div style="display:flex; gap:10px;">
-                    <button class="ghost" type="submit">鍒涘缓骞跺惎鐢?/button>
-                    <a class="ghost" href="/tg/auto/reply?account_id={{ .AccountID }}">鍒锋柊</a>
+                    <button class="ghost" type="submit">创建并启用</button>
+                    <a class="ghost" href="/tg/auto/reply?account_id={{ .AccountID }}">刷新</a>
                 </div>
             </form>
 
             <hr style="border:none; border-top:1px solid #eee; margin:16px 0;" />
-            <h2 style="margin:0 0 8px; font-size:16px;">瑙勫垯鍒楄〃</h2>
+            <h2 style="margin:0 0 8px; font-size:16px;">规则列表</h2>
             <table>
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>鐘舵€?/th>
-                        <th>鍖归厤</th>
-                        <th>鍥炲</th>
-                        <th>鎿嶄綔</th>
+                        <th>状态</th>
+                        <th>匹配</th>
+                        <th>回复</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
                     {{ range .Rules }}
                     <tr>
                         <td>{{ .ID }}</td>
-                        <td>{{ if .Enabled }}鍚敤{{ else }}鍋滅敤{{ end }}</td>
+                        <td>{{ if .Enabled }}启用{{ else }}停用{{ end }}</td>
                         <td>{{ .MatchText }}</td>
                         <td>{{ .ReplyText }}</td>
                         <td style="white-space:nowrap;">
@@ -93,23 +93,23 @@
                                 <input type="hidden" name="id" value="{{ .ID }}" />
                                 {{ if .Enabled }}
                                 <input type="hidden" name="action" value="disable" />
-                                <button class="ghost" type="submit">鍋滅敤</button>
+                                <button class="ghost" type="submit">停用</button>
                                 {{ else }}
                                 <input type="hidden" name="action" value="enable" />
-                                <button class="ghost" type="submit">鍚敤</button>
+                                <button class="ghost" type="submit">启用</button>
                                 {{ end }}
                             </form>
                             <form method="POST" action="/tg/auto/reply" style="display:inline; margin-left:6px;">
                                 <input type="hidden" name="account_id" value="{{ $.AccountID }}" />
                                 <input type="hidden" name="action" value="delete" />
                                 <input type="hidden" name="id" value="{{ .ID }}" />
-                                <button class="ghost" type="submit" onclick="return confirm('纭鍒犻櫎璇ヨ鍒欙紵')">鍒犻櫎</button>
+                                <button class="ghost" type="submit" onclick="return confirm('确认删除该规则？')">删除</button>
                             </form>
                         </td>
                     </tr>
                     {{ else }}
                     <tr>
-                        <td colspan="5" class="muted">鏆傛棤瑙勫垯銆?/td>
+                        <td colspan="5" class="muted">暂无规则。</td>
                     </tr>
                     {{ end }}
                 </tbody>

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -10,16 +10,16 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/tg_helper">杩斿洖Tg鍔╂墜</a>
-            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
-            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>浠ｇ悊璁剧疆锛圱elegram锛?/h1>
-            <p class="muted">璇ヨ缃細鍐欏叆鏈湴鏁版嵁搴擄紝骞跺湪 TG 鐧诲綍/浠诲姟鍙戦€佹椂浣滀负 ALL_PROXY 鐢熸晥锛坰ocks5/http 鍙栧喅浜庝綘鐨?URL锛夈€?/p>
+            <h1>代理设置（Telegram）</h1>
+            <p class="muted">该设置会写入本地数据库，并在 TG 登录/任务发送时作为 ALL_PROXY 生效（socks5/http 取决于你的 URL）。</p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
@@ -29,12 +29,12 @@
                 <div class="field">
                     <label for="all_proxy">ALL_PROXY</label>
                     <input id="all_proxy" name="all_proxy" value="{{ .AllProxy }}" placeholder="socks5://user:pass@127.0.0.1:1080" />
-                    <div class="muted">绀轰緥锛歴ocks5://127.0.0.1:1080 鎴?http://127.0.0.1:7890</div>
+                    <div class="muted">示例：socks5://127.0.0.1:1080 或 http://127.0.0.1:7890</div>
                 </div>
 
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="btn" type="submit" name="action" value="save">淇濆瓨</button>
-                    <button class="ghost" type="submit" name="action" value="clear">娓呯┖</button>
+                    <button class="btn" type="submit" name="action" value="save">保存</button>
+                    <button class="ghost" type="submit" name="action" value="clear">清空</button>
                 </div>
             </form>
         </section>

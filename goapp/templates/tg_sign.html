@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -10,36 +10,36 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/tg_helper">杩斿洖Tg鍔╂墜</a>
-            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
-            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>绛惧埌浠诲姟</h1>
-            <p class="muted">涓烘瘡涓处鍙蜂繚瀛樹竴鏉＄鍒伴厤缃紙鐩爣 + 娑堟伅锛夈€傚彲鎵嬪姩"绔嬪嵆鎵ц"銆?/p>
+            <h1>签到任务</h1>
+            <p class="muted">为每个账号保存一条签到配置（目标 + 消息）。可手动"立即执行"。</p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
             {{ if .AutoLast }}
-            <p class="muted" style="white-space:pre-wrap; margin-top:10px;">鏈€杩戣嚜鍔ㄧ鍒帮細
+            <p class="muted" style="white-space:pre-wrap; margin-top:10px;">最近自动签到：
 {{ .AutoLast }}</p>
             {{ end }}
 
             <form method="get" action="/tg/sign" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
                 <div class="field" style="min-width:320px;">
-                    <label for="account_id">閫夋嫨璐﹀彿</label>
+                    <label for="account_id">选择账号</label>
                     <select id="account_id" name="account_id">
                         {{ range .Accounts }}
                           <option value="{{ .ID }}" {{ if eq $.AccountID .ID }}selected{{ end }}>{{ .ID }} - {{ .AccountName }}</option>
                         {{ end }}
                     </select>
                 </div>
-                <button class="ghost" type="submit">鍒囨崲</button>
+                <button class="ghost" type="submit">切换</button>
             </form>
 
             <form method="post" action="/tg/sign" style="margin-top:10px;">
@@ -47,35 +47,35 @@
 
                 {{ if .Dialogs }}
                 <div class="field">
-                    <label for="dialog_pick">浠庝細璇濆垪琛ㄩ€夋嫨鐩爣锛堝彲閫夛級</label>
+                    <label for="dialog_pick">从会话列表选择目标（可选）</label>
                     <select id="dialog_pick" name="dialog_pick">
-                        <option value="">锛堜笉閫夋嫨锛屾墜鍔ㄥ～鍐欎笅鏂圭洰鏍囷級</option>
+                        <option value="">（不选择，手动填写下方目标）</option>
                         {{ range .Dialogs }}
                           <option value="{{ .DialogID }}" {{ if eq $.DialogID .DialogID }}selected{{ end }}>{{ .Title }} ({{ .DialogID }})</option>
                         {{ end }}
                     </select>
-                    <div class="muted">濡傚垪琛ㄤ负绌猴紝璇峰厛鍒?浼氳瘽鍒楄〃"椤甸潰鐐瑰嚮鍒锋柊銆?/div>
+                    <div class="muted">如列表为空，请先到"会话列表"页面点击刷新。</div>
                 </div>
                 {{ end }}
 
                 <div class="field">
-                    <label for="dialog_id">鐩爣锛堜細璇滻D锛屾敮鎸?@username 鎴?t.me/username 鑷姩杞崲锛?/label>
-                    <input id="dialog_id" name="dialog_id" value="{{ .DialogID }}" placeholder="-100xxxxxxxxxx 鎴?@mychannel" />
+                    <label for="dialog_id">目标（会话ID，支持 @username 或 t.me/username 自动转换）</label>
+                    <input id="dialog_id" name="dialog_id" value="{{ .DialogID }}" placeholder="-100xxxxxxxxxx 或 @mychannel" />
                 </div>
 
                 <div class="field">
-                    <label for="msg">娑堟伅鍐呭锛堝彲绌猴級</label>
-                    <textarea id="msg" name="msg" rows="3" placeholder="渚嬪锛氱鍒?>{{ .SignMessage }}</textarea>
+                    <label for="msg">消息内容（可空）</label>
+                    <textarea id="msg" name="msg" rows="3" placeholder="例如：签到">{{ .SignMessage }}</textarea>
                 </div>
 
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <button class="btn" type="submit" name="action" value="save">淇濆瓨</button>
-                    <button class="ghost" type="submit" name="action" value="run">绔嬪嵆鎵ц</button>
-                    <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('纭畾鍒犻櫎璇ヨ处鍙风殑绛惧埌浠诲姟鍚楋紵');">鍒犻櫎</button>
+                    <button class="btn" type="submit" name="action" value="save">保存</button>
+                    <button class="ghost" type="submit" name="action" value="run">立即执行</button>
+                    <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除该账号的签到任务吗？');">删除</button>
                 </div>
 
                 {{ if .CreatedAt }}
-                <p class="muted" style="margin-top:12px;">涓婃淇濆瓨鏃堕棿锛歿{ .CreatedAt }}</p>
+                <p class="muted" style="margin-top:12px;">上次保存时间：{{ .CreatedAt }}</p>
                 {{ end }}
             </form>
         </section>

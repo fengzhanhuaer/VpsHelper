@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -10,53 +10,53 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
-            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>闃茬伀澧?/h1>
-            <p class="muted">鏌ョ湅闃茬伀澧欑被鍨嬨€佸紑鏀剧鍙ｃ€佺洃鍚?IP 涓庤繘绋嬶紝骞跺彲鎵ц鍚敤涓庣鍙ｅ紑鏀炬搷浣溿€?/p>
+            <h1>防火墙</h1>
+            <p class="muted">查看防火墙类型、开放端口、监听 IP 与进程，并可执行启用与端口开放操作。</p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
             <div style="margin-top:12px; margin-bottom:12px;">
-                <div><strong>闃茬伀澧欑被鍨嬶細</strong>{{ .FirewallType }}</div>
-                <div><strong>褰撳墠鐘舵€侊細</strong>{{ .FirewallStatus }}</div>
+                <div><strong>防火墙类型：</strong>{{ .FirewallType }}</div>
+                <div><strong>当前状态：</strong>{{ .FirewallStatus }}</div>
                 {{ if .Note }}
                 <div style="margin-top:6px;" class="muted">{{ .Note }}</div>
                 {{ end }}
             </div>
 
             <form method="post" action="/firewall" style="display:grid; gap:8px; margin-bottom:12px;">
-                <button class="ghost" type="submit" name="action" value="enable_firewall">鍚敤闃茬伀澧?/button>
+                <button class="ghost" type="submit" name="action" value="enable_firewall">启用防火墙</button>
             </form>
 
             <form method="post" action="/firewall" style="display:grid; gap:8px; margin-bottom:14px;">
                 <div style="display:flex; gap:8px; align-items:center;">
-                    <input name="port" placeholder="杈撳叆瑕佸紑鏀剧殑绔彛锛屼緥濡?8080" />
+                    <input name="port" placeholder="输入要开放的端口，例如 8080" />
                     <select name="protocol" style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px;">
                         <option value="tcp">tcp</option>
                         <option value="udp">udp</option>
                     </select>
-                    <button class="btn" type="submit" name="action" value="open_port" style="width:auto;">寮€鏀剧鍙?/button>
+                    <button class="btn" type="submit" name="action" value="open_port" style="width:auto;">开放端口</button>
                 </div>
             </form>
 
-            <h3 style="margin: 0 0 8px; font-size: 16px;">闃茬伀澧欏凡寮€鏀剧鍙?/h3>
+            <h3 style="margin: 0 0 8px; font-size: 16px;">防火墙已开放端口</h3>
 
             {{ if .PortRows }}
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 140px;">寮€鏀剧鍙?/th>
-                        <th style="width: 120px;">绔彛绫诲瀷</th>
-                        <th style="width: 260px;">缁戝畾 IP</th>
-                        <th>杩涚▼鍚嶇О</th>
+                        <th style="width: 140px;">开放端口</th>
+                        <th style="width: 120px;">端口类型</th>
+                        <th style="width: 260px;">绑定 IP</th>
+                        <th>进程名称</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -71,18 +71,18 @@
                 </tbody>
             </table>
             {{ else }}
-            <p class="muted" style="margin-top:12px;">鏈娴嬪埌闃茬伀澧欏紑鏀剧鍙ｃ€?/p>
+            <p class="muted" style="margin-top:12px;">未检测到防火墙开放端口。</p>
             {{ end }}
 
-            <h3 style="margin: 16px 0 8px; font-size: 16px;">宸叉墦寮€绔彛锛堢洃鍚腑锛?/h3>
+            <h3 style="margin: 16px 0 8px; font-size: 16px;">已打开端口（监听中）</h3>
             {{ if .ListeningRows }}
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 140px;">鐩戝惉绔彛</th>
-                        <th style="width: 120px;">绔彛绫诲瀷</th>
-                        <th style="width: 260px;">缁戝畾 IP</th>
-                        <th>杩涚▼鍚嶇О</th>
+                        <th style="width: 140px;">监听端口</th>
+                        <th style="width: 120px;">端口类型</th>
+                        <th style="width: 260px;">绑定 IP</th>
+                        <th>进程名称</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -97,7 +97,7 @@
                 </tbody>
             </table>
             {{ else }}
-            <p class="muted" style="margin-top:12px;">鏈娴嬪埌鐩戝惉绔彛銆?/p>
+            <p class="muted" style="margin-top:12px;">未检测到监听端口。</p>
             {{ end }}
         </section>
     </main>

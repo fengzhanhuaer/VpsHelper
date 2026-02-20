@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -10,13 +10,13 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/tg_helper">杩斿洖</a>
+            <a class="ghost" href="/tg_helper">返回</a>
         </nav>
     </header>
     <main>
         <section class="panel panel--center">
-            <h1>Telegram API 璁剧疆</h1>
-            <p class="muted">濉啓 Telegram API ID 涓?Hash锛岀敤浜?MTProto 鐧诲綍銆?/p>
+            <h1>Telegram API 设置</h1>
+            <p class="muted">填写 Telegram API ID 与 Hash，用于 MTProto 登录。</p>
             {{ if .Error }}
             <div class="error">{{ .Error }}</div>
             {{ end }}
@@ -29,7 +29,7 @@
                     <label for="api_hash">API Hash</label>
                     <input id="api_hash" name="api_hash" value="{{ .ApiHash }}" required />
                 </div>
-                <button class="btn" type="submit">淇濆瓨</button>
+                <button class="btn" type="submit">保存</button>
             </form>
         </section>
     </main>
