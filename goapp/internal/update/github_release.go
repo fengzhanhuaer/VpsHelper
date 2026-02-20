@@ -275,7 +275,7 @@ func downloadAssetToTempOnce(ctx context.Context, asset SelectedAsset, token str
 	existing := int64(0)
 	if st, err := os.Stat(tmp); err == nil {
 		existing = st.Size()
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 
