@@ -52,6 +52,28 @@ cd goapp
 go build -o ./bin/vpshelper ./cmd/server
 ```
 
+## Text integrity guard (anti-garbled text)
+
+Enable the local pre-commit hook:
+
+```bash
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit scripts/check_text_integrity.sh
+```
+
+PowerShell (Windows):
+
+```powershell
+git config core.hooksPath .githooks
+sh ./scripts/check_text_integrity.sh --all
+```
+
+Run manually any time:
+
+```bash
+sh ./scripts/check_text_integrity.sh --all
+```
+
 ## Project structure
 
 - `goapp/`: Go source code

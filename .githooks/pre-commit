@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -eu
+
+sh ./scripts/check_text_integrity.sh --staged
