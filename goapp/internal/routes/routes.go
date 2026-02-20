@@ -34,10 +34,12 @@ func LoadTemplates(cfg config.Config) (*template.Template, error) {
 }
 
 func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
-	// Serve static assets: prefer disk directory when present (dev mode),
-	// fall back to embedded FS for production single-binary deployment.
+	// Serve static assets: prefer disk directory when it actually contains
+	// style.css (dev mode). Fall back to embedded FS for production
+	// single-binary deployment where the disk dir may exist but be empty.
 	staticDir := filepath.Join(cfg.BaseDir, "static")
-	if st, err := os.Stat(staticDir); err == nil && st.IsDir() {
+	cssPath := filepath.Join(staticDir, "style.css")
+	if _, err := os.Stat(cssPath); err == nil {
 		router.Static("/static", staticDir)
 	} else {
 		router.StaticFS("/static", http.FS(static.FS))

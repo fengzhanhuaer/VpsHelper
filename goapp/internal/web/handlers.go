@@ -2038,6 +2038,17 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 	if !send(100, finalMsg, true, true) {
 		return
 	}
+
+	// Clean up legacy on-disk static/ and templates/ directories so they
+	// do not shadow the embedded assets in the new binary.
+	for _, dir := range []string{"static", "templates"} {
+		target := filepath.Join(goappDir, dir)
+		if err := os.RemoveAll(target); err != nil {
+			// Non-fatal: log to progress but continue with restart.
+			_ = send(100, "提示：清理旧目录 "+dir+" 失败（"+err.Error()+"），但不影响更新结果。", true, true)
+		}
+	}
+
 	update.RestartToDelayed(bin, os.Args[1:], 1*time.Second)
 }
 
