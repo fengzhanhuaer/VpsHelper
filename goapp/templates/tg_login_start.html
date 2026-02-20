@@ -1,35 +1,35 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
 </head>
 <body>
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="btn" href="/tg_helper">返回</a>
+            <a class="btn" href="/tg_helper">杩斿洖</a>
         </nav>
     </header>
     <main>
         <section class="panel panel--center">
-            <h1>Telegram 登录</h1>
-            <p class="muted">输入手机号以接收验证码。</p>
+            <h1>Telegram 鐧诲綍</h1>
+            <p class="muted">杈撳叆鎵嬫満鍙蜂互鎺ユ敹楠岃瘉鐮併€?/p>
             {{ if .Error }}
             <div class="error">{{ .Error }}</div>
             {{ end }}
             <form method="post">
                 <div class="field">
-                    <label for="phone">手机号</label>
+                    <label for="phone">鎵嬫満鍙?/label>
                     <input id="phone" name="phone" value="{{ .Phone }}" placeholder="+8613812345678" required />
                 </div>
                 <div class="field">
-                    <label for="account_name">账号备注（可选）</label>
-                    <input id="account_name" name="account_name" value="{{ .AccountName }}" placeholder="工作号" />
+                    <label for="account_name">璐﹀彿澶囨敞锛堝彲閫夛級</label>
+                    <input id="account_name" name="account_name" value="{{ .AccountName }}" placeholder="宸ヤ綔鍙? />
                 </div>
-                <button class="btn" type="submit">发送验证码</button>
+                <button class="btn" type="submit">鍙戦€侀獙璇佺爜</button>
             </form>
         </section>
     </main>

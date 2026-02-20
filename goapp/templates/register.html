@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
 </head>
 <body>
     <header>
@@ -15,28 +15,28 @@
     </header>
     <main>
         <section class="panel panel--center">
-            <h1>注册账号</h1>
-            <p class="muted">首次使用请先注册账号。</p>
+            <h1>娉ㄥ唽璐﹀彿</h1>
+            <p class="muted">棣栨浣跨敤璇峰厛娉ㄥ唽璐﹀彿銆?/p>
             {{ if .Error }}
             <div class="error">{{ .Error }}</div>
             {{ end }}
             <form method="post">
                 <div class="field">
-                    <label for="username">用户名</label>
+                    <label for="username">鐢ㄦ埛鍚?/label>
                     <input id="username" name="username" required />
                 </div>
                 <div class="field">
-                    <label for="password">密码</label>
+                    <label for="password">瀵嗙爜</label>
                     <input id="password" name="password" type="password" required />
                 </div>
                 <div class="field">
-                    <label for="confirm">确认密码</label>
+                    <label for="confirm">纭瀵嗙爜</label>
                     <input id="confirm" name="confirm" type="password" required />
                 </div>
-                <button class="btn" type="submit">注册并登录</button>
+                <button class="btn" type="submit">娉ㄥ唽骞剁櫥褰?/button>
             </form>
             {{ if .HasUsers }}
-            <div class="link">已有账号？<a href="/login">去登录</a></div>
+            <div class="link">宸叉湁璐﹀彿锛?a href="/login">鍘荤櫥褰?/a></div>
             {{ end }}
         </section>
     </main>

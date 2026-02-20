@@ -1,25 +1,25 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
 </head>
 <body>
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/settings/ssh">SSH 设置</a>
-            <a class="ghost" href="/home">返回主菜单</a>
-            <a class="ghost" href="/logout">退出登录</a>
+            <a class="ghost" href="/settings/ssh">SSH 璁剧疆</a>
+            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
+            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>SSH 设置</h1>
-            <p class="muted">配置 SSH 端口与登录方式。保存后会尝试自动应用到系统（需要 root 权限）。</p>
+            <h1>SSH 璁剧疆</h1>
+            <p class="muted">閰嶇疆 SSH 绔彛涓庣櫥褰曟柟寮忋€備繚瀛樺悗浼氬皾璇曡嚜鍔ㄥ簲鐢ㄥ埌绯荤粺锛堥渶瑕?root 鏉冮檺锛夈€?/p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
@@ -27,36 +27,36 @@
 
             <form method="post" action="/settings/ssh">
                 <div class="field">
-                    <label for="ssh_port">SSH 端口</label>
+                    <label for="ssh_port">SSH 绔彛</label>
                     <input id="ssh_port" name="ssh_port" value="{{ .SSHPort }}" required />
                 </div>
 
                 <div class="field" style="display:flex; align-items:center; gap:8px;">
                     <input id="allow_password_login" name="allow_password_login" type="checkbox" {{ if .AllowPasswordLogin }}checked{{ end }} style="width:auto;" />
-                    <label for="allow_password_login" style="margin:0;">允许密码登录</label>
+                    <label for="allow_password_login" style="margin:0;">鍏佽瀵嗙爜鐧诲綍</label>
                 </div>
 
                 <div class="field" style="display:flex; align-items:center; gap:8px;">
                     <input id="allow_key_login" name="allow_key_login" type="checkbox" {{ if .AllowKeyLogin }}checked{{ end }} style="width:auto;" />
-                    <label for="allow_key_login" style="margin:0;">允许密钥登录</label>
+                    <label for="allow_key_login" style="margin:0;">鍏佽瀵嗛挜鐧诲綍</label>
                 </div>
 
                 <div class="field">
-                    <label for="ssh_public_key">SSH 公钥</label>
-                    <textarea id="ssh_public_key" name="ssh_public_key" rows="4" placeholder="例如：ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host">{{ .SSHPublicKey }}</textarea>
-                    <div class="muted">会尝试写入当前运行用户的 ~/.ssh/authorized_keys。</div>
+                    <label for="ssh_public_key">SSH 鍏挜</label>
+                    <textarea id="ssh_public_key" name="ssh_public_key" rows="4" placeholder="渚嬪锛歴sh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host">{{ .SSHPublicKey }}</textarea>
+                    <div class="muted">浼氬皾璇曞啓鍏ュ綋鍓嶈繍琛岀敤鎴风殑 ~/.ssh/authorized_keys銆?/div>
                 </div>
 
-                <button class="btn" type="submit" name="action" value="save">保存</button>
+                <button class="btn" type="submit" name="action" value="save">淇濆瓨</button>
             </form>
 
             <form method="post" action="/settings/ssh" style="margin-top:10px;">
-                <button class="ghost" type="submit" name="action" value="install_fail2ban" style="width:100%;">安装 Fail2ban</button>
+                <button class="ghost" type="submit" name="action" value="install_fail2ban" style="width:100%;">瀹夎 Fail2ban</button>
             </form>
 
             <form method="post" action="/settings/ssh" style="margin-top:10px;">
                 <input type="hidden" name="ssh_port" value="{{ .SSHPort }}" />
-                <button class="ghost" type="submit" name="action" value="diagnose_ssh" style="width:100%;">诊断 SSH 连通性</button>
+                <button class="ghost" type="submit" name="action" value="diagnose_ssh" style="width:100%;">璇婃柇 SSH 杩為€氭€?/button>
             </form>
         </section>
     </main>

@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
 </head>
 <body>
     <header>
@@ -15,23 +15,23 @@
     </header>
     <main>
         <section class="panel panel--center">
-            <h1>用户登录</h1>
-            <p class="muted">请输入账号和密码登录。</p>
+            <h1>鐢ㄦ埛鐧诲綍</h1>
+            <p class="muted">璇疯緭鍏ヨ处鍙峰拰瀵嗙爜鐧诲綍銆?/p>
             {{ if .Error }}
             <div class="error">{{ .Error }}</div>
             {{ end }}
             <form method="post">
                 <div class="field">
-                    <label for="username">用户名</label>
+                    <label for="username">鐢ㄦ埛鍚?/label>
                     <input id="username" name="username" required />
                 </div>
                 <div class="field">
-                    <label for="password">密码</label>
+                    <label for="password">瀵嗙爜</label>
                     <input id="password" name="password" type="password" required />
                 </div>
-                <button class="btn" type="submit">登录</button>
+                <button class="btn" type="submit">鐧诲綍</button>
             </form>
-            <div class="link">没有账号？<a href="/register">去注册</a></div>
+            <div class="link">娌℃湁璐﹀彿锛?a href="/register">鍘绘敞鍐?/a></div>
         </section>
     </main>
 </body>

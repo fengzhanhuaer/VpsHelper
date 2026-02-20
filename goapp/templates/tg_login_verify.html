@@ -1,36 +1,36 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
 </head>
 <body>
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="btn" href="/tg_helper">返回</a>
+            <a class="btn" href="/tg_helper">杩斿洖</a>
         </nav>
     </header>
     <main>
         <section class="panel panel--center">
-            <h1>验证码验证</h1>
-            <p class="muted">验证码已发送到 {{ .Phone }}。</p>
+            <h1>楠岃瘉鐮侀獙璇?/h1>
+            <p class="muted">楠岃瘉鐮佸凡鍙戦€佸埌 {{ .Phone }}銆?/p>
             {{ if .Error }}
             <div class="error">{{ .Error }}</div>
             {{ end }}
             <form method="post">
                 <input type="hidden" name="flow_id" value="{{ .FlowID }}" />
                 <div class="field">
-                    <label for="code">验证码</label>
+                    <label for="code">楠岃瘉鐮?/label>
                     <input id="code" name="code" required />
                 </div>
                 <div class="field">
-                    <label for="password">两步验证密码（如有）</label>
+                    <label for="password">涓ゆ楠岃瘉瀵嗙爜锛堝鏈夛級</label>
                     <input id="password" name="password" type="password" />
                 </div>
-                <button class="btn" type="submit">确认登录</button>
+                <button class="btn" type="submit">纭鐧诲綍</button>
             </form>
         </section>
     </main>

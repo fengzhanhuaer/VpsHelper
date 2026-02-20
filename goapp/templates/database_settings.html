@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
     <style>
         .progress-card { display:none; margin-top:14px; padding:12px; border-radius:12px; border:1px solid #ecd7cb; background:#fff8f3; }
         .progress-bar { width:100%; height:10px; border-radius:999px; background:#f1dfd2; overflow:hidden; margin:8px 0 6px; }
@@ -16,15 +16,15 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/home">返回主菜单</a>
-            <a class="ghost" href="/logout">退出登录</a>
+            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
+            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>数据库管理</h1>
-            <p class="muted">默认使用本地 sqlite。可创建云端私有 D1，并手动备份/拉取。</p>
+            <h1>鏁版嵁搴撶鐞?/h1>
+            <p class="muted">榛樿浣跨敤鏈湴 sqlite銆傚彲鍒涘缓浜戠绉佹湁 D1锛屽苟鎵嬪姩澶囦唤/鎷夊彇銆?/p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
@@ -36,29 +36,29 @@
                     <input id="cf_api_token" name="cf_api_token" value="{{ .CFToken }}" />
                 </div>
                 <div class="field">
-                    <label>D1 数据库名称（固定）</label>
+                    <label>D1 鏁版嵁搴撳悕绉帮紙鍥哄畾锛?/label>
                     <input value="{{ .DBName }}" readonly />
                 </div>
                 <div class="field">
-                    <label>D1 数据库 ID</label>
+                    <label>D1 鏁版嵁搴?ID</label>
                     <input value="{{ .DBID }}" readonly />
                 </div>
                 <div style="display:grid; gap:8px;">
-                    <button class="btn" type="submit" name="action" value="save">保存 Token</button>
-                    <button class="ghost" type="submit" name="action" value="create">自动创建/绑定 {{ .DBName }} 数据库</button>
+                    <button class="btn" type="submit" name="action" value="save">淇濆瓨 Token</button>
+                    <button class="ghost" type="submit" name="action" value="create">鑷姩鍒涘缓/缁戝畾 {{ .DBName }} 鏁版嵁搴?/button>
                 </div>
             </form>
 
             <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
 
-            <h2 style="margin:0 0 10px; font-size:16px;">手动备份 / 拉取</h2>
+            <h2 style="margin:0 0 10px; font-size:16px;">鎵嬪姩澶囦唤 / 鎷夊彇</h2>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button id="db-backup-btn" class="ghost" type="button">备份本地 → 云端 D1</button>
-                <button id="db-pull-btn" class="ghost" type="button">云端 D1 → 拉取到本地</button>
+                <button id="db-backup-btn" class="ghost" type="button">澶囦唤鏈湴 鈫?浜戠 D1</button>
+                <button id="db-pull-btn" class="ghost" type="button">浜戠 D1 鈫?鎷夊彇鍒版湰鍦?/button>
             </div>
 
             <div id="db-progress-card" class="progress-card">
-                <div id="db-progress-text" class="muted">准备中...</div>
+                <div id="db-progress-text" class="muted">鍑嗗涓?..</div>
                 <div class="progress-bar"><div id="db-progress-fill" class="progress-fill"></div></div>
                 <div id="db-progress-percent" class="muted">0%</div>
                 <div id="db-progress-log" class="progress-log"></div>
@@ -66,21 +66,21 @@
 
             <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
 
-            <h2 style="margin:0 0 10px; font-size:16px;">自动备份</h2>
+            <h2 style="margin:0 0 10px; font-size:16px;">鑷姩澶囦唤</h2>
             <form method="post" action="/settings/database">
                 <div class="field" style="display:flex; align-items:center; gap:8px;">
                     <input id="db_auto_backup_enabled" name="db_auto_backup_enabled" type="checkbox" {{ if .AutoBackupEnabled }}checked{{ end }} style="width:auto;" />
-                    <label for="db_auto_backup_enabled" style="margin:0;">启用每天自动备份</label>
+                    <label for="db_auto_backup_enabled" style="margin:0;">鍚敤姣忓ぉ鑷姩澶囦唤</label>
                 </div>
                 <div class="field">
-                    <label for="db_auto_backup_time">每日备份时间（HH:MM）</label>
+                    <label for="db_auto_backup_time">姣忔棩澶囦唤鏃堕棿锛圚H:MM锛?/label>
                     <input id="db_auto_backup_time" name="db_auto_backup_time" value="{{ .AutoBackupTime }}" placeholder="03:30" />
                 </div>
-                <button class="ghost" type="submit" name="action" value="auto_backup">保存自动备份设置</button>
+                <button class="ghost" type="submit" name="action" value="auto_backup">淇濆瓨鑷姩澶囦唤璁剧疆</button>
             </form>
 
             {{ if .LastAutoBackupResult }}
-            <p class="muted" style="margin-top:12px;">最近自动备份：{{ .LastAutoBackupResult }}</p>
+            <p class="muted" style="margin-top:12px;">鏈€杩戣嚜鍔ㄥ浠斤細{{ .LastAutoBackupResult }}</p>
             {{ end }}
         </section>
     </main>
@@ -112,8 +112,8 @@
         function setBusy(busy) {
             backupBtn.disabled = busy;
             pullBtn.disabled   = busy;
-            backupBtn.textContent = busy ? '操作中...' : '备份本地 → 云端 D1';
-            pullBtn.textContent   = busy ? '操作中...' : '云端 D1 → 拉取到本地';
+            backupBtn.textContent = busy ? '鎿嶄綔涓?..' : '澶囦唤鏈湴 鈫?浜戠 D1';
+            pullBtn.textContent   = busy ? '鎿嶄綔涓?..' : '浜戠 D1 鈫?鎷夊彇鍒版湰鍦?;
         }
 
         async function runStream(url, startLabel) {
@@ -130,7 +130,7 @@
                     headers: { 'Accept': 'application/x-ndjson' }
                 });
                 if (!res.ok || !res.body) {
-                    throw new Error('请求失败（HTTP ' + res.status + '）');
+                    throw new Error('璇锋眰澶辫触锛圚TTP ' + res.status + '锛?);
                 }
 
                 var reader  = res.body.getReader();
@@ -153,26 +153,26 @@
                         appendLog(ev.message);
                         if (ev.done) {
                             finished = true;
-                            if (!ev.ok) appendLog('操作失败，请根据日志检查配置。');
+                            if (!ev.ok) appendLog('鎿嶄綔澶辫触锛岃鏍规嵁鏃ュ織妫€鏌ラ厤缃€?);
                             break;
                         }
                     }
                     if (finished) break;
                 }
-                if (!finished) appendLog('连接已结束，请刷新页面。');
+                if (!finished) appendLog('杩炴帴宸茬粨鏉燂紝璇峰埛鏂伴〉闈€?);
             } catch (err) {
-                appendLog(err && err.message ? err.message : '请求出错');
-                setProgress(0, '请求出错');
+                appendLog(err && err.message ? err.message : '璇锋眰鍑洪敊');
+                setProgress(0, '璇锋眰鍑洪敊');
             } finally {
                 setBusy(false);
             }
         }
 
         backupBtn.addEventListener('click', function () {
-            runStream('/settings/database/backup/stream', '开始备份到云端 D1...');
+            runStream('/settings/database/backup/stream', '寮€濮嬪浠藉埌浜戠 D1...');
         });
         pullBtn.addEventListener('click', function () {
-            runStream('/settings/database/pull/stream', '开始从云端 D1 拉取...');
+            runStream('/settings/database/pull/stream', '寮€濮嬩粠浜戠 D1 鎷夊彇...');
         });
     })();
     </script>

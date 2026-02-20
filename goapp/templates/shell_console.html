@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
     <style>
         /* page-specific: terminal */
         #terminal { background:#111; color:#e2e8f0; font-family:"Courier New",Courier,monospace; font-size:13px; padding:12px; border-radius:10px; min-height:160px; max-height:400px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
@@ -16,47 +16,47 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/home">返回主菜单</a>
-            <a class="ghost" href="/logout">退出登录</a>
+            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
+            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>Shell 交互</h1>
-            <p class="muted">输入 Shell 命令并在此查看输出（基于服务器执行）。</p>
+            <h1>Shell 浜や簰</h1>
+            <p class="muted">杈撳叆 Shell 鍛戒护骞跺湪姝ゆ煡鐪嬭緭鍑猴紙鍩轰簬鏈嶅姟鍣ㄦ墽琛岋級銆?/p>
 
-            <div id="terminal">等待命令...\n</div>
+            <div id="terminal">绛夊緟鍛戒护...\n</div>
 
             <div id="cmd-bar">
-                <input id="cmd-input" class="field" style="margin:0;" type="text" placeholder="输入 Shell 命令" autocomplete="off" autofocus />
-                <button class="btn" id="run-btn" type="button">执行</button>
-                <button class="ghost" id="clear-btn" type="button">清空</button>
+                <input id="cmd-input" class="field" style="margin:0;" type="text" placeholder="杈撳叆 Shell 鍛戒护" autocomplete="off" autofocus />
+                <button class="btn" id="run-btn" type="button">鎵ц</button>
+                <button class="ghost" id="clear-btn" type="button">娓呯┖</button>
             </div>
 
             <div style="margin-top: 16px;">
-                <h3 style="font-size: 15px; margin: 0 0 8px;">快捷命令</h3>
+                <h3 style="font-size: 15px; margin: 0 0 8px;">蹇嵎鍛戒护</h3>
                 <div id="shortcut-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
                     {{ range .Shortcuts }}
                     <button class="ghost shortcut-btn" data-cmd="{{ .Command }}" title="{{ .Command }}" style="position:relative; padding-right:30px;">
                         {{ .Name }}
-                        <span class="del-shortcut" data-id="{{ .ID }}" title="删除" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:#9b1c1c; font-size:14px; padding:0 2px; line-height:1;">✕</span>
+                        <span class="del-shortcut" data-id="{{ .ID }}" title="鍒犻櫎" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:#9b1c1c; font-size:14px; padding:0 2px; line-height:1;">鉁?/span>
                     </button>
                     {{ else }}
-                    <span class="muted">暂无快捷命令</span>
+                    <span class="muted">鏆傛棤蹇嵎鍛戒护</span>
                     {{ end }}
                 </div>
 
                 <form id="add-shortcut-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
                     <div class="field" style="margin:0; flex:1; min-width:160px;">
-                        <label for="sc-name">名称</label>
-                        <input id="sc-name" name="name" placeholder="例如：查看内存" required />
+                        <label for="sc-name">鍚嶇О</label>
+                        <input id="sc-name" name="name" placeholder="渚嬪锛氭煡鐪嬪唴瀛? required />
                     </div>
                     <div class="field" style="margin:0; flex:2; min-width:200px;">
-                        <label for="sc-cmd">命令</label>
-                        <input id="sc-cmd" name="command" placeholder="例如：free -h" required />
+                        <label for="sc-cmd">鍛戒护</label>
+                        <input id="sc-cmd" name="command" placeholder="渚嬪锛歠ree -h" required />
                     </div>
-                    <button class="ghost" type="submit">添加快捷命令</button>
+                    <button class="ghost" type="submit">娣诲姞蹇嵎鍛戒护</button>
                 </form>
             </div>
         </section>
@@ -95,7 +95,7 @@
                 const data = await resp.json();
                 appendLine((data.output || '') + '\n');
             } catch (e) {
-                appendLine('[网络错误] ' + e.message + '\n');
+                appendLine('[缃戠粶閿欒] ' + e.message + '\n');
             }
         }
 
@@ -153,20 +153,20 @@
                 });
                 const data = await resp.json();
                 if (data.ok) location.reload();
-                else alert(data.message || '添加失败');
-            } catch(e) { alert('网络错误: ' + e.message); }
+                else alert(data.message || '娣诲姞澶辫触');
+            } catch(e) { alert('缃戠粶閿欒: ' + e.message); }
         });
 
         document.querySelectorAll('.del-shortcut').forEach(function (btn) {
             btn.addEventListener('click', async function(e) {
                 e.stopPropagation();
-                if (!confirm('删除快捷命令？')) return;
+                if (!confirm('鍒犻櫎蹇嵎鍛戒护锛?)) return;
                 try {
                     const resp = await fetch('/shell/shortcuts/delete/' + btn.dataset.id, { method: 'POST' });
                     const data = await resp.json();
                     if (data.ok) location.reload();
-                    else alert(data.message || '删除失败');
-                } catch(e) { alert('网络错误: ' + e.message); }
+                    else alert(data.message || '鍒犻櫎澶辫触');
+                } catch(e) { alert('缃戠粶閿欒: ' + e.message); }
             });
         });
     </script>

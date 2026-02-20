@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
     <style>
         /* page-specific: status cards */
         .status-grid { margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:10px; }
@@ -17,55 +17,55 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/home">返回主菜单</a>
-            <a class="ghost" href="/logout">退出登录</a>
+            <a class="ghost" href="/home">杩斿洖涓昏彍鍗?/a>
+            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>服务器状态</h1>
-            <p class="muted">自动刷新显示 RAM、CPU、硬盘使用情况。</p>
+            <h1>鏈嶅姟鍣ㄧ姸鎬?/h1>
+            <p class="muted">鑷姩鍒锋柊鏄剧ず RAM銆丆PU銆佺‖鐩樹娇鐢ㄦ儏鍐点€?/p>
 
             <div class="status-grid">
                 <div class="status-item">
-                    <h3>当前时区</h3>
+                    <h3>褰撳墠鏃跺尯</h3>
                     <div class="big" id="server-tz">{{ .Status.Time.Timezone }}</div>
-                    <div class="muted">默认未设置时为 Asia/Shanghai</div>
+                    <div class="muted">榛樿鏈缃椂涓?Asia/Shanghai</div>
                 </div>
 
                 <div class="status-item">
-                    <h3>服务器时间</h3>
+                    <h3>鏈嶅姟鍣ㄦ椂闂?/h3>
                     <div class="big" id="server-now">{{ .Status.Time.Now }}</div>
-                    <div class="muted">每 3 秒刷新</div>
+                    <div class="muted">姣?3 绉掑埛鏂?/div>
                 </div>
 
                 <div class="status-item">
-                    <h3>已运行时间</h3>
+                    <h3>宸茶繍琛屾椂闂?/h3>
                     <div class="big" id="server-uptime">{{ .Status.Time.Uptime }}</div>
-                    <div class="muted">系统 uptime（不可用则退回进程运行时长）</div>
+                    <div class="muted">绯荤粺 uptime锛堜笉鍙敤鍒欓€€鍥炶繘绋嬭繍琛屾椂闀匡級</div>
                 </div>
 
                 <div class="status-item">
-                    <h3>RAM 使用率</h3>
+                    <h3>RAM 浣跨敤鐜?/h3>
                     <div class="big" id="ram-usage">{{ .Status.RAM.UsagePercent }}%</div>
-                    <div class="muted" id="ram-detail">已用 {{ .Status.RAM.Used }} / 总计 {{ .Status.RAM.Total }}</div>
+                    <div class="muted" id="ram-detail">宸茬敤 {{ .Status.RAM.Used }} / 鎬昏 {{ .Status.RAM.Total }}</div>
                 </div>
 
                 <div class="status-item">
-                    <h3>CPU 使用率</h3>
+                    <h3>CPU 浣跨敤鐜?/h3>
                     <div class="big" id="cpu-usage">{{ .Status.CPU.UsagePercent }}%</div>
-                    <div class="muted">Linux 下基于 /proc/stat 差分计算</div>
+                    <div class="muted">Linux 涓嬪熀浜?/proc/stat 宸垎璁＄畻</div>
                 </div>
 
                 <div class="status-item">
-                    <h3>硬盘使用率</h3>
+                    <h3>纭洏浣跨敤鐜?/h3>
                     <div class="big" id="disk-usage">{{ .Status.Disk.UsagePercent }}%</div>
-                    <div class="muted" id="disk-detail">已用 {{ .Status.Disk.Used }} / 总计 {{ .Status.Disk.Total }}</div>
+                    <div class="muted" id="disk-detail">宸茬敤 {{ .Status.Disk.Used }} / 鎬昏 {{ .Status.Disk.Total }}</div>
                 </div>
             </div>
 
-            <div class="muted" id="last-updated" style="margin-top: 10px;">最后刷新：--</div>
+            <div class="muted" id="last-updated" style="margin-top: 10px;">鏈€鍚庡埛鏂帮細--</div>
         </section>
     </main>
 
@@ -90,14 +90,14 @@
             }
 
             document.getElementById("ram-usage").textContent = (data.ram.usage_percent || 0) + "%";
-            document.getElementById("ram-detail").textContent = "已用 " + fmtBytes(data.ram.used) + " / 总计 " + fmtBytes(data.ram.total);
+            document.getElementById("ram-detail").textContent = "宸茬敤 " + fmtBytes(data.ram.used) + " / 鎬昏 " + fmtBytes(data.ram.total);
 
             document.getElementById("cpu-usage").textContent = (data.cpu.usage_percent || 0) + "%";
 
             document.getElementById("disk-usage").textContent = (data.disk.usage_percent || 0) + "%";
-            document.getElementById("disk-detail").textContent = "已用 " + fmtBytes(data.disk.used) + " / 总计 " + fmtBytes(data.disk.total);
+            document.getElementById("disk-detail").textContent = "宸茬敤 " + fmtBytes(data.disk.used) + " / 鎬昏 " + fmtBytes(data.disk.total);
 
-            document.getElementById("last-updated").textContent = "最后刷新：" + new Date().toLocaleString("zh-CN");
+            document.getElementById("last-updated").textContent = "鏈€鍚庡埛鏂帮細" + new Date().toLocaleString("zh-CN");
         }
 
         async function fetchStatus() {

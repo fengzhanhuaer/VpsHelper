@@ -1,31 +1,31 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
 </head>
 <body>
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="btn" href="/system/update">程序更新</a>
-            <a class="btn" href="/change_password">修改密码</a>
-            <a class="btn" href="/logout">退出登录</a>
+            <a class="btn" href="/system/update">绋嬪簭鏇存柊</a>
+            <a class="btn" href="/change_password">淇敼瀵嗙爜</a>
+            <a class="btn" href="/logout">閫€鍑虹櫥褰?/a>
         </nav>
     </header>
     <main>
         <section class="panel panel--wide">
-            <h1>欢迎，{{ .Username }}</h1>
-            <p class="muted">VpsHelper - 选择您需要的功能模块</p>
+            <h1>娆㈣繋锛寋{ .Username }}</h1>
+            <p class="muted">VpsHelper - 閫夋嫨鎮ㄩ渶瑕佺殑鍔熻兘妯″潡</p>
             <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;">
-                <a class="btn" href="/tg_helper" style="display:block; text-align:center;">Tg助手</a>
-                <a class="btn" href="/settings/database" style="display:block; text-align:center;">数据库管理</a>
-                <a class="btn" href="/settings/ssh" style="display:block; text-align:center;">SSH设置</a>
-                <a class="btn" href="/server/status" style="display:block; text-align:center;">服务器状态</a>
-                <a class="btn" href="/shell" style="display:block; text-align:center;">Shell交互</a>
-                <a class="btn" href="/firewall" style="display:block; text-align:center;">防火墙</a>
+                <a class="btn" href="/tg_helper" style="display:block; text-align:center;">Tg鍔╂墜</a>
+                <a class="btn" href="/settings/database" style="display:block; text-align:center;">鏁版嵁搴撶鐞?/a>
+                <a class="btn" href="/settings/ssh" style="display:block; text-align:center;">SSH璁剧疆</a>
+                <a class="btn" href="/server/status" style="display:block; text-align:center;">鏈嶅姟鍣ㄧ姸鎬?/a>
+                <a class="btn" href="/shell" style="display:block; text-align:center;">Shell浜や簰</a>
+                <a class="btn" href="/firewall" style="display:block; text-align:center;">闃茬伀澧?/a>
             </div>
         </section>
     </main>

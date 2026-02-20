@@ -60,6 +60,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 			} else if strings.HasSuffix(name, ".png") {
 				contentType = "image/png"
 			}
+			c.Header("Cache-Control", "public, max-age=86400")
 			c.Data(http.StatusOK, contentType, data)
 		})
 	}

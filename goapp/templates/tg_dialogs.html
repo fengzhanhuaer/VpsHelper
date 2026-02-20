@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
     <style>
         .progress-card { display:none; margin-top:10px; padding:12px; border-radius:12px; border:1px solid #ecd7cb; background:#fff8f3; }
         .progress-bar { width:100%; height:8px; border-radius:999px; background:#f1dfd2; overflow:hidden; margin:6px 0 4px; }
@@ -15,16 +15,16 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/tg_helper">返回 Tg 助手</a>
-            <a class="ghost" href="/home">返回主页</a>
-            <a class="ghost" href="/logout">退出登录</a>
+            <a class="ghost" href="/tg_helper">杩斿洖 Tg 鍔╂墜</a>
+            <a class="ghost" href="/home">杩斿洖涓婚〉</a>
+            <a class="ghost" href="/logout">閫€鍑虹櫥褰?/a>
         </nav>
     </header>
 
     <main>
         <section class="panel">
-            <h1>会话列表</h1>
-            <p class="muted">会话列表保存的是可发送目标的会话ID。若历史任务仍使用 @username，刷新后会自动迁移为会话ID。</p>
+            <h1>浼氳瘽鍒楄〃</h1>
+            <p class="muted">浼氳瘽鍒楄〃淇濆瓨鐨勬槸鍙彂閫佺洰鏍囩殑浼氳瘽ID銆傝嫢鍘嗗彶浠诲姟浠嶄娇鐢?@username锛屽埛鏂板悗浼氳嚜鍔ㄨ縼绉讳负浼氳瘽ID銆?/p>
 
             <div id="page-msg-area">
             {{ if .Message }}
@@ -33,26 +33,26 @@
             </div>
 
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:4px;">
-                <!-- Account selector — GET, no stream -->
+                <!-- Account selector 鈥?GET, no stream -->
                 <form method="get" action="/tg/dialogs" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
                     <div class="field" style="min-width:280px; margin-bottom:0;">
-                        <label for="account_id">选择账号</label>
+                        <label for="account_id">閫夋嫨璐﹀彿</label>
                         <select id="account_id" name="account_id">
                             {{ range .Accounts }}
                               <option value="{{ .ID }}" {{ if eq $.AccountID .ID }}selected{{ end }}>{{ .ID }} - {{ .AccountName }}</option>
                             {{ end }}
                         </select>
                     </div>
-                    <button class="ghost" type="submit">切换</button>
+                    <button class="ghost" type="submit">鍒囨崲</button>
                 </form>
 
-                <!-- Refresh button — triggers SSE stream -->
-                <button id="dialogs-refresh-btn" class="btn" type="button">刷新会话列表</button>
+                <!-- Refresh button 鈥?triggers SSE stream -->
+                <button id="dialogs-refresh-btn" class="btn" type="button">鍒锋柊浼氳瘽鍒楄〃</button>
             </div>
 
             <!-- Inline progress card -->
             <div id="dialogs-progress-card" class="progress-card">
-                <div id="dialogs-progress-text" class="muted">准备中...</div>
+                <div id="dialogs-progress-text" class="muted">鍑嗗涓?..</div>
                 <div class="progress-bar"><div id="dialogs-progress-fill" class="progress-fill"></div></div>
                 <div id="dialogs-progress-pct" class="muted" style="font-size:11px;">0%</div>
             </div>
@@ -60,10 +60,10 @@
             <table id="dialogs-table" style="margin-top:12px;">
                 <thead>
                     <tr>
-                        <th>标题</th>
+                        <th>鏍囬</th>
                         <th>username</th>
-                        <th>会话ID</th>
-                        <th>更新时间</th>
+                        <th>浼氳瘽ID</th>
+                        <th>鏇存柊鏃堕棿</th>
                     </tr>
                 </thead>
                 <tbody id="dialogs-tbody">
@@ -75,7 +75,7 @@
                         <td class="muted">{{ .UpdatedAt }}</td>
                     </tr>
                 {{ else }}
-                    <tr><td colspan="4" class="muted">暂无数据（先刷新）</td></tr>
+                    <tr><td colspan="4" class="muted">鏆傛棤鏁版嵁锛堝厛鍒锋柊锛?/td></tr>
                 {{ end }}
                 </tbody>
             </table>
@@ -129,7 +129,7 @@
 
         function renderRows(dialogs) {
             if (!dialogs || dialogs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="muted">暂无数据（先刷新）</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="muted">鏆傛棤鏁版嵁锛堝厛鍒锋柊锛?/td></tr>';
                 return;
             }
             var html = '';
@@ -147,10 +147,10 @@
         btn.addEventListener('click', async function () {
             var accountID = accountSel ? accountSel.value : '0';
             card.style.display = 'block';
-            setProgress(0, '准备刷新...');
+            setProgress(0, '鍑嗗鍒锋柊...');
             msgArea.innerHTML = '';
             btn.disabled = true;
-            btn.textContent = '刷新中...';
+            btn.textContent = '鍒锋柊涓?..';
 
             var fd = new FormData();
             fd.set('account_id', accountID);
@@ -162,7 +162,7 @@
                     credentials: 'same-origin',
                     headers: { 'Accept': 'application/x-ndjson' }
                 });
-                if (!res.ok || !res.body) throw new Error('请求失败（HTTP ' + res.status + '）');
+                if (!res.ok || !res.body) throw new Error('璇锋眰澶辫触锛圚TTP ' + res.status + '锛?);
 
                 var reader  = res.body.getReader();
                 var decoder = new TextDecoder();
@@ -195,14 +195,14 @@
                 } else if (lastEv) {
                     showMsg(lastEv.message, false);
                 } else {
-                    showMsg('刷新结束，请刷新页面确认结果。', false);
+                    showMsg('鍒锋柊缁撴潫锛岃鍒锋柊椤甸潰纭缁撴灉銆?, false);
                 }
             } catch (err) {
-                showMsg(err && err.message ? err.message : '请求出错', false);
-                setProgress(0, '出错');
+                showMsg(err && err.message ? err.message : '璇锋眰鍑洪敊', false);
+                setProgress(0, '鍑洪敊');
             } finally {
                 btn.disabled = false;
-                btn.textContent = '刷新会话列表';
+                btn.textContent = '鍒锋柊浼氳瘽鍒楄〃';
                 // Hide progress card after 2s
                 setTimeout(function () { card.style.display = 'none'; }, 2000);
             }
