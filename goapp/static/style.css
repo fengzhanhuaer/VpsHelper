@@ -44,6 +44,22 @@ main {
     box-shadow: 0 10px 30px rgba(31, 27, 22, 0.08);
 }
 
+/* Centered narrow card for login / auth pages */
+.panel--center {
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 48px;
+}
+
+/* Centered wider card for nav menus and multi-field forms */
+.panel--wide {
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 32px;
+}
+
 /* ── Buttons ───────────────────────────────────────────────────── */
 .btn {
     display: inline-block;
