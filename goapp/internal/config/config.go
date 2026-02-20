@@ -3,6 +3,7 @@
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -29,10 +30,9 @@ func Load() Config {
 		dataDir = filepath.Join(baseDir, "..", "userdata")
 	}
 
-	templatesDir := os.Getenv("VPSHELPER_TEMPLATES_DIR")
-	if templatesDir == "" {
-		templatesDir = filepath.Join(baseDir, "templates")
-	}
+	// Production defaults to embedded templates.
+	// Set VPSHELPER_TEMPLATES_DIR explicitly for local template hot-reload.
+	templatesDir := strings.TrimSpace(os.Getenv("VPSHELPER_TEMPLATES_DIR"))
 
 	listenAddr := os.Getenv("VPSHELPER_LISTEN")
 	if listenAddr == "" {
