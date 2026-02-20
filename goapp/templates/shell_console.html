@@ -68,12 +68,12 @@
         var cmdInput = document.getElementById('cmd-input');
         var runBtn = document.getElementById('run-btn');
         var clearBtn = document.getElementById('clear-btn');
-        var history = [];
+        var cmdHistory = [];
         var histIdx = -1;
         
         try {
             var histEl = document.getElementById('history-data');
-            if (histEl) history = JSON.parse(histEl.textContent) || [];
+            if (histEl) cmdHistory = JSON.parse(histEl.textContent) || [];
         } catch(e) {}
 
         function appendLine(text) {
@@ -84,7 +84,7 @@
         async function runCommand(cmd) {
             if (!cmd.trim()) return;
             appendLine('$ ' + cmd + '\n');
-            history.unshift(cmd);
+            cmdHistory.unshift(cmd);
             histIdx = -1;
             try {
                 const resp = await fetch('/shell/exec', {
@@ -95,7 +95,7 @@
                 const data = await resp.json();
                 appendLine((data.output || '') + '\n');
             } catch (e) {
-                appendLine('[缃戠粶閿欒] ' + e.message + '\n');
+                appendLine('[网络错误] ' + e.message + '\n');
             }
         }
 
@@ -113,15 +113,15 @@
                 runCommand(cmd);
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                if (histIdx < history.length - 1) {
+                if (histIdx < cmdHistory.length - 1) {
                     histIdx += 1;
-                    cmdInput.value = history[histIdx];
+                    cmdInput.value = cmdHistory[histIdx];
                 }
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 if (histIdx > 0) {
                     histIdx -= 1;
-                    cmdInput.value = history[histIdx];
+                    cmdInput.value = cmdHistory[histIdx];
                 } else {
                     histIdx = -1;
                     cmdInput.value = '';
@@ -153,20 +153,20 @@
                 });
                 const data = await resp.json();
                 if (data.ok) location.reload();
-                else alert(data.message || '娣诲姞澶辫触');
-            } catch(e) { alert('缃戠粶閿欒: ' + e.message); }
+                else alert(data.message || '添加失败');
+            } catch(e) { alert('网络错误: ' + e.message); }
         });
 
         document.querySelectorAll('.del-shortcut').forEach(function (btn) {
             btn.addEventListener('click', async function(e) {
                 e.stopPropagation();
-                if (!confirm('鍒犻櫎蹇嵎鍛戒护锛?)) return;
+                if (!confirm('确认删除快捷命令？')) return;
                 try {
                     const resp = await fetch('/shell/shortcuts/delete/' + btn.dataset.id, { method: 'POST' });
                     const data = await resp.json();
                     if (data.ok) location.reload();
-                    else alert(data.message || '鍒犻櫎澶辫触');
-                } catch(e) { alert('缃戠粶閿欒: ' + e.message); }
+                    else alert(data.message || '删除失败');
+                } catch(e) { alert('网络错误: ' + e.message); }
             });
         });
     </script>
