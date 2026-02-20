@@ -64,8 +64,8 @@
                     <tr>
                         <td>{{ .port }}</td>
                         <td>{{ .protocol }}</td>
-                        <td>{{ join .bind_ips "锛? }}</td>
-                        <td>{{ join .process_names "锛? }}</td>
+                        <td>{{ join .bind_ips ", " }}</td>
+                        <td>{{ join .process_names ", " }}</td>
                     </tr>
                     {{ end }}
                 </tbody>
@@ -91,7 +91,7 @@
                         <td>{{ .Port }}</td>
                         <td>{{ .Protocol }}</td>
                         <td>{{ .BindIP }}</td>
-                        <td>{{ join .ProcNames "锛? }}</td>
+                        <td>{{ join .ProcNames ", " }}</td>
                     </tr>
                     {{ end }}
                 </tbody>

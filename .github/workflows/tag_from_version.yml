@@ -1,4 +1,4 @@
-name: tag-from-version
+﻿name: tag-from-version
 
 on:
   push:

@@ -1,4 +1,4 @@
-package static
+﻿package static
 
 import "embed"
 

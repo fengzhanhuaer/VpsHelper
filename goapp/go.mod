@@ -1,4 +1,4 @@
-module vpshelper-go
+﻿module vpshelper-go
 
 go 1.24.0
 

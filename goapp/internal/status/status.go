@@ -1,4 +1,4 @@
-package status
+﻿package status
 
 import (
     "bufio"

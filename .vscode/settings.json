@@ -1,4 +1,4 @@
-{
+﻿{
   "chat.tools.terminal.autoApprove": {
     "/^cd goapp; go test \\./\\.\\.\\.$/": {
       "approve": true,
