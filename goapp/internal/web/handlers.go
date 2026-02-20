@@ -84,7 +84,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/server/status", h.serverStatus)
 	router.GET("/server/status/data", h.serverStatusData)
 	router.GET("/shell", h.shellConsole)
-	router.POST("/shell/exec", h.shellExec)
+	router.POST("/shell/run", h.shellExec)
 	router.POST("/shell/shortcuts/add", h.shellShortcutsAdd)
 	router.POST("/shell/shortcuts/delete/:id", h.shellShortcutsDelete)
 	router.POST("/shell/shortcuts/clear", h.shellShortcutsClear)

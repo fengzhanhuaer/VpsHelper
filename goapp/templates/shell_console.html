@@ -26,7 +26,7 @@
             <h1>Shell 交互</h1>
             <p class="muted">输入 Shell 命令并在此查看输出（基于服务器执行）。</p>
 
-            <div id="terminal">等待命令...\n</div>
+            <div id="terminal"></div>
 
             <div id="cmd-bar">
                 <input id="cmd-input" class="field" style="margin:0;" type="text" placeholder="输入 Shell 命令" autocomplete="off" autofocus />
@@ -80,6 +80,8 @@
             terminal.textContent += text;
             terminal.scrollTop = terminal.scrollHeight;
         }
+        appendLine('等待命令...\n');
+
 
         async function runCommand(cmd) {
             if (!cmd.trim()) return;
@@ -87,7 +89,7 @@
             cmdHistory.unshift(cmd);
             histIdx = -1;
             try {
-                const resp = await fetch('/shell/exec', {
+                const resp = await fetch('/shell/run', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: 'command=' + encodeURIComponent(cmd)
