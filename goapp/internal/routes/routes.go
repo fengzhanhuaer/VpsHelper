@@ -3,6 +3,7 @@ package routes
 import (
 	"database/sql"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,9 +35,34 @@ func LoadTemplates(cfg config.Config) (*template.Template, error) {
 }
 
 func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
-	// Always serve static assets from the embedded FS so the single-binary
-	// deployment never depends on on-disk files.
-	router.StaticFS("/static", http.FS(static.FS))
+	// Serve individual static files from the embedded FS.
+	// Using GET handler per-file avoids issues with Gin's StaticFS
+	// and http.FS path handling that caused 404s in production.
+	staticFiles, _ := fs.ReadDir(static.FS, ".")
+	for _, entry := range staticFiles {
+		if entry.IsDir() || strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		name := entry.Name()
+		router.GET("/static/"+name, func(c *gin.Context) {
+			data, err := static.FS.ReadFile(name)
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			contentType := "application/octet-stream"
+			if strings.HasSuffix(name, ".css") {
+				contentType = "text/css; charset=utf-8"
+			} else if strings.HasSuffix(name, ".js") {
+				contentType = "application/javascript; charset=utf-8"
+			} else if strings.HasSuffix(name, ".svg") {
+				contentType = "image/svg+xml"
+			} else if strings.HasSuffix(name, ".png") {
+				contentType = "image/png"
+			}
+			c.Data(http.StatusOK, contentType, data)
+		})
+	}
 
 	web.Register(router, cfg, dbConn)
 }
