@@ -2081,7 +2081,6 @@ func (h *Handler) sshSettings(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
-	_ = username
 
 	message := ""
 	msgOK := false
@@ -2113,52 +2112,43 @@ func (h *Handler) sshSettings(c *gin.Context) {
 				break
 			}
 
-			_ = store.SetSetting(h.dbConn, "ssh_port", strconv.Itoa(p))
-			_ = store.SetSetting(h.dbConn, "ssh_allow_password_login", bool01(allowPass))
-			_ = store.SetSetting(h.dbConn, "ssh_allow_key_login", bool01(allowKey))
+			// Only store public key in database (for backup)
 			_ = store.SetSetting(h.dbConn, "ssh_public_key", pub)
 
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 45*time.Second)
 			defer cancel()
 			ok, msg := ssh.ApplySettings(ctx, p, allowPass, allowKey, pub)
 			if ok {
-				message = "SSH 设置已保存，并已自动应用到系统。"
+				message = "SSH 设置已应用到系统。"
 				msgOK = true
 			} else {
-				message = "SSH 设置已保存，但系统应用失败：" + msg
+				message = "系统应用失败：" + msg
 			}
 		}
 	}
 
-	settings, err := store.GetSettings(h.dbConn, []string{"ssh_port", "ssh_allow_password_login", "ssh_allow_key_login", "ssh_public_key"})
-	if err != nil {
-		c.String(http.StatusInternalServerError, "load settings failed")
-		return
-	}
+	// Read port, password/key auth from actual system config
+	sysCfg := ssh.ReadSystemConfig()
 
-	sshPort := settings["ssh_port"]
-	if sshPort == "" {
-		sshPort = "22"
-	}
-	allowPass := settings["ssh_allow_password_login"]
-	if allowPass == "" {
-		allowPass = "1"
-	}
-	allowKey := settings["ssh_allow_key_login"]
-	if allowKey == "" {
-		allowKey = "1"
+	// Read public key from database (backup & editable)
+	dbSettings, _ := store.GetSettings(h.dbConn, []string{"ssh_public_key"})
+	pubKey := dbSettings["ssh_public_key"]
+	// If database has no public key stored yet, show system authorized_keys
+	if pubKey == "" {
+		pubKey = sysCfg.AuthorizedKeys
 	}
 
 	c.HTML(http.StatusOK, "ssh_settings.html", gin.H{
 		"Title":              "SSH 设置",
 		"Message":            message,
 		"MsgOK":              msgOK,
-		"SSHPort":            sshPort,
-		"SSHPublicKey":       settings["ssh_public_key"],
-		"AllowPasswordLogin": allowPass == "1",
-		"AllowKeyLogin":      allowKey == "1",
+		"SSHPort":            strconv.Itoa(sysCfg.Port),
+		"SSHPublicKey":       pubKey,
+		"AllowPasswordLogin": sysCfg.AllowPassword,
+		"AllowKeyLogin":      sysCfg.AllowPubkey,
 	})
 }
+
 
 func bool01(v bool) string {
 	if v {

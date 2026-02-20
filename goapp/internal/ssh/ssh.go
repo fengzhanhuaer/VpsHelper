@@ -16,6 +16,61 @@ import (
 	"time"
 )
 
+// SystemSSHConfig holds SSH settings read directly from the OS.
+type SystemSSHConfig struct {
+	Port           int
+	AllowPassword  bool
+	AllowPubkey    bool
+	AuthorizedKeys string // contents of ~/.ssh/authorized_keys
+}
+
+// ReadSystemConfig reads the actual sshd_config and authorized_keys from the OS.
+func ReadSystemConfig() SystemSSHConfig {
+	cfg := SystemSSHConfig{Port: 22, AllowPassword: true, AllowPubkey: true}
+
+	if runtime.GOOS == "windows" {
+		return cfg
+	}
+
+	b, err := os.ReadFile("/etc/ssh/sshd_config")
+	if err != nil {
+		return cfg
+	}
+
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		key := strings.ToLower(fields[0])
+		val := strings.ToLower(fields[1])
+		switch key {
+		case "port":
+			if p, err := strconv.Atoi(fields[1]); err == nil && p > 0 && p <= 65535 {
+				cfg.Port = p
+			}
+		case "passwordauthentication":
+			cfg.AllowPassword = val == "yes"
+		case "pubkeyauthentication":
+			cfg.AllowPubkey = val == "yes"
+		}
+	}
+
+	// Read authorized_keys
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		ak := filepath.Join(u.HomeDir, ".ssh", "authorized_keys")
+		if data, err := os.ReadFile(ak); err == nil {
+			cfg.AuthorizedKeys = strings.TrimSpace(string(data))
+		}
+	}
+
+	return cfg
+}
+
 func Diagnose(port int) string {
 	if port <= 0 {
 		port = 22
