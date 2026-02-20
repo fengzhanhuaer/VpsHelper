@@ -89,22 +89,33 @@
             appendLine('$ ' + cmd + '\n');
             cmdHistory.unshift(cmd);
             histIdx = -1;
+            appendLine('[DEBUG] 开始发送请求...\n');
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/shell/exec', true);
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.onreadystatechange = function() {
+                appendLine('[DEBUG] readyState=' + xhr.readyState + ' status=' + xhr.status + '\n');
+            };
             xhr.onload = function() {
+                appendLine('[DEBUG] onload status=' + xhr.status + ' len=' + xhr.responseText.length + '\n');
                 try {
                     var data = JSON.parse(xhr.responseText);
                     appendLine((data.output || '') + '\n');
                 } catch (e) {
                     appendLine('[解析错误] ' + e.message + '\n');
+                    appendLine('[响应内容] ' + xhr.responseText.substring(0, 200) + '\n');
                 }
             };
             xhr.onerror = function() {
-                appendLine('[网络错误] 请求失败\n');
+                appendLine('[网络错误] 请求失败 readyState=' + xhr.readyState + '\n');
+            };
+            xhr.ontimeout = function() {
+                appendLine('[超时] 请求超时\n');
             };
             xhr.send('command=' + encodeURIComponent(cmd));
+            appendLine('[DEBUG] xhr.send() 已调用\n');
         }
+
 
 
         runBtn.addEventListener('click', function () {
