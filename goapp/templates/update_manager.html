@@ -110,12 +110,12 @@
 
                     <!-- Action buttons -->
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button id="btn-update" class="btn" type="button">⬆ 从 Release 更新并重启</button>
                         <form method="post" action="/system/update" style="display:inline;">
-                            <button class="ghost" type="submit" name="action" value="gh_check">检查最新 Release</button>
+                            <button class="ghost" type="submit" name="action" value="gh_check">🔍 检测更新</button>
                         </form>
+                        <button id="btn-update" class="btn" type="button">⬆ 下载并重启服务</button>
                         <form method="post" action="/system/update" style="display:inline;">
-                            <button id="btn-restart" class="ghost" type="submit" name="action" value="restart">↺ 仅重启服务</button>
+                            <button class="ghost" type="submit" name="action" value="restart">↺ 仅重启服务</button>
                         </form>
                     </div>
                 </div>
@@ -127,7 +127,7 @@
                         <span id="update-progress-percent" class="muted" style="font-size:13px;">—</span>
                     </div>
                     <div class="progress-bar"><div id="update-progress-fill" class="progress-fill"></div></div>
-                    <div id="update-progress-text" class="muted" style="font-size:13px; margin-bottom:6px;">点击「从 Release 更新并重启」开始</div>
+                    <div id="update-progress-text" class="muted" style="font-size:13px; margin-bottom:6px;">点击「下载并重启服务」开始</div>
                     <div id="update-progress-log" class="progress-log"><span class="progress-idle">尚未执行任何操作</span></div>
                 </div>
             </div>
@@ -161,7 +161,7 @@
 
             function setBusy(busy) {
                 updateBtn.disabled = busy;
-                updateBtn.textContent = busy ? "更新中..." : "⬆ 从 Release 更新并重启";
+                updateBtn.textContent = busy ? "更新中..." : "⬆ 下载并重启服务";
             }
 
             async function runUpdate() {
