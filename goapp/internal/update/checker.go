@@ -12,19 +12,18 @@ import (
 	"sync"
 	"time"
 
-	"vpshelper-go/internal/store"
 	"vpshelper-go/internal/version"
 )
 
 // PreDownloadState holds info about a pre-downloaded release binary.
 type PreDownloadState struct {
-	Available   bool   // a newer release has been pre-downloaded
-	TagName     string // e.g. "v0.2.46"
-	AssetName   string
-	BinaryPath  string // local path of the downloaded binary
+	Available    bool   // a newer release has been pre-downloaded
+	TagName      string // e.g. "v0.2.46"
+	AssetName    string
+	BinaryPath   string // local path of the downloaded binary
 	DownloadedAt time.Time
-	Downloading bool   // currently downloading
-	Error       string // last check/download error (transient)
+	Downloading  bool   // currently downloading in background
+	Error        string // last check/download error (transient)
 }
 
 var (
@@ -45,76 +44,22 @@ func setPreDownloadState(fn func(*PreDownloadState)) {
 	fn(&checkerState)
 }
 
-// StartBackgroundChecker launches a goroutine that periodically checks
-// for new GitHub releases and pre-downloads them. The check interval
-// is 30 minutes. The first check happens 30 seconds after startup.
-func StartBackgroundChecker(ctx context.Context, dbConn *sql.DB, baseDir string) {
-	go func() {
-		// Wait a bit after startup before first check.
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(30 * time.Second):
-		}
-
-		runCheck(ctx, dbConn, baseDir)
-
-		ticker := time.NewTicker(30 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				runCheck(ctx, dbConn, baseDir)
-			}
-		}
-	}()
-}
-
-func runCheck(ctx context.Context, dbConn *sql.DB, baseDir string) {
-	ghOwner := "fengzhanhuaer"
-	ghRepo := "VpsHelper"
-	ghToken := ""
-	ghAsset := ""
-
-	if settings, err := store.GetSettings(dbConn, []string{"github_release_token", "github_release_asset"}); err == nil {
-		ghToken = settings["github_release_token"]
-		ghAsset = settings["github_release_asset"]
-	}
-
-	checkCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	info, rel, err := FetchLatestGitHubRelease(checkCtx, ghOwner, ghRepo, ghToken)
-	if err != nil && strings.TrimSpace(ghToken) != "" {
-		// Fallback to anonymous.
-		if info2, rel2, err2 := FetchLatestGitHubRelease(checkCtx, ghOwner, ghRepo, ""); err2 == nil {
-			info, rel, err = info2, rel2, nil
-			ghToken = ""
-		}
-	}
-	if err != nil {
-		setPreDownloadState(func(s *PreDownloadState) {
-			s.Error = "检查更新失败: " + err.Error()
-		})
-		log.Printf("[auto-update] check failed: %v", err)
-		return
-	}
-
-	// Compare with current version.
+// TriggerPreDownload starts a background download of the latest release
+// if a newer version is available. Called when user manually checks.
+// Returns immediately; download happens in a goroutine.
+func TriggerPreDownload(dbConn *sql.DB, baseDir string, info GitHubReleaseInfo, rel *ghRelease, ghToken, ghAsset string) {
 	latest := strings.TrimPrefix(info.TagName, "v")
 	current := strings.TrimPrefix(version.Version, "v")
 	if latest == current {
-		setPreDownloadState(func(s *PreDownloadState) {
-			s.Error = ""
-		})
 		return
 	}
 
 	// Already downloaded this version?
 	st := GetPreDownloadState()
 	if st.Available && st.TagName == info.TagName {
+		return
+	}
+	if st.Downloading {
 		return
 	}
 
@@ -126,45 +71,46 @@ func runCheck(ctx context.Context, dbConn *sql.DB, baseDir string) {
 		return
 	}
 
-	// Start downloading.
 	setPreDownloadState(func(s *PreDownloadState) {
 		s.Downloading = true
 		s.Error = ""
 	})
 
-	log.Printf("[auto-update] new release found: %s (current: %s), downloading %s...", info.TagName, version.Version, asset.Name)
+	go func() {
+		log.Printf("[pre-download] downloading %s (%s)...", info.TagName, asset.Name)
 
-	ext := ""
-	if runtime.GOOS == "windows" {
-		ext = ".exe"
-	}
-	destDir := filepath.Join(baseDir, "bin")
-	_ = os.MkdirAll(destDir, 0o755)
-	dest := filepath.Join(destDir, "vpshelper-predownload"+ext)
+		ext := ""
+		if runtime.GOOS == "windows" {
+			ext = ".exe"
+		}
+		destDir := filepath.Join(baseDir, "bin")
+		_ = os.MkdirAll(destDir, 0o755)
+		dest := filepath.Join(destDir, "vpshelper-predownload"+ext)
 
-	dlCtx, dlCancel := context.WithTimeout(ctx, 15*time.Minute)
-	defer dlCancel()
+		dlCtx, dlCancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer dlCancel()
 
-	bin, err := DownloadReleaseAsset(dlCtx, asset, ghToken, dest)
-	if err != nil {
+		bin, err := DownloadReleaseAsset(dlCtx, asset, ghToken, dest)
+		if err != nil {
+			setPreDownloadState(func(s *PreDownloadState) {
+				s.Downloading = false
+				s.Error = "预下载失败: " + err.Error()
+			})
+			log.Printf("[pre-download] failed: %v", err)
+			return
+		}
+
 		setPreDownloadState(func(s *PreDownloadState) {
+			s.Available = true
+			s.TagName = info.TagName
+			s.AssetName = asset.Name
+			s.BinaryPath = bin
+			s.DownloadedAt = time.Now()
 			s.Downloading = false
-			s.Error = "预下载失败: " + err.Error()
+			s.Error = ""
 		})
-		log.Printf("[auto-update] pre-download failed: %v", err)
-		return
-	}
-
-	setPreDownloadState(func(s *PreDownloadState) {
-		s.Available = true
-		s.TagName = info.TagName
-		s.AssetName = asset.Name
-		s.BinaryPath = bin
-		s.DownloadedAt = time.Now()
-		s.Downloading = false
-		s.Error = ""
-	})
-	log.Printf("[auto-update] pre-downloaded %s to %s", info.TagName, bin)
+		log.Printf("[pre-download] ready: %s -> %s", info.TagName, bin)
+	}()
 }
 
 // ApplyPreDownload replaces the current executable with the pre-downloaded
@@ -175,7 +121,6 @@ func ApplyPreDownload() (string, bool) {
 		return "没有预下载的更新可用。", false
 	}
 
-	// Verify the pre-downloaded binary exists.
 	if _, err := os.Stat(st.BinaryPath); err != nil {
 		setPreDownloadState(func(s *PreDownloadState) {
 			s.Available = false
@@ -200,7 +145,6 @@ func ApplyPreDownload() (string, bool) {
 
 	msg := fmt.Sprintf("已应用预下载版本 %s，服务将在 1 秒后自动重启。", st.TagName)
 
-	// Clear state.
 	setPreDownloadState(func(s *PreDownloadState) {
 		s.Available = false
 		s.BinaryPath = ""

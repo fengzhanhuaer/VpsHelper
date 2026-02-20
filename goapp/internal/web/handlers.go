@@ -1802,6 +1802,8 @@ func (h *Handler) systemUpdate(c *gin.Context) {
 			if action == "gh_check" {
 				message = "已获取最新 Release 信息。"
 				msgOK = true
+				// Trigger background pre-download if newer version found
+				update.TriggerPreDownload(h.dbConn, h.cfg.BaseDir, info, rel, ghToken, ghAsset)
 				break
 			}
 
