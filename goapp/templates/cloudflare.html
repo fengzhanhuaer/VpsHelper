@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+        textarea.ip-list { min-height: 150px; font-family: monospace; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/home">返回</a>
+        </nav>
+    </header>
+    <main>
+        <section class="panel panel--wide">
+            <h1>Cloudflare 防火墙与 ZeroTrust 策略设置</h1>
+            <p class="muted">通过 Cloudflare API 推送 IP BlockList（防火墙屏蔽）和 WhiteList（ZeroTrust 放行）规则。</p>
+
+            {{ if .Error }}
+            <div class="error" id="msg-box">{{ .Error }}</div>
+            {{ else if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" id="msg-box">{{ .Message }}</div>
+            {{ end }}
+
+            <form method="post" action="/cloudflare/sync" id="syncForm"></form>
+
+            <form method="post" action="/cloudflare">
+                <div class="field">
+                    <label for="cf_api_token">Cloudflare API Token (具有修改防火墙和 Access 权限)</label>
+                    <input id="cf_api_token" name="cf_api_token" value="{{ .Token }}" placeholder="传入你的 Global API Key 或是具备范围权限的 Token" required/>
+                </div>
+
+                <div class="grid-2">
+                    <div>
+                        <h3>防火墙 BlockList 设置 (IP 访问规则)</h3>
+                        <div class="field">
+                            <label for="cf_zone_id">Zone ID</label>
+                            <input id="cf_zone_id" name="cf_zone_id" value="{{ .ZoneID }}" placeholder="主域名对应的 Zone ID" />
+                        </div>
+                        <div class="field">
+                            <label for="cf_block_uris">要保护的 URI 或 URL 列表 (访问这些地址即触发规则阻断，每行一个)</label>
+                            <textarea id="cf_block_uris" name="cf_block_uris" class="ip-list" placeholder="/api/webhook&#10;https://example.com/login">{{ .BlockURIs }}</textarea>
+                        </div>
+                        <div class="field">
+                            <label for="cf_block_ips">放行的 IP 或 ASN (如果访问上述 URI，非这些来源则阻断，每行一个)</label>
+                            <textarea id="cf_block_ips" name="cf_block_ips" class="ip-list" placeholder="192.168.1.1&#10;10.0.0.0/24&#10;AS12345">{{ .BlockIPs }}</textarea>
+                        </div>
+                        <button type="submit" name="action" value="sync_block" class="btn" form="syncForm" onclick="syncInputs()">同步推送到 CF 防火墙</button>
+                    </div>
+
+                    <div>
+                        <h3>ZeroTrust WhiteList 设置 (Access 放行)</h3>
+                        <div class="field">
+                            <label for="cf_account_id">Account ID</label>
+                            <input id="cf_account_id" name="cf_account_id" value="{{ .AccountID }}" placeholder="账户的 Account ID (通常在 URL 或侧边栏)" />
+                        </div>
+                        <div class="grid-2" style="gap:10px;">
+                            <div class="field">
+                                <label for="cf_app_id">Access App ID</label>
+                                <input id="cf_app_id" name="cf_app_id" value="{{ .AppID }}" placeholder="如 xxx-xxx" />
+                            </div>
+                            <div class="field">
+                                <label for="cf_policy_id">Access Policy ID</label>
+                                <input id="cf_policy_id" name="cf_policy_id" value="{{ .PolicyID }}" placeholder="在此政策中写入 Includes" />
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="cf_allow_ips">要 Allow (白名单放行) 的 IP 列表 (每行一个)</label>
+                            <textarea id="cf_allow_ips" name="cf_allow_ips" class="ip-list" placeholder="192.168.1.1">{{ .AllowIPs }}</textarea>
+                        </div>
+                        <button type="submit" name="action" value="sync_allow" class="btn" form="syncForm" onclick="syncInputs()">同步推送到 ZeroTrust 策略</button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                    <button type="submit" name="action" value="save" class="btn btn-secondary">只保存配置 (不同步到 CF)</button>
+                </div>
+            </form>
+        </section>
+    </main>
+    <script>
+        // 将主表单的输入内容拷贝到同步表单以便一同提交数据
+        function syncInputs() {
+            var syncForm = document.getElementById("syncForm");
+            syncForm.innerHTML = "";
+            var inputs = document.querySelectorAll("input, textarea");
+            inputs.forEach(function(el) {
+                if (el.name) {
+                    var hidden = document.createElement("input");
+                    hidden.type = "hidden";
+                    hidden.name = el.name;
+                    hidden.value = el.value;
+                    syncForm.appendChild(hidden);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

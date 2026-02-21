@@ -97,6 +97,9 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/shell/shortcuts/clear", h.shellShortcutsClear)
 	router.GET("/firewall", h.firewallPage)
 	router.POST("/firewall", h.firewallPage)
+	router.GET("/cloudflare", h.cloudflarePage)
+	router.POST("/cloudflare", h.cloudflarePage)
+	router.POST("/cloudflare/sync", h.cloudflareSync)
 	router.POST("/api/:secret", h.tgBotWebhook)
 }
 
