@@ -15,7 +15,7 @@ import (
 	"vpshelper-go/internal/store"
 )
 
-func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID int64, apiID int, apiHash, allProxy string) (int, string) {
+func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID int64, apiID int, apiHash, allProxy string, onProgress func(int, string)) (int, string) {
 	storage := NewAccountSessionStorage(dbConn, owner, accountID)
 	opts, err := newTelegramOptions(storage, true, allProxy)
 	if err != nil {
@@ -44,11 +44,11 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 				return fmt.Errorf("get dialogs: %w", err)
 			}
 
-			batch, nextPeer, nextID, nextDate, err := extractDialogs(res)
+			rawCount, batch, nextPeer, nextID, nextDate, err := extractDialogs(res)
 			if err != nil {
 				return err
 			}
-			if len(batch) == 0 {
+			if rawCount == 0 {
 				break
 			}
 
@@ -65,6 +65,10 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 				d.AccountID = accountID
 				dialogs = append(dialogs, d)
 			}
+			
+			if onProgress != nil {
+				onProgress(len(dialogs), "拉取中...")
+			}
 
 			offsetPeer = nextPeer
 			offsetID = nextID
@@ -72,7 +76,7 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 			if offsetID == 0 && offsetDate == 0 {
 				break
 			}
-			if len(batch) < 100 {
+			if rawCount < 100 {
 				break
 			}
 		}
@@ -105,16 +109,18 @@ type extracted struct {
 	nextDate int
 }
 
-func extractDialogs(res tg.MessagesDialogsClass) ([]store.TGDialog, tg.InputPeerClass, int, int, error) {
+func extractDialogs(res tg.MessagesDialogsClass) (int, []store.TGDialog, tg.InputPeerClass, int, int, error) {
 	switch v := res.(type) {
 	case *tg.MessagesDialogs:
-		return convertDialogs(v.Dialogs, v.Users, v.Chats)
+		batch, p, id, date, err := convertDialogs(v.Dialogs, v.Users, v.Chats)
+		return len(v.Dialogs), batch, p, id, date, err
 	case *tg.MessagesDialogsSlice:
-		return convertDialogs(v.Dialogs, v.Users, v.Chats)
+		batch, p, id, date, err := convertDialogs(v.Dialogs, v.Users, v.Chats)
+		return len(v.Dialogs), batch, p, id, date, err
 	case *tg.MessagesDialogsNotModified:
-		return nil, &tg.InputPeerEmpty{}, 0, 0, nil
+		return 0, nil, &tg.InputPeerEmpty{}, 0, 0, nil
 	default:
-		return nil, &tg.InputPeerEmpty{}, 0, 0, fmt.Errorf("unsupported dialogs type: %T", res)
+		return 0, nil, &tg.InputPeerEmpty{}, 0, 0, fmt.Errorf("unsupported dialogs type: %T", res)
 	}
 }
 
@@ -149,6 +155,15 @@ func convertDialogs(dialogs []tg.DialogClass, users []tg.UserClass, chats []tg.C
 		}
 
 		dialogID, username, title, peer := resolveDialogPeer(d.Peer, userByID, chatByID, channelByID)
+		
+		// Update offsets best-effort.
+		if peer != nil {
+			lastPeer = peer
+		}
+		lastID = d.TopMessage
+		lastDate = d.ReadInboxMaxID
+		_ = lastDate
+
 		if dialogID == "" {
 			continue
 		}
@@ -157,12 +172,6 @@ func convertDialogs(dialogs []tg.DialogClass, users []tg.UserClass, chats []tg.C
 		}
 
 		out = append(out, store.TGDialog{DialogID: dialogID, Title: title, Username: username})
-
-		// Update offsets best-effort.
-		lastPeer = peer
-		lastID = d.TopMessage
-		lastDate = d.ReadInboxMaxID
-		_ = lastDate
 	}
 
 	return out, lastPeer, lastID, 0, nil

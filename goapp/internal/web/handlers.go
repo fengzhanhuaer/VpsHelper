@@ -637,7 +637,7 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 			defer cancel()
-			n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, selectedAccountID, apiID, apiHash, allProxy)
+			n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, selectedAccountID, apiID, apiHash, allProxy, nil)
 			if msg != "ok" {
 				message = "刷新失败：" + msg
 				break
@@ -787,7 +787,7 @@ func (h *Handler) tgDialogs(c *gin.Context) {
 				} else {
 					ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 					defer cancel()
-					n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, accountID, apiID, apiHash, allProxy)
+					n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, accountID, apiID, apiHash, allProxy, nil)
 					if msg != "ok" {
 						message = "刷新失败: " + msg
 					} else {
@@ -895,7 +895,13 @@ func (h *Handler) tgDialogsRefreshStream(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 	defer cancel()
 
-	n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, accountID, apiID, apiHash, allProxy)
+	n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, accountID, apiID, apiHash, allProxy, func(count int, info string) {
+		pct := 15 + count/100
+		if pct > 75 {
+			pct = 75
+		}
+		send(pct, fmt.Sprintf("拉取中：已获取 %d 条会话...", count), false, false)
+	})
 	if msg != "ok" {
 		fail("刷新失败：" + msg)
 		return
