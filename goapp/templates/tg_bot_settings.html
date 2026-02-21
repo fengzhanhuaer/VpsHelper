@@ -28,14 +28,13 @@
                     <input id="tg_bot_token" name="tg_bot_token" value="{{ .BotToken }}" placeholder="申请的机器人 Token" />
                 </div>
                 <div class="field">
-                    <label for="tg_bot_admin_id">Bot Admin ID (仅列出已登录账户)</label>
-                    <select id="tg_bot_admin_id" name="tg_bot_admin_id">
-                        <option value="">-- 请选择当前绑定的 VPS 账号 --</option>
-                        {{ $admin := .BotAdminID }}
+                    <label for="tg_bot_admin_id">Bot Admin ID (只能响应给此数字 ID，必须填写)</label>
+                    <input list="admin_list" id="tg_bot_admin_id" name="tg_bot_admin_id" value="{{ .BotAdminID }}" placeholder="请输入您的数字 ID 或查拉列表选择" />
+                    <datalist id="admin_list">
                         {{ range .AdminCandidates }}
-                        <option value="{{ .ID }}" {{ if eq .ID $admin }}selected{{ end }}>{{ .Name }}</option>
+                        <option value="{{ .ID }}">{{ .Name }}</option>
                         {{ end }}
-                    </select>
+                    </datalist>
                 </div>
                 <div class="field">
                     <label for="tg_bot_webhook_secret">Webhook Secret (可选)</label>

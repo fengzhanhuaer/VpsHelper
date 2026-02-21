@@ -2,6 +2,7 @@
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -96,7 +97,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/shell/shortcuts/clear", h.shellShortcutsClear)
 	router.GET("/firewall", h.firewallPage)
 	router.POST("/firewall", h.firewallPage)
-	router.POST("/tghelperapi/:secret", h.tgBotWebhook)
+	router.POST("/api/:secret", h.tgBotWebhook)
 }
 
 func (h *Handler) index(c *gin.Context) {
@@ -643,7 +644,12 @@ func (h *Handler) tgBotSettings(c *gin.Context) {
 	_ = store.SetSetting(h.dbConn, "tg_bot_admin_id", botAdmin)
 	
 	if webhookSecret == "" && botToken != "" {
-		webhookSecret = fmt.Sprintf("random_%d", time.Now().UnixNano()) // fallback random
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err == nil {
+			webhookSecret = fmt.Sprintf("tg_%x", b)
+		} else {
+			webhookSecret = fmt.Sprintf("tg_%d", time.Now().UnixNano()) // fallback
+		}
 	}
 	_ = store.SetSetting(h.dbConn, "tg_bot_webhook_secret", webhookSecret)
 
@@ -657,7 +663,7 @@ func (h *Handler) tgBotSettings(c *gin.Context) {
 			scheme = "https"
 		}
 		
-		hookURL := fmt.Sprintf("%s://%s/tghelperapi/%s", scheme, host, webhookSecret)
+		hookURL := fmt.Sprintf("%s://%s/api/%s", scheme, host, webhookSecret)
 		err := tgbot.SetWebhook(botToken, hookURL, webhookSecret)
 		if err != nil {
 			errMsg = "自动注册 Webhook 失败: " + err.Error()
