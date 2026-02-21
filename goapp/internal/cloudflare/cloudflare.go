@@ -51,28 +51,33 @@ func (c *APIClient) doRequest(method, url string, body []byte) ([]byte, error) {
 	return respBody, nil
 }
 
-// LookupZoneID finds the Zone ID for a given domain name
+// LookupZoneID finds the Zone ID for a given domain name.
+// Tries progressively shorter suffixes (sub.example.com → example.com)
+// since Cloudflare zones are registered at the root domain level.
 func (c *APIClient) LookupZoneID(domain string) (string, error) {
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones?name=%s", domain)
-	respBytes, err := c.doRequest("GET", url, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to list zones: %v", err)
+	parts := strings.Split(domain, ".")
+	for i := 0; i < len(parts)-1; i++ {
+		candidate := strings.Join(parts[i:], ".")
+		url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones?name=%s", candidate)
+		respBytes, err := c.doRequest("GET", url, nil)
+		if err != nil {
+			continue
+		}
+		var result struct {
+			Success bool `json:"success"`
+			Result  []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(respBytes, &result); err != nil {
+			continue
+		}
+		if result.Success && len(result.Result) > 0 {
+			return result.Result[0].ID, nil
+		}
 	}
-
-	var result struct {
-		Success bool `json:"success"`
-		Result  []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return "", fmt.Errorf("failed to parse zones: %v", err)
-	}
-	if !result.Success || len(result.Result) == 0 {
-		return "", fmt.Errorf("no zone found for domain: %s", domain)
-	}
-	return result.Result[0].ID, nil
+	return "", fmt.Errorf("no zone found for domain: %s", domain)
 }
 
 func expandIPsAndDomains(items []string) []string {
@@ -382,23 +387,63 @@ func (c *APIClient) SyncReusablePolicy(policyID string, ips []string) (string, e
 		if ip == "" {
 			continue
 		}
-		
-		// Very basic detection
+
+		// Skip ASNs — not supported in ZeroTrust IP rules
+		upper := strings.ToUpper(ip)
+		if strings.HasPrefix(upper, "AS") || isNumeric(strings.SplitN(ip, "/", 2)[0]) {
+			continue
+		}
+
+		// Split host from CIDR suffix
+		host := ip
+		cidr := ""
+		if idx := strings.Index(ip, "/"); idx != -1 {
+			host = ip[:idx]
+			cidr = ip[idx:]
+		}
+
+		// Validate the host portion
+		parsed := net.ParseIP(host)
+		if parsed == nil {
+			continue // skip invalid entries
+		}
+
+		// Convert IPv4-mapped IPv6 (::ffff:x.x.x.x) to plain IPv4
+		if v4 := parsed.To4(); v4 != nil {
+			host = v4.String()
+			parsed = v4
+		}
+
 		key := "ipv4"
-		if strings.Contains(ip, ":") {
+		if strings.Contains(host, ":") {
 			key = "ipv6"
-			if !strings.Contains(ip, "/") {
-				ip = ip + "/128"
+		}
+
+		// If CIDR is specified, validate and normalize the network address
+		if cidr != "" {
+			_, netw, err := net.ParseCIDR(host + cidr)
+			if err != nil {
+				// CIDR invalid — fall back to host-only
+				cidr = ""
+			} else {
+				// Use the canonical network address (e.g. 2403:1::/56 not 2403:1::5/56)
+				host = netw.IP.String()
+				ones, _ := netw.Mask.Size()
+				cidr = fmt.Sprintf("/%d", ones)
 			}
-		} else {
-			if !strings.Contains(ip, "/") {
-				ip = ip + "/32"
+		}
+
+		if cidr == "" {
+			if key == "ipv6" {
+				cidr = "/128"
+			} else {
+				cidr = "/32"
 			}
 		}
 
 		includes = append(includes, map[string]interface{}{
 			"ip": map[string]string{
-				key: ip,
+				key: host + cidr,
 			},
 		})
 	}
