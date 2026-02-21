@@ -117,9 +117,18 @@ func expandIPsAndDomains(items []string) []string {
 		// Not an IP, try resolving as domain
 		ips, err := net.LookupIP(host)
 		if err == nil && len(ips) > 0 {
-			for _, resolveIP := range ips {
-				// If the user specified a domain + CIDR, preserve the CIDR
-				result = append(result, resolveIP.String()+cidr)
+			for _, resolvedIP := range ips {
+				if v4 := resolvedIP.To4(); v4 != nil {
+					// IPv4 address → always use /32 (host route)
+					result = append(result, v4.String()+"/32")
+				} else {
+					// IPv6 address → use user-specified CIDR (e.g. /56) or /128
+					ipv6CIDR := cidr
+					if ipv6CIDR == "" {
+						ipv6CIDR = "/128"
+					}
+					result = append(result, resolvedIP.String()+ipv6CIDR)
+				}
 			}
 		} else {
 			// Resolution failed, keep original so API errs or it's handled downstream
