@@ -51,6 +51,30 @@ func (c *APIClient) doRequest(method, url string, body []byte) ([]byte, error) {
 	return respBody, nil
 }
 
+// LookupZoneID finds the Zone ID for a given domain name
+func (c *APIClient) LookupZoneID(domain string) (string, error) {
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones?name=%s", domain)
+	respBytes, err := c.doRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to list zones: %v", err)
+	}
+
+	var result struct {
+		Success bool `json:"success"`
+		Result  []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return "", fmt.Errorf("failed to parse zones: %v", err)
+	}
+	if !result.Success || len(result.Result) == 0 {
+		return "", fmt.Errorf("no zone found for domain: %s", domain)
+	}
+	return result.Result[0].ID, nil
+}
+
 func expandIPsAndDomains(items []string) []string {
 	var result []string
 	for _, item := range items {
@@ -268,20 +292,70 @@ func (c *APIClient) SyncBlockList(uris []string, ips []string) error {
 	return nil
 }
 
-// SyncWhiteList updates a ZeroTrust policy to include the allowed IPs
-func (c *APIClient) SyncWhiteList(appID, policyID string, ips []string) error {
+// SyncReusablePolicy updates a ZeroTrust Reusable Policy to include the allowed IPs
+func (c *APIClient) SyncReusablePolicy(policyID string, ips []string) (string, error) {
 	if c.AccountID == "" {
-		return fmt.Errorf("Account ID is required for ZeroTrust Access Policy")
+		return "", fmt.Errorf("Account ID is required for ZeroTrust Reusable Policy")
 	}
-	if appID == "" || policyID == "" {
-		return fmt.Errorf("App ID and Policy ID are required")
+
+	listURL := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/access/policies", c.AccountID)
+
+	if policyID == "" {
+		listResp, err := c.doRequest("GET", listURL, nil)
+		if err != nil {
+			return "", fmt.Errorf("failed to list access groups: %v", err)
+		}
+		var listResult struct {
+			Success bool `json:"success"`
+			Result  []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(listResp, &listResult); err != nil {
+			return "", fmt.Errorf("failed to parse access groups list: %v", err)
+		}
+		for _, p := range listResult.Result {
+			if strings.EqualFold(p.Name, "WhiteList") {
+				policyID = p.ID
+				break
+			}
+		}
+		
+		if policyID == "" {
+			newPolicy := map[string]interface{}{
+				"name": "WhiteList",
+				"decision": "bypass",
+				"include": []map[string]interface{}{
+					{"ip": map[string]string{"ipv4": "127.0.0.1/32"}},
+				},
+			}
+			bodyBytes, _ := json.Marshal(newPolicy)
+			createResp, err := c.doRequest("POST", listURL, bodyBytes)
+			if err != nil {
+				return "", fmt.Errorf("failed to create WhiteList reusable policy: %v", err)
+			}
+			var createResult struct {
+				Success bool `json:"success"`
+				Result  struct {
+					ID string `json:"id"`
+				} `json:"result"`
+			}
+			if err := json.Unmarshal(createResp, &createResult); err != nil {
+				return "", fmt.Errorf("failed to parse created reusable policy: %v", err)
+			}
+			if !createResult.Success {
+				return "", fmt.Errorf("failed to create WhiteList reusable policy: %s", string(createResp))
+			}
+			policyID = createResult.Result.ID
+		}
 	}
 
 	// 1. Fetch current policy
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/access/apps/%s/policies/%s", c.AccountID, appID, policyID)
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/access/policies/%s", c.AccountID, policyID)
 	respBytes, err := c.doRequest("GET", url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to fetch access policy: %v", err)
+		return "", fmt.Errorf("failed to fetch reusable policy: %v", err)
 	}
 
 	var fetchResult struct {
@@ -289,7 +363,7 @@ func (c *APIClient) SyncWhiteList(appID, policyID string, ips []string) error {
 		Result  map[string]interface{} `json:"result"`
 	}
 	if err := json.Unmarshal(respBytes, &fetchResult); err != nil {
-		return fmt.Errorf("failed to parse access policy: %v", err)
+		return "", fmt.Errorf("failed to parse reusable policy: %v", err)
 	}
 
 	policy := fetchResult.Result
@@ -329,23 +403,21 @@ func (c *APIClient) SyncWhiteList(appID, policyID string, ips []string) error {
 		})
 	}
 
-	// Overwrite the include rule
-	// Usually zero trust policies also require an email/etc, but if this is strictly a bypass/whitelist by IP:
-	// "decision": "allow" or "bypass"
 	policy["include"] = includes
+	policy["decision"] = "bypass" // Ensure decision is bypass
 
 	bodyBytes, _ := json.Marshal(policy)
 	putRespBytes, err := c.doRequest("PUT", url, bodyBytes)
 	if err != nil {
-		return fmt.Errorf("failed to update access policy: %v", err)
+		return "", fmt.Errorf("failed to update reusable policy: %v", err)
 	}
 
 	var putResult struct {
 		Success bool `json:"success"`
 	}
 	if err := json.Unmarshal(putRespBytes, &putResult); err != nil || !putResult.Success {
-		return fmt.Errorf("failed to apply access policy changes: %s", string(putRespBytes))
+		return "", fmt.Errorf("failed to apply reusable policy changes: %s", string(putRespBytes))
 	}
 
-	return nil
+	return policyID, nil
 }

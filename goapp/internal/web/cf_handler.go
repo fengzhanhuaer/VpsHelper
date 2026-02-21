@@ -17,8 +17,8 @@ func (h *Handler) cloudflarePage(c *gin.Context) {
 	}
 
 	settings, err := store.GetSettings(h.dbConn, []string{
-		"cf_api_token", "cf_zone_id", "cf_block_uris", "cf_block_ips",
-		"cf_account_id", "cf_app_id", "cf_policy_id", "cf_allow_ips",
+		"cf_api_token", "cf_zone_id", "cf_zone_domain", "cf_block_uris", "cf_block_ips",
+		"cf_account_id", "cf_policy_id", "cf_allow_ips",
 		"tg_bot_webhook_secret",
 	})
 	if err != nil {
@@ -44,14 +44,14 @@ func (h *Handler) cloudflarePage(c *gin.Context) {
 
 		c.HTML(http.StatusOK, "cloudflare.html", gin.H{
 			"Title":     "Cloudflare Settings",
-			"Token":     settings["cf_api_token"],
-			"ZoneID":    settings["cf_zone_id"],
-			"BlockURIs": cfBlockURIs,
-			"BlockIPs":  cfBlockIPs,
-			"AccountID": settings["cf_account_id"],
-			"AppID":     settings["cf_app_id"],
-			"PolicyID":  settings["cf_policy_id"],
-			"AllowIPs":  settings["cf_allow_ips"],
+			"Token":      settings["cf_api_token"],
+			"ZoneID":     settings["cf_zone_id"],
+			"ZoneDomain": settings["cf_zone_domain"],
+			"BlockURIs":  cfBlockURIs,
+			"BlockIPs":   cfBlockIPs,
+			"AccountID":  settings["cf_account_id"],
+			"PolicyID":   settings["cf_policy_id"],
+			"AllowIPs":   settings["cf_allow_ips"],
 		})
 		return
 	}
@@ -59,34 +59,34 @@ func (h *Handler) cloudflarePage(c *gin.Context) {
 	// POST save
 	cfToken := strings.TrimSpace(c.PostForm("cf_api_token"))
 	cfZoneID := strings.TrimSpace(c.PostForm("cf_zone_id"))
+	cfZoneDomain := strings.TrimSpace(c.PostForm("cf_zone_domain"))
 	cfBlockURIs := strings.TrimSpace(c.PostForm("cf_block_uris"))
 	cfBlockIPs := strings.TrimSpace(c.PostForm("cf_block_ips"))
 	cfAccountID := strings.TrimSpace(c.PostForm("cf_account_id"))
-	cfAppID := strings.TrimSpace(c.PostForm("cf_app_id"))
 	cfPolicyID := strings.TrimSpace(c.PostForm("cf_policy_id"))
 	cfAllowIPs := strings.TrimSpace(c.PostForm("cf_allow_ips"))
 
 	_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
 	_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
+	_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
 	_ = store.SetSetting(h.dbConn, "cf_block_uris", cfBlockURIs)
 	_ = store.SetSetting(h.dbConn, "cf_block_ips", cfBlockIPs)
 	_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
-	_ = store.SetSetting(h.dbConn, "cf_app_id", cfAppID)
 	_ = store.SetSetting(h.dbConn, "cf_policy_id", cfPolicyID)
 	_ = store.SetSetting(h.dbConn, "cf_allow_ips", cfAllowIPs)
 
 	c.HTML(http.StatusOK, "cloudflare.html", gin.H{
-		"Title":     "Cloudflare Settings",
-		"Token":     cfToken,
-		"ZoneID":    cfZoneID,
-		"BlockURIs": cfBlockURIs,
-		"BlockIPs":  cfBlockIPs,
-		"AccountID": cfAccountID,
-		"AppID":     cfAppID,
-		"PolicyID":  cfPolicyID,
-		"AllowIPs":  cfAllowIPs,
-		"Message":   "配置已保存。",
-		"MsgOK":     true,
+		"Title":      "Cloudflare Settings",
+		"Token":      cfToken,
+		"ZoneID":     cfZoneID,
+		"ZoneDomain": cfZoneDomain,
+		"BlockURIs":  cfBlockURIs,
+		"BlockIPs":   cfBlockIPs,
+		"AccountID":  cfAccountID,
+		"PolicyID":   cfPolicyID,
+		"AllowIPs":   cfAllowIPs,
+		"Message":    "配置已保存。",
+		"MsgOK":      true,
 	})
 }
 
@@ -98,20 +98,20 @@ func (h *Handler) cloudflareSync(c *gin.Context) {
 
 	cfToken := strings.TrimSpace(c.PostForm("cf_api_token"))
 	cfZoneID := strings.TrimSpace(c.PostForm("cf_zone_id"))
+	cfZoneDomain := strings.TrimSpace(c.PostForm("cf_zone_domain"))
 	cfBlockURIs := strings.TrimSpace(c.PostForm("cf_block_uris"))
 	cfBlockIPs := strings.TrimSpace(c.PostForm("cf_block_ips"))
 	cfAccountID := strings.TrimSpace(c.PostForm("cf_account_id"))
-	cfAppID := strings.TrimSpace(c.PostForm("cf_app_id"))
 	cfPolicyID := strings.TrimSpace(c.PostForm("cf_policy_id"))
 	cfAllowIPs := strings.TrimSpace(c.PostForm("cf_allow_ips"))
 
 	// Save first
 	_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
 	_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
+	_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
 	_ = store.SetSetting(h.dbConn, "cf_block_uris", cfBlockURIs)
 	_ = store.SetSetting(h.dbConn, "cf_block_ips", cfBlockIPs)
 	_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
-	_ = store.SetSetting(h.dbConn, "cf_app_id", cfAppID)
 	_ = store.SetSetting(h.dbConn, "cf_policy_id", cfPolicyID)
 	_ = store.SetSetting(h.dbConn, "cf_allow_ips", cfAllowIPs)
 
@@ -120,6 +120,32 @@ func (h *Handler) cloudflareSync(c *gin.Context) {
 	var succMsg string
 
 	client := cloudflare.NewAPIClient(cfToken, cfAccountID, cfZoneID)
+
+	// If Zone ID is empty, resolve domain automatically
+	if cfZoneID == "" {
+		domain := cfZoneDomain
+		if domain == "" {
+			// Auto-detect from request Host (strip port if present)
+			host := c.Request.Host
+			if idx := strings.LastIndex(host, ":"); idx != -1 {
+				host = host[:idx]
+			}
+			domain = host
+		}
+		if domain != "" {
+			if id, err := client.LookupZoneID(domain); err != nil {
+				errMsg = "自动查询 Zone ID 失败 (" + domain + "): " + err.Error()
+			} else {
+				cfZoneID = id
+				if cfZoneDomain == "" {
+					cfZoneDomain = domain
+				}
+				client = cloudflare.NewAPIClient(cfToken, cfAccountID, cfZoneID)
+				_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
+				_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
+			}
+		}
+	}
 
 	if action == "sync_block" {
 		uris := strings.Split(cfBlockURIs, "\n")
@@ -153,27 +179,31 @@ func (h *Handler) cloudflareSync(c *gin.Context) {
 				validIPs = append(validIPs, ip)
 			}
 		}
-		if err := client.SyncWhiteList(cfAppID, cfPolicyID, validIPs); err != nil {
-			errMsg = "推送 ZeroTrust 白名单失败: " + err.Error()
+		if newPolicyID, err := client.SyncReusablePolicy(cfPolicyID, validIPs); err != nil {
+			errMsg = "推送 ZeroTrust 复用策略白名单失败: " + err.Error()
 		} else {
-			succMsg = "同步推送到 ZeroTrust 策略放行规则成功！"
+			if cfPolicyID == "" && newPolicyID != "" {
+				cfPolicyID = newPolicyID
+				_ = store.SetSetting(h.dbConn, "cf_policy_id", cfPolicyID)
+			}
+			succMsg = "同步推送到 ZeroTrust 全局复用策略成功！"
 		}
 	} else {
 		errMsg = "未知的同步动作。"
 	}
 
 	c.HTML(http.StatusOK, "cloudflare.html", gin.H{
-		"Title":     "Cloudflare Settings",
-		"Token":     cfToken,
-		"ZoneID":    cfZoneID,
-		"BlockURIs": cfBlockURIs,
-		"BlockIPs":  cfBlockIPs,
-		"AccountID": cfAccountID,
-		"AppID":     cfAppID,
-		"PolicyID":  cfPolicyID,
-		"AllowIPs":  cfAllowIPs,
-		"Error":     errMsg,
-		"Message":   succMsg,
-		"MsgOK":     succMsg != "",
+		"Title":      "Cloudflare Settings",
+		"Token":      cfToken,
+		"ZoneID":     cfZoneID,
+		"ZoneDomain": cfZoneDomain,
+		"BlockURIs":  cfBlockURIs,
+		"BlockIPs":   cfBlockIPs,
+		"AccountID":  cfAccountID,
+		"PolicyID":   cfPolicyID,
+		"AllowIPs":   cfAllowIPs,
+		"Error":      errMsg,
+		"Message":    succMsg,
+		"MsgOK":      succMsg != "",
 	})
 }

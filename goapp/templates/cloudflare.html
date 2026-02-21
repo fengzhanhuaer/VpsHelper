@@ -40,9 +40,15 @@
                 <div class="grid-2">
                     <div>
                         <h3>防火墙 BlockList 设置 (IP 访问规则)</h3>
-                        <div class="field">
-                            <label for="cf_zone_id">Zone ID</label>
-                            <input id="cf_zone_id" name="cf_zone_id" value="{{ .ZoneID }}" placeholder="主域名对应的 Zone ID" />
+                        <div class="grid-2" style="gap:10px;">
+                            <div class="field">
+                                <label for="cf_zone_id">Zone ID（留空可通过右侧域名自动查询）</label>
+                                <input id="cf_zone_id" name="cf_zone_id" value="{{ .ZoneID }}" placeholder="留空自动处理" />
+                            </div>
+                            <div class="field">
+                                <label for="cf_zone_domain">域名（用于自动查询 Zone ID）</label>
+                                <input id="cf_zone_domain" name="cf_zone_domain" value="{{ .ZoneDomain }}" placeholder="example.com" />
+                            </div>
                         </div>
                         <div class="field">
                             <label for="cf_block_uris">要保护的 URI 或 URL 列表 (访问这些地址即触发规则阻断，每行一个)</label>
@@ -61,16 +67,10 @@
                             <label for="cf_account_id">Account ID</label>
                             <input id="cf_account_id" name="cf_account_id" value="{{ .AccountID }}" placeholder="账户的 Account ID (通常在 URL 或侧边栏)" />
                         </div>
-                        <div class="grid-2" style="gap:10px;">
-                            <div class="field">
-                                <label for="cf_app_id">Access App ID</label>
-                                <input id="cf_app_id" name="cf_app_id" value="{{ .AppID }}" placeholder="如 xxx-xxx" />
+                            <div class="field" style="grid-column: span 2;">
+                                <label for="cf_policy_id">Access Policy ID (全局复用策略，为空时自动查找/创建 WhiteList 策略)</label>
+                                <input id="cf_policy_id" name="cf_policy_id" value="{{ .PolicyID }}" placeholder="留空自动处理" />
                             </div>
-                            <div class="field">
-                                <label for="cf_policy_id">Access Policy ID</label>
-                                <input id="cf_policy_id" name="cf_policy_id" value="{{ .PolicyID }}" placeholder="在此政策中写入 Includes" />
-                            </div>
-                        </div>
                         <div class="field">
                             <label for="cf_allow_ips">要 Allow (白名单放行) 的 IP 列表 (每行一个)</label>
                             <textarea id="cf_allow_ips" name="cf_allow_ips" class="ip-list" placeholder="192.168.1.1">{{ .AllowIPs }}</textarea>

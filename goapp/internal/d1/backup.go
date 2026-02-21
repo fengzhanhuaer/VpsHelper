@@ -31,6 +31,9 @@ func EnsureSchema(ctx context.Context, cf Client, accountID, dbID string, local 
             if lower != "" {
                 // best-effort match
                 if containsInsensitive(lower, "already exists") {
+                    if table == "tg_accounts" {
+                        cf.D1Query(ctx, accountID, dbID, "ALTER TABLE tg_accounts ADD COLUMN tg_user_id INTEGER DEFAULT 0;", nil)
+                    }
                     continue
                 }
             }
