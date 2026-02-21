@@ -450,9 +450,11 @@ func (c *APIClient) SyncReusablePolicy(policyID string, ips []string) (string, e
 			}
 		}
 
+		// Cloudflare Access Policy IP rule format: {"ip": {"ip": "x.x.x.x/32"}}
+		// (NOT {"ip": {"ipv4": ...}} — both IPv4 and IPv6 use the single "ip" key)
 		includes = append(includes, map[string]interface{}{
 			"ip": map[string]string{
-				key: host + cidr,
+				"ip": host + cidr,
 			},
 		})
 	}
