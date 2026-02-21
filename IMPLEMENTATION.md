@@ -33,4 +33,4 @@ The project is now **Go-only**.
 
 ## Deploy
 
-Use `install-go.sh` for Linux systemd deployment.
+Use `install.sh` for Linux systemd deployment.

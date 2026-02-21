@@ -1,91 +1,77 @@
 ﻿# VpsHelper
 
-VpsHelper is now **Go-only** (Gin + SQLite). All legacy Python code has been removed.
+VpsHelper is a powerful, lightweight, Go-based (Gin + SQLite/Cloudflare D1) server management and Telegram Bot integration toolkit.
 
-- Default address: `http://127.0.0.1:15018`
-- Local database: `./userdata/VpsHelper.db`
-- Cloudflare D1 default name: `VpsHelper.db`
+## Features
 
-## Run locally
+- **Web Dashboard**: Modern UI with dark/light mode, mobile-friendly interface for managing your server.
+- **Telegram Helper**: Manage Telegram userbots (MTProto via `gotd`), check sessions, auto-sign, auto-reply, auto-send tasks.
+- **Telegram Bot Control**: Connect a private Telegram Bot to securely receive webhooks and send commands (like `/ping`, `/status`) directly to your VPS.
+- **Auto Backups (Cloudflare D1)**: Automatically sync and backup your SQLite database to Cloudflare D1. 
+- **Web Terminal (Shell)**: Execute predefined safe commands or arbitrary shell commands directly from the dashboard.
+- **SSH & Firewall**: View active SSH sessions, ban IP rules (using `ufw`/`iptables`), and manage SSH server keys.
+- **One-Click Update**: Auto-check for the newest releases on GitHub, perform a pre-flight smoke test, and seamlessly seamlessly replace and restart the service without downtime.
 
-### Windows
+## Setup & Deployment
 
-```powershell
-cd goapp
-go run ./cmd/server
-```
+### Run locally (Development)
 
-or run from repo root:
-
+**Windows** (PowerShell):
 ```powershell
 .\VpsHelper.bat
-```
-
-### Linux/macOS
-
-```bash
+# or
 cd goapp
 go run ./cmd/server
 ```
 
-or run from repo root:
-
+**Linux/macOS**:
 ```bash
 chmod +x VpsHelper.sh
 ./VpsHelper.sh
+# or
+cd goapp
+go run ./cmd/server
 ```
 
-## Install as Linux service
+### Install as Linux service (Production)
 
-Recommended:
+Recommended one-click install and upgrade command:
 
 ```bash
-curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install-go.sh | sudo bash
+curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash
 ```
+> This script automatically detects your architecture, downloads the latest Go-built ELF binary release, initializes the environment, and sets up `vpshelper.service` via systemd.
 
-Compatibility entrypoint (`install.sh`) now delegates to `install-go.sh`.
-
-## Build
+## Building from Source
 
 ```bash
 cd goapp
-go build -o ./bin/vpshelper ./cmd/server
+go build -o ../bin/vpshelper ./cmd/server
 ```
 
-## Text integrity guard (anti-garbled text)
+## Security & Text Integrity
 
-Enable the local pre-commit hook:
+Enable the local pre-commit hook to prevent Chinese garbled text errors:
 
+**Linux/macOS**:
 ```bash
 git config core.hooksPath .githooks
 chmod +x .githooks/pre-commit scripts/check_text_integrity.sh
 ```
 
-PowerShell (Windows):
-
+**Windows (PowerShell)**:
 ```powershell
 git config core.hooksPath .githooks
 sh ./scripts/check_text_integrity.sh --all
 ```
 
-Run manually any time:
+## Environment Variables & Overrides
 
-```bash
-sh ./scripts/check_text_integrity.sh --all
-```
+| Variable | Description | Default |
+|-------------|-------------|---------|
+| `VPSHELPER_LISTEN` | Bind address/port for the web server | `:15018` |
+| `VPSHELPER_DATA_DIR` | Absolute path to the runtime storage layer | `./userdata` |
+| `TZ` / `VPSHELPER_TZ` | Timezone setting context | `Asia/Shanghai` |
 
-## Project structure
-
-- `goapp/`: Go source code
-- `goapp/templates/`: Web templates (embedded at build time)
-- `install-go.sh`: one-click Linux service installer
-- `install.sh`: compatibility wrapper to Go installer
-- `VpsHelper.sh`: local startup script (Go)
-- `VpsHelper.bat`: local startup script (Go)
-- `userdata/`: runtime data directory
-
-## Notes
-
-- Default timezone is `Asia/Shanghai` (override with `TZ` or `VPSHELPER_TZ`).
-- Default listen address can be overridden by `VPSHELPER_LISTEN`.
-- Runtime data dir can be overridden by `VPSHELPER_DATA_DIR`.
+- **Default Address**: `http://127.0.0.1:15018`
+- **Database**: `${VPSHELPER_DATA_DIR}/VpsHelper.db`
