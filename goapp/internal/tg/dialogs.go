@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gotd/td/telegram"
+	"github.com/gotd/td/telegram/query"
 	"github.com/gotd/td/tg"
 
 	"vpshelper-go/internal/store"
@@ -27,58 +28,51 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 	err = client.Run(ctx, func(ctx context.Context) error {
 		api := client.API()
 
-		var offsetPeer tg.InputPeerClass = &tg.InputPeerEmpty{}
-		offsetID := 0
-		offsetDate := 0
 		seen := map[string]bool{}
+		iter := query.NewQuery(api).GetDialogs().BatchSize(100).Iter()
 
-		for {
-			res, err := messagesGetDialogsWithRetry(ctx, api, &tg.MessagesGetDialogsRequest{
-				OffsetPeer: offsetPeer,
-				OffsetID:   offsetID,
-				OffsetDate: offsetDate,
-				Limit:      100,
-				Hash:       0,
-			})
-			if err != nil {
-				return fmt.Errorf("get dialogs: %w", err)
+		for iter.Next(ctx) {
+			elem := iter.Value()
+			d, ok := elem.Dialog.(*tg.Dialog)
+			if !ok {
+				continue
 			}
 
-			rawCount, batch, nextPeer, nextID, nextDate, err := extractDialogs(res)
-			if err != nil {
-				return err
-			}
-			if rawCount == 0 {
-				break
-			}
+			userByID := elem.Entities.Users()
+			chatByID := elem.Entities.Chats()
+			channelByID := elem.Entities.Channels()
 
-			for _, d := range batch {
-				if d.DialogID == "" {
-					continue
-				}
-				key := strings.ToLower(d.DialogID)
-				if seen[key] {
-					continue
-				}
-				seen[key] = true
-				d.UpdatedAt = time.Now().Format(time.RFC3339)
-				d.AccountID = accountID
-				dialogs = append(dialogs, d)
+			dialogID, username, title, _ := resolveDialogPeer(d.Peer, userByID, chatByID, channelByID)
+			if dialogID == "" {
+				continue
 			}
+			key := strings.ToLower(dialogID)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
 			
-			if onProgress != nil {
+			updatedAt := time.Now().Format(time.RFC3339)
+			dialogs = append(dialogs, store.TGDialog{
+				DialogID:  dialogID,
+				Title:     title,
+				Username:  username,
+				UpdatedAt: updatedAt,
+				AccountID: accountID,
+			})
+			
+			// Avoid spamming progress, report every 100 dialogs
+			if len(dialogs)%100 == 0 && onProgress != nil {
 				onProgress(len(dialogs), "拉取中...")
 			}
+		}
 
-			offsetPeer = nextPeer
-			offsetID = nextID
-			offsetDate = nextDate
-			if offsetID == 0 && offsetDate == 0 {
-				break
-			}
-			if rawCount < 100 {
-				break
-			}
+		if err := iter.Err(); err != nil {
+			return err
+		}
+		
+		if onProgress != nil {
+			onProgress(len(dialogs), "拉取中...")
 		}
 
 		return nil
@@ -102,80 +96,6 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 	return len(dialogs), "ok"
 }
 
-type extracted struct {
-	dialogs  []store.TGDialog
-	nextPeer tg.InputPeerClass
-	nextID   int
-	nextDate int
-}
-
-func extractDialogs(res tg.MessagesDialogsClass) (int, []store.TGDialog, tg.InputPeerClass, int, int, error) {
-	switch v := res.(type) {
-	case *tg.MessagesDialogs:
-		batch, p, id, date, err := convertDialogs(v.Dialogs, v.Users, v.Chats)
-		return len(v.Dialogs), batch, p, id, date, err
-	case *tg.MessagesDialogsSlice:
-		batch, p, id, date, err := convertDialogs(v.Dialogs, v.Users, v.Chats)
-		return len(v.Dialogs), batch, p, id, date, err
-	case *tg.MessagesDialogsNotModified:
-		return 0, nil, &tg.InputPeerEmpty{}, 0, 0, nil
-	default:
-		return 0, nil, &tg.InputPeerEmpty{}, 0, 0, fmt.Errorf("unsupported dialogs type: %T", res)
-	}
-}
-
-func convertDialogs(dialogs []tg.DialogClass, users []tg.UserClass, chats []tg.ChatClass) ([]store.TGDialog, tg.InputPeerClass, int, int, error) {
-	userByID := map[int64]*tg.User{}
-	for _, u := range users {
-		if uu, ok := u.(*tg.User); ok {
-			userByID[uu.ID] = uu
-		}
-	}
-
-	channelByID := map[int64]*tg.Channel{}
-	chatByID := map[int64]*tg.Chat{}
-	for _, c := range chats {
-		switch cc := c.(type) {
-		case *tg.Channel:
-			channelByID[cc.ID] = cc
-		case *tg.Chat:
-			chatByID[cc.ID] = cc
-		}
-	}
-
-	out := make([]store.TGDialog, 0, len(dialogs))
-	var lastPeer tg.InputPeerClass = &tg.InputPeerEmpty{}
-	lastID := 0
-	lastDate := 0
-
-	for _, dc := range dialogs {
-		d, ok := dc.(*tg.Dialog)
-		if !ok {
-			continue
-		}
-
-		dialogID, username, title, peer := resolveDialogPeer(d.Peer, userByID, chatByID, channelByID)
-		
-		// Update offsets best-effort.
-		if peer != nil {
-			lastPeer = peer
-		}
-		lastID = d.TopMessage
-		lastDate = d.ReadInboxMaxID
-		_ = lastDate
-
-		if dialogID == "" {
-			continue
-		}
-		if title == "" {
-			title = dialogID
-		}
-
-		out = append(out, store.TGDialog{DialogID: dialogID, Title: title, Username: username})
-	}
-
-	return out, lastPeer, lastID, 0, nil
-}
 
 func resolveDialogPeer(peer tg.PeerClass, users map[int64]*tg.User, chats map[int64]*tg.Chat, channels map[int64]*tg.Channel) (dialogID, username, title string, outPeer tg.InputPeerClass) {
 	switch p := peer.(type) {
