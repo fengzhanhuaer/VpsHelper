@@ -39,7 +39,7 @@ func (h *Handler) cloudflarePage(c *gin.Context) {
 
 		cfBlockIPs := settings["cf_block_ips"]
 		if cfBlockIPs == "" {
-			cfBlockIPs = "AS62041"
+			cfBlockIPs = "AS62041\nAS59930\nAS44907\nAS211157" // Telegram ASNs
 		}
 
 		c.HTML(http.StatusOK, "cloudflare.html", gin.H{
