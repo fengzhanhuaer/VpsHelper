@@ -283,7 +283,7 @@ func (h *Handler) tgHelper(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
-	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash"})
+	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_bot_token", "tg_bot_admin_id"})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "load settings failed")
 		return
@@ -292,10 +292,13 @@ func (h *Handler) tgHelper(c *gin.Context) {
 	apiID := settings["telegram_api_id"]
 	apiHash := settings["telegram_api_hash"]
 	configured := apiID != "" && apiHash != ""
+	
+	botConfigured := settings["tg_bot_token"] != "" && settings["tg_bot_admin_id"] != ""
 
 	c.HTML(http.StatusOK, "tg_helper.html", gin.H{
-		"Title":      "TgHelper",
-		"Configured": configured,
+		"Title":         "TgHelper",
+		"Configured":    configured,
+		"BotConfigured": botConfigured,
 	})
 }
 
@@ -518,6 +521,31 @@ func (h *Handler) tgSettings(c *gin.Context) {
 		return
 	}
 
+	type AdminCandidate struct {
+		ID   string
+		Name string
+	}
+	var adminCandidates []AdminCandidate
+	seenCandidates := map[string]bool{}
+	
+	username := h.currentUser(c)
+	accounts, _ := store.ListTGAccounts(h.dbConn, username)
+	for _, acc := range accounts {
+		dialogs, _ := store.ListTGDialogs(h.dbConn, acc.ID)
+		for _, d := range dialogs {
+			if strings.HasPrefix(d.DialogID, "user:") {
+				uid := strings.TrimPrefix(d.DialogID, "user:")
+				if !seenCandidates[uid] {
+					seenCandidates[uid] = true
+					adminCandidates = append(adminCandidates, AdminCandidate{
+						ID:   uid,
+						Name: d.Title + " (" + uid + ")",
+					})
+				}
+			}
+		}
+	}
+
 	if c.Request.Method == http.MethodGet {
 		c.HTML(http.StatusOK, "tg_settings.html", gin.H{
 			"Title":            "TG Settings",
@@ -526,6 +554,7 @@ func (h *Handler) tgSettings(c *gin.Context) {
 			"BotToken":         settings["tg_bot_token"],
 			"BotAdminID":       settings["tg_bot_admin_id"],
 			"BotWebhookSecret": settings["tg_bot_webhook_secret"],
+			"AdminCandidates":  adminCandidates,
 		})
 		return
 	}
@@ -589,6 +618,7 @@ func (h *Handler) tgSettings(c *gin.Context) {
 			"BotToken":         botToken,
 			"BotAdminID":       botAdmin,
 			"BotWebhookSecret": webhookSecret,
+			"AdminCandidates":  adminCandidates,
 			"Error":            errMsg,
 		})
 		return

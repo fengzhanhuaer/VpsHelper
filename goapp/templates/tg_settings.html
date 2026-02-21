@@ -35,7 +35,12 @@
                 </div>
                 <div class="field">
                     <label for="tg_bot_admin_id">Bot Admin ID (可选)</label>
-                    <input id="tg_bot_admin_id" name="tg_bot_admin_id" value="{{ .BotAdminID }}" placeholder="您的私人 TG ID" />
+                    <input id="tg_bot_admin_id" name="tg_bot_admin_id" value="{{ .BotAdminID }}" list="admin_candidates" placeholder="您的私人 TG ID" />
+                    <datalist id="admin_candidates">
+                        {{ range .AdminCandidates }}
+                        <option value="{{ .ID }}">{{ .Name }}</option>
+                        {{ end }}
+                    </datalist>
                 </div>
                 <div class="field">
                     <label for="tg_bot_webhook_secret">Webhook Secret (可选)</label>
