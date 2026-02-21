@@ -58,6 +58,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/tg/bot/settings", h.tgBotSettings)
 	router.POST("/tg/bot/settings", h.tgBotSettings)
 	router.POST("/tg/bot/test", h.tgBotTestMessage)
+	router.POST("/tg/bot/webhook_info", h.tgBotWebhookInfo)
 	router.GET("/tg/login/start", h.tgLoginStart)
 	router.POST("/tg/login/start", h.tgLoginStart)
 	router.GET("/tg/login/verify", h.tgLoginVerify)
@@ -712,6 +713,33 @@ func (h *Handler) tgBotTestMessage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *Handler) tgBotWebhookInfo(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	settings, err := store.GetSettings(h.dbConn, []string{"tg_bot_token"})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "load settings failed"})
+		return
+	}
+
+	botToken := settings["tg_bot_token"]
+	if botToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Bot Token 未配置"})
+		return
+	}
+
+	info, err := tgbot.GetWebhookInfo(botToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "data": info})
 }
 
 func (h *Handler) tgAccounts(c *gin.Context) {

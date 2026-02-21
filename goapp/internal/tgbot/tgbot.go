@@ -87,3 +87,32 @@ func SetWebhook(token, webhookURL, secretToken string) error {
 
 	return nil
 }
+
+// GetWebhookInfo proxy gets the webhook info from Telegram.
+func GetWebhookInfo(token string) (map[string]interface{}, error) {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/getWebhookInfo", token)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bot api error: status=%d body=%s", resp.StatusCode, body)
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
