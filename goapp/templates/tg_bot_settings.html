@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/tg_helper">返回</a>
+        </nav>
+    </header>
+    <main>
+        <section class="panel panel--center">
+            <h1>Telegram Bot 设置</h1>
+            <p class="muted">填写 Bot Token 与 Admin ID 参数，支持双向交互控制。</p>
+            {{ if .Error }}
+            <div class="error" id="msg-box">{{ .Error }}</div>
+            {{ else if .Message }}
+            <div class="success" id="msg-box">{{ .Message }}</div>
+            {{ end }}
+            <form method="post">
+                <div class="field">
+                    <label for="tg_bot_token">Bot Token</label>
+                    <input id="tg_bot_token" name="tg_bot_token" value="{{ .BotToken }}" placeholder="申请的机器人 Token" />
+                </div>
+                <div class="field">
+                    <label for="tg_bot_admin_id">Bot Admin ID (仅列出已登录账户)</label>
+                    <select id="tg_bot_admin_id" name="tg_bot_admin_id">
+                        <option value="">-- 请选择当前绑定的 VPS 账号 --</option>
+                        {{ $admin := .BotAdminID }}
+                        {{ range .AdminCandidates }}
+                        <option value="{{ .ID }}" {{ if eq .ID $admin }}selected{{ end }}>{{ .Name }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="tg_bot_webhook_secret">Webhook Secret (可选)</label>
+                    <input id="tg_bot_webhook_secret" name="tg_bot_webhook_secret" value="{{ .BotWebhookSecret }}" placeholder="防止探测的安全密钥" />
+                </div>
+                <button class="btn" type="submit">保存配置与注册 Webhook</button>
+                <div style="margin-top: 15px;">
+                    <button class="btn btn-secondary" type="button" onclick="testMessage()" {{ if not .BotConfigured }}disabled{{ end }}>发送测试消息</button>
+                    <span id="test-result" style="margin-left: 10px; font-size: 0.9em;"></span>
+                </div>
+            </form>
+        </section>
+    </main>
+    <script>
+        function testMessage() {
+            var btn = event.target;
+            btn.disabled = true;
+            btn.innerText = "发送中...";
+            var result = document.getElementById("test-result");
+            result.innerText = "";
+            result.className = "muted";
+
+            fetch("/tg/bot/test", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+            }).then(resp => resp.json()).then(data => {
+                btn.disabled = false;
+                btn.innerText = "发送测试消息";
+                if (data.ok) {
+                    result.innerText = "✓ 测试指令已发送至 Bot";
+                    result.className = "success";
+                } else {
+                    result.innerText = "✗ 失败: " + data.error;
+                    result.className = "error";
+                }
+            }).catch(err => {
+                btn.disabled = false;
+                btn.innerText = "发送测试消息";
+                result.innerText = "✗ 网络请求失败";
+                result.className = "error";
+            });
+        }
+    </script>
+</body>
+</html>

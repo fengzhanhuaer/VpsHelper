@@ -11,16 +11,18 @@ type TGAccount struct {
 	Owner       string
 	AccountName string
 	SessionText string
+	TGUserID    int64
 	CreatedAt   string
 }
 
-func CreateTGAccount(dbConn *sql.DB, owner, accountName, sessionText string) error {
+func CreateTGAccount(dbConn *sql.DB, owner, accountName, sessionText string, tgUserID int64) error {
 	createdAt := time.Now().Format(time.RFC3339)
 	_, err := dbConn.Exec(
-		"INSERT INTO tg_accounts (owner, account_name, session_text, created_at) VALUES (?, ?, ?, ?)",
+		"INSERT INTO tg_accounts (owner, account_name, session_text, tg_user_id, created_at) VALUES (?, ?, ?, ?, ?)",
 		owner,
 		accountName,
 		sessionText,
+		tgUserID,
 		createdAt,
 	)
 	if err != nil {
@@ -31,7 +33,7 @@ func CreateTGAccount(dbConn *sql.DB, owner, accountName, sessionText string) err
 
 func ListTGAccounts(dbConn *sql.DB, owner string) ([]TGAccount, error) {
 	rows, err := dbConn.Query(
-		"SELECT id, owner, account_name, created_at FROM tg_accounts WHERE owner = ? ORDER BY id DESC",
+		"SELECT id, owner, account_name, tg_user_id, created_at FROM tg_accounts WHERE owner = ? ORDER BY id DESC",
 		owner,
 	)
 	if err != nil {
@@ -42,7 +44,7 @@ func ListTGAccounts(dbConn *sql.DB, owner string) ([]TGAccount, error) {
 	var out []TGAccount
 	for rows.Next() {
 		var a TGAccount
-		if err := rows.Scan(&a.ID, &a.Owner, &a.AccountName, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Owner, &a.AccountName, &a.TGUserID, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan tg account: %w", err)
 		}
 		out = append(out, a)
@@ -53,11 +55,11 @@ func ListTGAccounts(dbConn *sql.DB, owner string) ([]TGAccount, error) {
 func GetTGAccountByID(dbConn *sql.DB, owner string, accountID int64) (TGAccount, error) {
 	var a TGAccount
 	row := dbConn.QueryRow(
-		"SELECT id, owner, account_name, session_text, created_at FROM tg_accounts WHERE id = ? AND owner = ?",
+		"SELECT id, owner, account_name, session_text, tg_user_id, created_at FROM tg_accounts WHERE id = ? AND owner = ?",
 		accountID,
 		owner,
 	)
-	if err := row.Scan(&a.ID, &a.Owner, &a.AccountName, &a.SessionText, &a.CreatedAt); err != nil {
+	if err := row.Scan(&a.ID, &a.Owner, &a.AccountName, &a.SessionText, &a.TGUserID, &a.CreatedAt); err != nil {
 		return TGAccount{}, fmt.Errorf("get tg account: %w", err)
 	}
 	return a, nil
@@ -73,4 +75,9 @@ func DeleteTGAccount(dbConn *sql.DB, owner string, accountID int64) error {
 	_, _ = dbConn.Exec("DELETE FROM tg_sign_tasks WHERE owner = ? AND account_id = ?", owner, accountID)
 	_, _ = dbConn.Exec("DELETE FROM tg_auto_reply_rules WHERE owner = ? AND account_id = ?", owner, accountID)
 	return nil
+}
+
+func UpdateTGAccountUserID(dbConn *sql.DB, accountID int64, tgUserID int64) error {
+	_, err := dbConn.Exec("UPDATE tg_accounts SET tg_user_id = ? WHERE id = ?", tgUserID, accountID)
+	return err
 }

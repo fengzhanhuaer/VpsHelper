@@ -55,6 +55,9 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/tg_helper", h.tgHelper)
 	router.GET("/tg/settings", h.tgSettings)
 	router.POST("/tg/settings", h.tgSettings)
+	router.GET("/tg/bot/settings", h.tgBotSettings)
+	router.POST("/tg/bot/settings", h.tgBotSettings)
+	router.POST("/tg/bot/test", h.tgBotTestMessage)
 	router.GET("/tg/login/start", h.tgLoginStart)
 	router.POST("/tg/login/start", h.tgLoginStart)
 	router.GET("/tg/login/verify", h.tgLoginVerify)
@@ -495,7 +498,7 @@ func (h *Handler) tgLoginVerify(c *gin.Context) {
 		accountName = flow.Phone
 	}
 
-	if err := store.CreateTGAccount(h.dbConn, username, accountName, updatedFlow.SessionText); err != nil {
+	if err := store.CreateTGAccount(h.dbConn, username, accountName, updatedFlow.SessionText, self.ID); err != nil {
 		c.HTML(http.StatusOK, "tg_login_verify.html", gin.H{
 			"Title":  "TG Verify",
 			"FlowID": flowID,
@@ -515,57 +518,26 @@ func (h *Handler) tgSettings(c *gin.Context) {
 		return
 	}
 
-	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_bot_token", "tg_bot_admin_id", "tg_bot_webhook_secret"})
+	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash"})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "load settings failed")
 		return
 	}
 
-	type AdminCandidate struct {
-		ID   string
-		Name string
-	}
-	var adminCandidates []AdminCandidate
-	seenCandidates := map[string]bool{}
-	
-	username := h.currentUser(c)
-	accounts, _ := store.ListTGAccounts(h.dbConn, username)
-	for _, acc := range accounts {
-		dialogs, _ := store.ListTGDialogs(h.dbConn, acc.ID)
-		for _, d := range dialogs {
-			if strings.HasPrefix(d.DialogID, "user:") {
-				uid := strings.TrimPrefix(d.DialogID, "user:")
-				if !seenCandidates[uid] {
-					seenCandidates[uid] = true
-					adminCandidates = append(adminCandidates, AdminCandidate{
-						ID:   uid,
-						Name: d.Title + " (" + uid + ")",
-					})
-				}
-			}
-		}
-	}
-
 	if c.Request.Method == http.MethodGet {
 		c.HTML(http.StatusOK, "tg_settings.html", gin.H{
-			"Title":            "TG Settings",
-			"ApiID":            settings["telegram_api_id"],
-			"ApiHash":          settings["telegram_api_hash"],
-			"BotToken":         settings["tg_bot_token"],
-			"BotAdminID":       settings["tg_bot_admin_id"],
-			"BotWebhookSecret": settings["tg_bot_webhook_secret"],
-			"AdminCandidates":  adminCandidates,
+			"Title":   "TG Settings",
+			"ApiID":   settings["telegram_api_id"],
+			"ApiHash": settings["telegram_api_hash"],
 		})
 		return
 	}
 
 	apiID := strings.TrimSpace(c.PostForm("api_id"))
 	apiHash := strings.TrimSpace(c.PostForm("api_hash"))
-	botToken := strings.TrimSpace(c.PostForm("tg_bot_token"))
-	botAdmin := strings.TrimSpace(c.PostForm("tg_bot_admin_id"))
-	webhookSecret := strings.TrimSpace(c.PostForm("tg_bot_webhook_secret"))
 
 	var errMsg string
+	var succMsg string
 	if apiID == "" || apiHash == "" {
 		errMsg = "API ID 和 API Hash 不能为空。"
 	}
@@ -580,51 +552,166 @@ func (h *Handler) tgSettings(c *gin.Context) {
 			errMsg = "保存 API Hash 失败。"
 		}
 	}
-	
-	if errMsg == "" {
-		_ = store.SetSetting(h.dbConn, "tg_bot_token", botToken)
-		_ = store.SetSetting(h.dbConn, "tg_bot_admin_id", botAdmin)
-		
-		if webhookSecret == "" && botToken != "" {
-			webhookSecret = fmt.Sprintf("random_%d", time.Now().UnixNano()) // fallback random
-		}
-		_ = store.SetSetting(h.dbConn, "tg_bot_webhook_secret", webhookSecret)
-
-		if botToken != "" && webhookSecret != "" {
-			// Auto set webhook using current host
-			host := c.Request.Host
-			scheme := "http"
-			if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" || c.GetHeader("Cf-Visitor") != "" {
-				scheme = "https"
-			}
-			// Hardcode https if proxy headers didn't match normally
-			if !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
-				scheme = "https"
-			}
-			
-			hookURL := fmt.Sprintf("%s://%s/tghelperapi/%s", scheme, host, webhookSecret)
-			err := tgbot.SetWebhook(botToken, hookURL, webhookSecret)
-			if err != nil {
-				errMsg = "自动注册 Webhook 失败: " + err.Error()
-			}
-		}
-	}
 
 	if errMsg != "" {
 		c.HTML(http.StatusOK, "tg_settings.html", gin.H{
-			"Title":            "TG Settings",
-			"ApiID":            apiID,
-			"ApiHash":          apiHash,
-			"BotToken":         botToken,
-			"BotAdminID":       botAdmin,
-			"BotWebhookSecret": webhookSecret,
+			"Title":   "TG Settings",
+			"ApiID":   apiID,
+			"ApiHash": apiHash,
+			"Error":   errMsg,
+		})
+		return
+	}
+	
+	succMsg = "API 设置已保存"
+	c.HTML(http.StatusOK, "tg_settings.html", gin.H{
+		"Title":   "TG Settings",
+		"ApiID":   apiID,
+		"ApiHash": apiHash,
+		"Message": succMsg,
+	})
+}
+
+func (h *Handler) tgBotSettings(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_bot_token", "tg_bot_admin_id", "tg_bot_webhook_secret"})
+	if err != nil {
+		c.String(http.StatusInternalServerError, "load settings failed")
+		return
+	}
+
+	type AdminCandidate struct {
+		ID   string
+		Name string
+	}
+	var adminCandidates []AdminCandidate
+	
+	username := h.currentUser(c)
+	accounts, _ := store.ListTGAccounts(h.dbConn, username)
+	
+	for _, acc := range accounts {
+		uid := acc.TGUserID
+		if uid == 0 {
+			// Transparently fetch ID from token without forcing re-login
+			apiIDInt, _ := strconv.Atoi(settings["telegram_api_id"])
+			if apiIDInt > 0 && settings["telegram_api_hash"] != "" {
+				storage := tg.NewAccountSessionStorage(h.dbConn, acc.Owner, acc.ID)
+				ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+				user, err := tg.GetAccountSelf(ctx, apiIDInt, settings["telegram_api_hash"], storage, settings["tg_all_proxy"])
+				cancel()
+				if err == nil && user != nil {
+					uid = user.ID
+					_ = store.UpdateTGAccountUserID(h.dbConn, acc.ID, uid)
+				}
+			}
+		}
+		if uid > 0 {
+			adminCandidates = append(adminCandidates, AdminCandidate{
+				ID:   strconv.FormatInt(uid, 10),
+				Name: acc.AccountName + " (" + strconv.FormatInt(uid, 10) + ")",
+			})
+		}
+	}
+	
+	botConfigured := settings["tg_bot_token"] != "" && settings["tg_bot_admin_id"] != ""
+
+	if c.Request.Method == http.MethodGet {
+		c.HTML(http.StatusOK, "tg_bot_settings.html", gin.H{
+			"Title":            "Bot Settings",
+			"BotToken":         settings["tg_bot_token"],
+			"BotAdminID":       settings["tg_bot_admin_id"],
+			"BotWebhookSecret": settings["tg_bot_webhook_secret"],
 			"AdminCandidates":  adminCandidates,
-			"Error":            errMsg,
+			"BotConfigured":    botConfigured,
 		})
 		return
 	}
 
-	c.Redirect(http.StatusFound, "/tg_helper")
+	botToken := strings.TrimSpace(c.PostForm("tg_bot_token"))
+	botAdmin := strings.TrimSpace(c.PostForm("tg_bot_admin_id"))
+	webhookSecret := strings.TrimSpace(c.PostForm("tg_bot_webhook_secret"))
+
+	var errMsg string
+	var succMsg string
+
+	_ = store.SetSetting(h.dbConn, "tg_bot_token", botToken)
+	_ = store.SetSetting(h.dbConn, "tg_bot_admin_id", botAdmin)
+	
+	if webhookSecret == "" && botToken != "" {
+		webhookSecret = fmt.Sprintf("random_%d", time.Now().UnixNano()) // fallback random
+	}
+	_ = store.SetSetting(h.dbConn, "tg_bot_webhook_secret", webhookSecret)
+
+	if botToken != "" && webhookSecret != "" {
+		host := c.Request.Host
+		scheme := "http"
+		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" || c.GetHeader("Cf-Visitor") != "" {
+			scheme = "https"
+		}
+		if !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
+			scheme = "https"
+		}
+		
+		hookURL := fmt.Sprintf("%s://%s/tghelperapi/%s", scheme, host, webhookSecret)
+		err := tgbot.SetWebhook(botToken, hookURL, webhookSecret)
+		if err != nil {
+			errMsg = "自动注册 Webhook 失败: " + err.Error()
+		} else {
+		    succMsg = "Bot 设置已保存，且 Webhook 注册成功。"
+		    botConfigured = true
+		}
+	} else if botToken == "" {
+	    succMsg = "BotToken 已清空，当前 Bot 功能处于停用状态。"
+	    botConfigured = false
+	} else {
+	    succMsg = "配置已保存，但缺少信息未能注册 Webhook。"
+	}
+
+	c.HTML(http.StatusOK, "tg_bot_settings.html", gin.H{
+		"Title":            "Bot Settings",
+		"BotToken":         botToken,
+		"BotAdminID":       botAdmin,
+		"BotWebhookSecret": webhookSecret,
+		"AdminCandidates":  adminCandidates,
+		"Error":            errMsg,
+		"Message":          succMsg,
+		"BotConfigured":    botConfigured,
+	})
+}
+
+func (h *Handler) tgBotTestMessage(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	settings, err := store.GetSettings(h.dbConn, []string{"tg_bot_admin_id"})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "load settings failed"})
+		return
+	}
+
+	adminIDStr := settings["tg_bot_admin_id"]
+	if adminIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Bot Admin ID 未配置"})
+		return
+	}
+	chatID, err := strconv.ParseInt(adminIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Bot Admin ID 格式错误"})
+		return
+	}
+
+	err = tgbot.SendMessage(h.dbConn, chatID, "你好！这是一条来自 VpsHelper 面板的测试消息。🚀\n如果你能收到该消息，说明双向交互已全面打通！")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (h *Handler) tgAccounts(c *gin.Context) {

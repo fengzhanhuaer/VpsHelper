@@ -17,6 +17,7 @@ func Migrate(dbConn *sql.DB) error {
             owner TEXT NOT NULL,
             account_name TEXT NOT NULL,
             session_text TEXT NOT NULL,
+			tg_user_id INTEGER DEFAULT 0,
             created_at TEXT NOT NULL
         )`,
 		`CREATE TABLE IF NOT EXISTS tg_dialogs (
@@ -92,6 +93,9 @@ func Migrate(dbConn *sql.DB) error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
+
+	_ = dbConn.QueryRow("SELECT tg_user_id FROM tg_accounts LIMIT 1").Scan(new(int)) // trigger syntax check? no, actually just run ALTER
+	_, _ = dbConn.Exec("ALTER TABLE tg_accounts ADD COLUMN tg_user_id INTEGER DEFAULT 0;")
 
 	return nil
 }

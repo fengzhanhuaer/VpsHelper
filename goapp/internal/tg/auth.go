@@ -104,3 +104,28 @@ func newTelegramOptions(storage telegram.SessionStorage, noUpdates bool, allProx
 	opts := telegram.Options{SessionStorage: storage, NoUpdates: noUpdates}
 	return telegram.OptionsFromEnvironment(opts)
 }
+
+func GetAccountSelf(ctx context.Context, appID int, appHash string, storage telegram.SessionStorage, allProxy string) (*tg.User, error) {
+	opts, err := newTelegramOptions(storage, true, allProxy)
+	if err != nil {
+		return nil, err
+	}
+	client := telegram.NewClient(appID, appHash, opts)
+
+	var self *tg.User
+	err = client.Run(ctx, func(ctx context.Context) error {
+		user, err := client.Self(ctx)
+		if err != nil {
+			return err
+		}
+		self = user
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get self: %w", err)
+	}
+	if self == nil {
+		return nil, fmt.Errorf("missing user")
+	}
+	return self, nil
+}
