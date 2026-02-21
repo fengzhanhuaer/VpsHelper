@@ -29,6 +29,18 @@
                     <label for="api_hash">API Hash</label>
                     <input id="api_hash" name="api_hash" value="{{ .ApiHash }}" required />
                 </div>
+                <div class="field">
+                    <label for="tg_bot_token">Bot Token (可选)</label>
+                    <input id="tg_bot_token" name="tg_bot_token" value="{{ .BotToken }}" placeholder="申请的机器人 Token" />
+                </div>
+                <div class="field">
+                    <label for="tg_bot_admin_id">Bot Admin ID (可选)</label>
+                    <input id="tg_bot_admin_id" name="tg_bot_admin_id" value="{{ .BotAdminID }}" placeholder="您的私人 TG ID" />
+                </div>
+                <div class="field">
+                    <label for="tg_bot_webhook_secret">Webhook Secret (可选)</label>
+                    <input id="tg_bot_webhook_secret" name="tg_bot_webhook_secret" value="{{ .BotWebhookSecret }}" placeholder="防止探测的安全密钥" />
+                </div>
                 <button class="btn" type="submit">保存</button>
             </form>
         </section>

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -29,6 +30,7 @@ import (
 	"vpshelper-go/internal/status"
 	"vpshelper-go/internal/store"
 	"vpshelper-go/internal/tg"
+	"vpshelper-go/internal/tgbot"
 	"vpshelper-go/internal/update"
 	"vpshelper-go/internal/version"
 )
@@ -90,6 +92,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/shell/shortcuts/clear", h.shellShortcutsClear)
 	router.GET("/firewall", h.firewallPage)
 	router.POST("/firewall", h.firewallPage)
+	router.POST("/tghelperapi/:secret", h.tgBotWebhook)
 }
 
 func (h *Handler) index(c *gin.Context) {
@@ -509,7 +512,7 @@ func (h *Handler) tgSettings(c *gin.Context) {
 		return
 	}
 
-	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash"})
+	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_bot_token", "tg_bot_admin_id", "tg_bot_webhook_secret"})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "load settings failed")
 		return
@@ -517,15 +520,21 @@ func (h *Handler) tgSettings(c *gin.Context) {
 
 	if c.Request.Method == http.MethodGet {
 		c.HTML(http.StatusOK, "tg_settings.html", gin.H{
-			"Title":   "TG Settings",
-			"ApiID":   settings["telegram_api_id"],
-			"ApiHash": settings["telegram_api_hash"],
+			"Title":            "TG Settings",
+			"ApiID":            settings["telegram_api_id"],
+			"ApiHash":          settings["telegram_api_hash"],
+			"BotToken":         settings["tg_bot_token"],
+			"BotAdminID":       settings["tg_bot_admin_id"],
+			"BotWebhookSecret": settings["tg_bot_webhook_secret"],
 		})
 		return
 	}
 
 	apiID := strings.TrimSpace(c.PostForm("api_id"))
 	apiHash := strings.TrimSpace(c.PostForm("api_hash"))
+	botToken := strings.TrimSpace(c.PostForm("tg_bot_token"))
+	botAdmin := strings.TrimSpace(c.PostForm("tg_bot_admin_id"))
+	webhookSecret := strings.TrimSpace(c.PostForm("tg_bot_webhook_secret"))
 
 	var errMsg string
 	if apiID == "" || apiHash == "" {
@@ -542,13 +551,45 @@ func (h *Handler) tgSettings(c *gin.Context) {
 			errMsg = "保存 API Hash 失败。"
 		}
 	}
+	
+	if errMsg == "" {
+		_ = store.SetSetting(h.dbConn, "tg_bot_token", botToken)
+		_ = store.SetSetting(h.dbConn, "tg_bot_admin_id", botAdmin)
+		
+		if webhookSecret == "" && botToken != "" {
+			webhookSecret = fmt.Sprintf("random_%d", time.Now().UnixNano()) // fallback random
+		}
+		_ = store.SetSetting(h.dbConn, "tg_bot_webhook_secret", webhookSecret)
+
+		if botToken != "" && webhookSecret != "" {
+			// Auto set webhook using current host
+			host := c.Request.Host
+			scheme := "http"
+			if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" || c.GetHeader("Cf-Visitor") != "" {
+				scheme = "https"
+			}
+			// Hardcode https if proxy headers didn't match normally
+			if !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
+				scheme = "https"
+			}
+			
+			hookURL := fmt.Sprintf("%s://%s/tghelperapi/%s", scheme, host, webhookSecret)
+			err := tgbot.SetWebhook(botToken, hookURL, webhookSecret)
+			if err != nil {
+				errMsg = "自动注册 Webhook 失败: " + err.Error()
+			}
+		}
+	}
 
 	if errMsg != "" {
 		c.HTML(http.StatusOK, "tg_settings.html", gin.H{
-			"Title":   "TG Settings",
-			"ApiID":   apiID,
-			"ApiHash": apiHash,
-			"Error":   errMsg,
+			"Title":            "TG Settings",
+			"ApiID":            apiID,
+			"ApiHash":          apiHash,
+			"BotToken":         botToken,
+			"BotAdminID":       botAdmin,
+			"BotWebhookSecret": webhookSecret,
+			"Error":            errMsg,
 		})
 		return
 	}
@@ -2022,7 +2063,29 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		return
 	}
 
-	if !send(92, "下载完成，正在替换可执行文件...", false, false) {
+	if !send(92, "下载完成，正在触发新版本预启动自检 (拦截崩溃或异常)...", false, false) {
+		return
+	}
+
+	ctxTest, cancelTest := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelTest()
+	cmd := exec.CommandContext(ctxTest, bin, os.Args[1:]...)
+	cmd.Env = append(os.Environ(), "VPSHELPER_UPDATE_TEST=1")
+	out, errTest := cmd.CombinedOutput()
+	
+	if errTest != nil || ctxTest.Err() == context.DeadlineExceeded {
+		failMsg := "新版本自检失败，已自动回滚并保持当前原版运行! 原因: "
+		if errTest != nil {
+			failMsg += errTest.Error()
+		} else {
+			failMsg += "心跳存活超时"
+		}
+		_ = os.Remove(bin) // Rollback: do not use the corrupted binary
+		fail(93, failMsg + ". 输出记录: " + string(out))
+		return
+	}
+
+	if !send(94, "启动自检通过，开始无缝替换可执行文件...", false, false) {
 		return
 	}
 

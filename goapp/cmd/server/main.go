@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -36,6 +37,18 @@ func main() {
 	tg.StartAutoSend(context.Background(), database)
 	tg.StartAutoSign(context.Background(), database)
 	tg.StartAutoReply(context.Background(), database)
+
+	if os.Getenv("VPSHELPER_UPDATE_TEST") == "1" {
+		log.Printf("VPSHELPER_UPDATE_TEST is active. Running pre-flight health checks...")
+		// Avoid port conflicts with the running parent process
+		cfg.ListenAddr = "127.0.0.1:0"
+		// If the process survives for 10 seconds without crashing, exit with success.
+		go func() {
+			time.Sleep(10 * time.Second)
+			log.Printf("Pre-flight checks passed successfully.")
+			os.Exit(0)
+		}()
+	}
 
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
