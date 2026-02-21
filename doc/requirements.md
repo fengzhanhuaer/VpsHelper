@@ -35,3 +35,12 @@
   - 新版本拉起后，须在预设超时窗口（如 60 秒）内立刻尝试寻源并与控制中心系统重建多路复用的 WebSocket 连接。
   - 若发生程序 Crash、心跳超时或重连持续失败等任意严重异常，守护进程将立刻接管斩断新版本进程，自动覆盖并回滚至备份的稳定固件版本，以确保远程节点处于“永不失管”状态。
 
+### 6. 基于 WebSocket 的端到端代理与客户端接入 (WebSocket-based Proxy & Client Access)
+- **协议选型与内嵌服务端**:
+  - 由于探针本身利用 WebSocket 进行通信并具备防封锁特性，为了无缝衔接市面上成熟的各类流量代理客户端（供 PC 端如 Windows，或移动端全局代理翻墙），探针需在特定指令下动态启动兼容协议。
+  - **首推方案**：在 WebSocket 流之上承载 **Trojan** 或 **Vmess** / **Shadowsocks (Over WS)** 协议。这就意味着流量特征为标准的 WSS (WebSocket + TLS)，具有顶尖的穿墙留存率。
+- **推荐接入的第三方客户端**:
+  - **Clash Verge Rev** (基于 Mihomo 内核): 完美支持所有主流 WebSocket 承载的代理协议（Trojan-WS, Shadowsocks-WS, Vmess），支持极其强大的分流规则。
+  - **v2rayN / NekoBox**: 非常纯粹且专业的 WebSocket 直连代理客户端，对上述衍生协议支持度极好。
+- **运行机制**: 
+  - 通过控制板下发指令，任意公网探针即可瞬时开启 `Trojan over WebSocket` 监听，控制中心生成 `trojan://密码@探针IP:端口?security=tls&type=ws` 的标准订阅链接，本地 Windows 的 Clash 等软件导入即可无缝中继上网。
