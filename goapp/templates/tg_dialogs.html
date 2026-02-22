@@ -135,10 +135,10 @@
             var html = '';
             dialogs.forEach(function (d) {
                 html += '<tr>'
-                    + '<td>' + escHtml(d.Title || '') + '</td>'
-                    + '<td>' + escHtml(d.Username || '') + '</td>'
-                    + '<td><code>' + escHtml(d.DialogID || '') + '</code></td>'
-                    + '<td class="muted">' + escHtml(d.UpdatedAt || '') + '</td>'
+                    + '<td>' + escHtml(d.title || '') + '</td>'
+                    + '<td>' + escHtml(d.username || '') + '</td>'
+                    + '<td><code>' + escHtml(d.dialog_id || '') + '</code></td>'
+                    + '<td class="muted">' + escHtml(d.updated_at || '') + '</td>'
                     + '</tr>';
             });
             tbody.innerHTML = html;

@@ -2933,8 +2933,10 @@ func (h *Handler) tgChat(c *gin.Context) {
 }
 
 // tgChatMessages returns JSON chat messages for a given account + dialog.
+// If no local messages are stored yet, automatically fetches recent history from Telegram.
 func (h *Handler) tgChatMessages(c *gin.Context) {
-	if h.currentUser(c) == "" {
+	username := h.currentUser(c)
+	if username == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
 		return
 	}
@@ -2945,13 +2947,27 @@ func (h *Handler) tgChatMessages(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "invalid params"})
 		return
 	}
+
 	msgs, err := store.ListChatMessages(accountID, dialogID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
+
+	fetched := false
+	if len(msgs) == 0 {
+		// Nothing stored locally — pull from Telegram directly.
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		defer cancel()
+		pulled, fetchErr := tg.FetchAndStoreDialogHistory(ctx, h.dbConn, username, accountID, dialogID, 100)
+		if fetchErr == nil && len(pulled) > 0 {
+			msgs = pulled
+			fetched = true
+		}
+	}
+
 	if msgs == nil {
 		msgs = []store.ChatMessage{}
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true, "messages": msgs})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "messages": msgs, "fetched": fetched})
 }

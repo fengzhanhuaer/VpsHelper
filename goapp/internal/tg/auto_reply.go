@@ -70,10 +70,24 @@ func StartAutoReply(ctx context.Context, dbConn *sql.DB) {
 					continue
 				}
 
-				accounts, err := store.ListEnabledAutoReplyAccounts(dbConn)
-				if err != nil {
-					continue
+				// All TG accounts: for message capture (may have no rules).
+				allAccts, _ := store.ListAllTGAccountsAsOwnerAccounts(dbConn)
+				// Rule accounts: may have better embedded credentials.
+				ruleAccts, _ := store.ListEnabledAutoReplyAccounts(dbConn)
+
+				// Build merged map; rule accounts override all-accounts (better credentials).
+				acctMap := make(map[autoReplyKey]store.OwnerAccount, len(allAccts))
+				for _, a := range allAccts {
+					acctMap[autoReplyKey{owner: a.Owner, accountID: a.AccountID}] = a
 				}
+				for _, a := range ruleAccts {
+					acctMap[autoReplyKey{owner: a.Owner, accountID: a.AccountID}] = a
+				}
+				accounts := make([]store.OwnerAccount, 0, len(acctMap))
+				for _, a := range acctMap {
+					accounts = append(accounts, a)
+				}
+
 				want := map[autoReplyKey]bool{}
 				for _, a := range accounts {
 					want[autoReplyKey{owner: a.Owner, accountID: a.AccountID}] = true
@@ -171,9 +185,58 @@ func runAutoReplyListener(ctx context.Context, dbConn *sql.DB, acct store.OwnerA
 		if res, err := client.API().ContactsGetContacts(ctx, 0); err == nil {
 			h.applyContacts(res)
 		}
+
+		// On first connect, catch up messages missed while offline (best-effort).
+		go catchUpAccountDialogs(ctx, client.API(), acct.AccountID)
+
 		<-ctx.Done()
 		return nil
 	})
+}
+
+// catchUpAccountDialogs fetches messages newer than the last stored msg_id
+// for every dialog that already has a local history file for accountID.
+func catchUpAccountDialogs(ctx context.Context, api *tg.Client, accountID int64) {
+	dialogs := store.ListDialogsWithHistory(accountID)
+	for _, dialogID := range dialogs {
+		minID := store.GetLastStoredMsgID(accountID, dialogID)
+		if minID <= 0 {
+			continue
+		}
+		resolved, err := resolveTarget(ctx, api, dialogID)
+		if err != nil {
+			continue
+		}
+		res, err := messagesGetHistoryWithRetry(ctx, api, &tg.MessagesGetHistoryRequest{
+			Peer:  resolved.peer,
+			MinID: minID,
+			Limit: 100,
+		})
+		if err != nil {
+			continue
+		}
+		raw := historyMessagesFromResponse(res)
+		// Telegram returns newest-first; store oldest-first.
+		for i := len(raw) - 1; i >= 0; i-- {
+			m, ok := raw[i].(*tg.Message)
+			if !ok || strings.TrimSpace(m.Message) == "" {
+				continue
+			}
+			from := "me"
+			if !m.Out {
+				if fid, ok := m.FromID.(*tg.PeerUser); ok {
+					from = strconv.FormatInt(fid.UserID, 10)
+				}
+			}
+			_ = store.AppendChatMessage(accountID, dialogID, store.ChatMessage{
+				MsgID: m.ID,
+				From:  from,
+				Text:  m.Message,
+				Date:  int64(m.Date),
+				Out:   m.Out,
+			})
+		}
+	}
 }
 
 // lateUpdateHandler allows setting the real handler after telegram.Client is constructed.

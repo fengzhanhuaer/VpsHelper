@@ -109,6 +109,43 @@ func ListChatMessages(accountID int64, dialogID string) ([]ChatMessage, error) {
 	return msgs, nil
 }
 
+// ListDialogsWithHistory returns the dialog IDs that have a local message file
+// for the given accountID. Used at startup for catch-up fetch.
+func ListDialogsWithHistory(accountID int64) []string {
+	dir := filepath.Join(chatMsgsDir(), fmt.Sprintf("%d", accountID))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+			ids = append(ids, strings.TrimSuffix(e.Name(), ".json"))
+		}
+	}
+	return ids
+}
+
+// GetLastStoredMsgID returns the highest MsgID in the stored history for a dialog.
+// Returns 0 if no messages are stored. Used as minID for catch-up requests.
+func GetLastStoredMsgID(accountID int64, dialogID string) int {
+	data, err := os.ReadFile(chatMsgsPath(accountID, dialogID))
+	if err != nil {
+		return 0
+	}
+	var msgs []ChatMessage
+	if json.Unmarshal(data, &msgs) != nil {
+		return 0
+	}
+	maxID := 0
+	for _, m := range msgs {
+		if m.MsgID > maxID {
+			maxID = m.MsgID
+		}
+	}
+	return maxID
+}
+
 // DeleteChatMsgsForAccount removes all chat message files for an account.
 func DeleteChatMsgsForAccount(accountID int64) {
 	dir := filepath.Join(chatMsgsDir(), fmt.Sprintf("%d", accountID))

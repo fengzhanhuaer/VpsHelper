@@ -3,6 +3,7 @@
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -171,6 +172,37 @@ func ListEnabledAutoReplyAccounts(dbConn *sql.DB) ([]OwnerAccount, error) {
 		if err := rows.Scan(&oa.Owner, &oa.AccountID, &oa.AccountName, &oa.SessionText, &oa.APIID, &oa.APIHash, &oa.AllProxy); err != nil {
 			return nil, fmt.Errorf("scan enabled auto reply accounts: %w", err)
 		}
+		out = append(out, oa)
+	}
+	return out, nil
+}
+
+// ListAllTGAccountsAsOwnerAccounts returns every TG account as an OwnerAccount,
+// with API credentials loaded from the global app_settings.
+// Used by StartAutoReply so the listener runs for ALL accounts (not just ones with rules).
+func ListAllTGAccountsAsOwnerAccounts(dbConn *sql.DB) ([]OwnerAccount, error) {
+	settings, _ := GetSettings(dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+	apiID := strings.TrimSpace(settings["telegram_api_id"])
+	apiHash := strings.TrimSpace(settings["telegram_api_hash"])
+	allProxy := strings.TrimSpace(settings["tg_all_proxy"])
+
+	rows, err := dbConn.Query(
+		"SELECT owner, id, COALESCE(account_name,''), COALESCE(session_text,'') FROM tg_accounts",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list all tg accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var out []OwnerAccount
+	for rows.Next() {
+		var oa OwnerAccount
+		if err := rows.Scan(&oa.Owner, &oa.AccountID, &oa.AccountName, &oa.SessionText); err != nil {
+			return nil, fmt.Errorf("scan tg account: %w", err)
+		}
+		oa.APIID = apiID
+		oa.APIHash = apiHash
+		oa.AllProxy = allProxy
 		out = append(out, oa)
 	}
 	return out, nil
