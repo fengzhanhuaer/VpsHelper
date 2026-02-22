@@ -66,6 +66,7 @@ func FetchAndStoreDialogHistory(ctx context.Context, dbConn *sql.DB, owner strin
 			return err
 		}
 		raw := historyMessagesFromResponse(res)
+		nameMap := buildSenderNameMap(historyUsersFromResponse(res))
 		// Telegram returns newest-first; store oldest-first.
 		for i := len(raw) - 1; i >= 0; i-- {
 			m, ok := raw[i].(*gotdtg.Message)
@@ -75,10 +76,14 @@ func FetchAndStoreDialogHistory(ctx context.Context, dbConn *sql.DB, owner strin
 			from := "me"
 			if !m.Out {
 				if fid, ok := m.FromID.(*gotdtg.PeerUser); ok {
-					from = strconv.FormatInt(fid.UserID, 10)
+					if n := nameMap[fid.UserID]; n != "" {
+						from = n
+					} else {
+						from = strconv.FormatInt(fid.UserID, 10)
+					}
 				}
 			}
-			cm := store.ChatMessage{
+cm := store.ChatMessage{
 				MsgID: m.ID,
 				From:  from,
 				Text:  m.Message,

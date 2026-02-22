@@ -145,7 +145,7 @@
                 var timeStr = m.date ? new Date(m.date * 1000).toLocaleString('zh-CN', {
                     month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
                 }) : '';
-                var fromLabel = m.out ? '' : (m.from && m.from !== 'me' ? 'ID:' + m.from + ' · ' : '');
+                var fromLabel = m.out ? '' : (m.from && m.from !== 'me' ? m.from + ' · ' : '');
                 div.innerHTML = '<div class="bubble">' + esc(m.text) + '</div>'
                               + '<div class="msg-meta">' + fromLabel + timeStr + '</div>';
                 box.appendChild(div);

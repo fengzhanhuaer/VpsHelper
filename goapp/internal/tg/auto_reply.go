@@ -215,6 +215,7 @@ func catchUpAccountDialogs(ctx context.Context, api *tg.Client, accountID int64)
 		if err != nil {
 			continue
 		}
+		nameMap := buildSenderNameMap(historyUsersFromResponse(res))
 		raw := historyMessagesFromResponse(res)
 		// Telegram returns newest-first; store oldest-first.
 		for i := len(raw) - 1; i >= 0; i-- {
@@ -225,7 +226,11 @@ func catchUpAccountDialogs(ctx context.Context, api *tg.Client, accountID int64)
 			from := "me"
 			if !m.Out {
 				if fid, ok := m.FromID.(*tg.PeerUser); ok {
-					from = strconv.FormatInt(fid.UserID, 10)
+					if n := nameMap[fid.UserID]; n != "" {
+						from = n
+					} else {
+						from = strconv.FormatInt(fid.UserID, 10)
+					}
 				}
 			}
 			_ = store.AppendChatMessage(accountID, dialogID, store.ChatMessage{
@@ -263,12 +268,13 @@ func (l *lateUpdateHandler) Set(h telegram.UpdateHandler) {
 }
 
 type incomingMessage struct {
-	MsgID    int
-	Peer     tg.PeerClass
-	SenderID int64 // 0 = self / outgoing
-	Text     string
-	Date     int64 // unix timestamp
-	Out      bool
+	MsgID      int
+	Peer       tg.PeerClass
+	SenderID   int64  // 0 = self / outgoing
+	SenderName string // display name if resolved, else empty
+	Text       string
+	Date       int64  // unix timestamp
+	Out        bool
 }
 
 func extractIncomingMessages(u tg.UpdatesClass) []incomingMessage {
@@ -286,47 +292,53 @@ func extractIncomingMessages(u tg.UpdatesClass) []incomingMessage {
 		}
 		return []incomingMessage{{MsgID: v.ID, Peer: &tg.PeerChat{ChatID: v.ChatID}, SenderID: sid, Text: v.Message, Date: int64(v.Date), Out: v.Out}}
 	case *tg.UpdateShort:
-		return extractFromUpdate(v.Update)
+		return extractFromUpdate(v.Update, nil)
 	case *tg.Updates:
-		return extractFromUpdates(v.Updates)
+		nameMap := buildSenderNameMap(v.Users)
+		return extractFromUpdates(v.Updates, nameMap)
 	case *tg.UpdatesCombined:
-		return extractFromUpdates(v.Updates)
+		nameMap := buildSenderNameMap(v.Users)
+		return extractFromUpdates(v.Updates, nameMap)
 	default:
 		return nil
 	}
 }
 
-func extractFromUpdates(updates []tg.UpdateClass) []incomingMessage {
+func extractFromUpdates(updates []tg.UpdateClass, nameMap map[int64]string) []incomingMessage {
 	var out []incomingMessage
 	for _, u := range updates {
-		out = append(out, extractFromUpdate(u)...)
+		out = append(out, extractFromUpdate(u, nameMap)...)
 	}
 	return out
 }
 
-func extractFromUpdate(u tg.UpdateClass) []incomingMessage {
+func extractFromUpdate(u tg.UpdateClass, nameMap map[int64]string) []incomingMessage {
 	switch v := u.(type) {
 	case *tg.UpdateNewMessage:
-		return extractFromMessage(v.Message)
+		return extractFromMessage(v.Message, nameMap)
 	case *tg.UpdateNewChannelMessage:
-		return extractFromMessage(v.Message)
+		return extractFromMessage(v.Message, nameMap)
 	default:
 		return nil
 	}
 }
 
-func extractFromMessage(m tg.MessageClass) []incomingMessage {
+func extractFromMessage(m tg.MessageClass, nameMap map[int64]string) []incomingMessage {
 	msg, ok := m.(*tg.Message)
 	if !ok {
 		return nil
 	}
 	var senderID int64
+	var senderName string
 	if !msg.Out {
 		if fid, ok := msg.FromID.(*tg.PeerUser); ok {
 			senderID = fid.UserID
+			if nameMap != nil {
+				senderName = nameMap[senderID]
+			}
 		}
 	}
-	return []incomingMessage{{MsgID: msg.ID, Peer: msg.PeerID, SenderID: senderID, Text: msg.Message, Date: int64(msg.Date), Out: msg.Out}}
+	return []incomingMessage{{MsgID: msg.ID, Peer: msg.PeerID, SenderID: senderID, SenderName: senderName, Text: msg.Message, Date: int64(msg.Date), Out: msg.Out}}
 }
 
 func randomID() int64 {
@@ -508,16 +520,21 @@ func (h *autoReplyHandler) storeMsgsToHistory(_ context.Context, msgs []incoming
 		if t == 0 {
 			t = time.Now().Unix()
 		}
-		senderName := "me"
-		if !m.Out && m.SenderID != 0 {
-			senderName = strconv.FormatInt(m.SenderID, 10)
+		// Use resolved name when available, else numeric ID, else "me" for outgoing.
+		senderDisplay := "me"
+		if !m.Out {
+			if m.SenderName != "" {
+				senderDisplay = m.SenderName
+			} else if m.SenderID != 0 {
+				senderDisplay = strconv.FormatInt(m.SenderID, 10)
+			}
 		}
 		cm := store.ChatMessage{
-			MsgID:  m.MsgID,
-			From:   senderName,
-			Text:   m.Text,
-			Date:   t,
-			Out:    m.Out,
+			MsgID: m.MsgID,
+			From:  senderDisplay,
+			Text:  m.Text,
+			Date:  t,
+			Out:   m.Out,
 		}
 		_ = store.AppendChatMessage(h.accountID, key, cm)
 		_ = store.UpdateDialogLastMsgAt(h.accountID, key, t)

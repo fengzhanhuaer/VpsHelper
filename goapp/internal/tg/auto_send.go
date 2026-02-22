@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -282,6 +283,40 @@ func historyMessagesFromResponse(res tg.MessagesMessagesClass) []tg.MessageClass
 	default:
 		return nil
 	}
+}
+
+// historyUsersFromResponse extracts the Users list embedded in a getHistory response.
+func historyUsersFromResponse(res tg.MessagesMessagesClass) []tg.UserClass {
+	switch v := res.(type) {
+	case *tg.MessagesMessages:
+		return v.Users
+	case *tg.MessagesMessagesSlice:
+		return v.Users
+	case *tg.MessagesChannelMessages:
+		return v.Users
+	}
+	return nil
+}
+
+// buildSenderNameMap creates a userID → display-name map from a UserClass slice.
+// Priority: FirstName+LastName → Username → "#<ID>".
+func buildSenderNameMap(users []tg.UserClass) map[int64]string {
+	m := make(map[int64]string, len(users))
+	for _, u := range users {
+		usr, ok := u.(*tg.User)
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(usr.FirstName + " " + usr.LastName)
+		if name == "" {
+			name = usr.Username
+		}
+		if name == "" {
+			name = "#" + strconv.FormatInt(usr.ID, 10)
+		}
+		m[usr.ID] = name
+	}
+	return m
 }
 
 func buildOptions(storage telegram.SessionStorage, allProxy string) (telegram.Options, error) {
