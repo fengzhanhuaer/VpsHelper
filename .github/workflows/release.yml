@@ -14,14 +14,18 @@ on:
 permissions:
   contents: write
 
+env:
+  TAG_NAME: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+
 jobs:
-  release:
+  validate:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      TAG_NAME: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+    outputs:
+      tag_name: ${{ steps.tag.outputs.tag_name }}
     steps:
+      - id: tag
+        run: echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+
       - name: Validate tag
         run: |
           if [[ "${TAG_NAME}" != v* ]]; then
@@ -29,6 +33,10 @@ jobs:
             exit 1
           fi
 
+  test:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -44,27 +52,74 @@ jobs:
         working-directory: goapp
         run: go test ./...
 
-      - name: Build All Architectures
+  build:
+    runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ''
+          - goos: linux
+            goarch: arm64
+            ext: ''
+          - goos: windows
+            goarch: amd64
+            ext: '.exe'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: goapp/go.mod
+          cache-dependency-path: goapp/go.sum
+
+      - name: Build
         working-directory: goapp
         env:
           CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          
-          echo "Building linux/amd64..."
-          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${{ env.TAG_NAME }}" -o "dist/vpshelper_linux_amd64" ./cmd/server
-          
-          echo "Building linux/arm64..."
-          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${{ env.TAG_NAME }}" -o "dist/vpshelper_linux_arm64" ./cmd/server
-          
-          echo "Building windows/amd64..."
-          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${{ env.TAG_NAME }}" -o "dist/vpshelper_windows_amd64.exe" ./cmd/server
+          OUTPUT="dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
+          go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}" -o "${OUTPUT}" ./cmd/server
+          echo "Built ${OUTPUT}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: goapp/dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - test
+      - build
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vpshelper_*
+          path: goapp/dist
+          merge-multiple: true
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: ${{ env.TAG_NAME }}
+          tag_name: ${{ needs.validate.outputs.tag_name }}
+          name: ${{ needs.validate.outputs.tag_name }}
           generate_release_notes: true
           overwrite_files: true
           files: goapp/dist/*
