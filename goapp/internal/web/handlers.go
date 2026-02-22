@@ -108,6 +108,8 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/cloudflare", h.cloudflarePage)
 	router.POST("/cloudflare/sync", h.cloudflareSync)
 	router.POST("/cloudflare/addself", h.cloudflareAddSelf)
+	router.GET("/ns/lottery", h.nsLottery)
+	router.POST("/ns/lottery", h.nsLottery)
 	router.POST("/api/:secret", h.tgBotWebhook)
 }
 

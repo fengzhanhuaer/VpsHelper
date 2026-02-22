@@ -77,11 +77,37 @@ func MigrateLocal(db *sql.DB) error {
         )`,
 		`CREATE INDEX IF NOT EXISTS idx_tgsh_task
             ON tg_send_history(task_id, id DESC)`,
+
+		// ── nodeseek lottery watches ──────────────────────────────────────────
+		`CREATE TABLE IF NOT EXISTS ns_lottery_watches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT NOT NULL,
+            url TEXT NOT NULL,
+            post_id TEXT NOT NULL,
+            draw_time INTEGER NOT NULL,
+            count INTEGER NOT NULL DEFAULT 1,
+            start_floor INTEGER NOT NULL DEFAULT 1,
+            duplicate INTEGER NOT NULL DEFAULT 0,
+            watch_username TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            winners TEXT NOT NULL DEFAULT '',
+            notified INTEGER NOT NULL DEFAULT 0,
+            note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )`,
+		`CREATE INDEX IF NOT EXISTS idx_nslw_owner
+            ON ns_lottery_watches(owner, draw_time DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_nslw_pending
+            ON ns_lottery_watches(status, draw_time ASC)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
 			return fmt.Errorf("migrate local db: %w\nstmt: %s", err, s)
 		}
 	}
+
+	// v2 columns for retry control (idempotent).
+	_, _ = db.Exec("ALTER TABLE ns_lottery_watches ADD COLUMN check_count INTEGER NOT NULL DEFAULT 0;")
+	_, _ = db.Exec("ALTER TABLE ns_lottery_watches ADD COLUMN next_check_at INTEGER NOT NULL DEFAULT 0;")
 	return nil
 }

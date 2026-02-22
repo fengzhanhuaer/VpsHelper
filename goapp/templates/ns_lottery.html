@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .lottery-card {
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+            padding: 14px 18px; margin-bottom: 10px;
+            transition: box-shadow .15s;
+        }
+        .lottery-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+        .lottery-card .title-row {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 6px;
+        }
+        .lottery-card .post-id { font-weight: 600; font-size: 14px; }
+        .lottery-card .draw-time { font-size: 12px; color: #6b7280; }
+        .lottery-card .note { font-size: 13px; color: #374151; margin: 4px 0; line-height: 1.5; }
+        .lottery-card .winners { font-size: 13px; color: #059669; font-weight: 500; }
+        .lottery-card .actions { display: flex; gap: 6px; margin-top: 8px; }
+        .lottery-card .actions button,
+        .lottery-card .actions a {
+            font-size: 12px; padding: 4px 10px; border-radius: 6px;
+            border: 1px solid #d1d5db; background: #fff; cursor: pointer;
+            color: #374151; text-decoration: none; transition: background .12s;
+        }
+        .lottery-card .actions button:hover,
+        .lottery-card .actions a:hover { background: #f3f4f6; }
+
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 11px; font-weight: 600; }
+        .badge-pending { background: #fef3c7; color: #92400e; }
+        .badge-drawn  { background: #e5e7eb; color: #374151; }
+        .badge-won    { background: #d1fae5; color: #065f46; }
+
+        .section-title { font-size: 15px; font-weight: 600; margin: 18px 0 8px; color: #111; }
+        .empty-hint { color: #9ca3af; font-size: 13px; padding: 8px 0; }
+
+        .add-form { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px;
+            padding: 16px; margin-bottom: 18px; }
+        .add-form .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+        .add-form input[type=text] { flex:1; min-width: 200px; padding: 8px 12px;
+            border: 1px solid #d1d5db; border-radius: 8px; font: inherit; font-size: 13px; }
+        .add-form button { padding: 8px 16px; border-radius: 8px; font-size: 13px;
+            background: #2563eb; color: #fff; border: none; cursor: pointer; white-space: nowrap; }
+        .add-form button:hover { background: #1d4ed8; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/tg/bot/settings">Bot设置</a>
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+    <main>
+        <section class="panel panel--center">
+            <h1>🎰 NodeSeek 抽奖监视</h1>
+            <p class="muted">添加抽奖链接，系统会在开奖后自动检查结果。中奖时通过 Telegram Bot 发送通知。</p>
+
+            {{ if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" id="msg-box">{{ .Message }}</div>
+            {{ end }}
+
+            <!-- 用户名设置 -->
+            <div class="add-form">
+                <form method="post">
+                    <input type="hidden" name="action" value="save_username" />
+                    <div class="row">
+                        <label style="font-size:13px;font-weight:500;white-space:nowrap;">NodeSeek 用户名:</label>
+                        <input type="text" name="watch_username" value="{{ .WatchUsername }}" placeholder="你的 NodeSeek 用户名" />
+                        <button type="submit">保存</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 添加链接 -->
+            <div class="add-form">
+                <form method="post">
+                    <input type="hidden" name="action" value="add" />
+                    <input type="hidden" name="watch_username" value="{{ .WatchUsername }}" />
+                    <div class="row">
+                        <input type="text" name="lottery_url" placeholder="粘贴 NodeSeek 抽奖链接 https://www.nodeseek.com/lucky?post=..." />
+                        <button type="submit">➕ 添加监视</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 已中奖 -->
+            <div class="section-title">🎉 已中奖 ({{ len .Won }})</div>
+            {{ if .Won }}
+            {{ range .Won }}
+            <div class="lottery-card" style="border-left: 3px solid #10b981;">
+                <div class="title-row">
+                    <span class="post-id">帖子 #{{ .PostID }}</span>
+                    <span class="badge badge-won">🎉 中奖</span>
+                </div>
+                <div class="draw-time">用户: {{ .WatchUsername }}</div>
+                <div class="note">{{ .Note }}</div>
+                <div class="actions">
+                    <a href="{{ .URL }}" target="_blank">查看抽奖</a>
+                    <form method="post" style="margin:0;">
+                        <input type="hidden" name="action" value="delete" />
+                        <input type="hidden" name="id" value="{{ .ID }}" />
+                        <button type="submit" onclick="return confirm('确认删除？')">删除</button>
+                    </form>
+                </div>
+            </div>
+            {{ end }}
+            {{ else }}
+            <div class="empty-hint">暂无中奖记录</div>
+            {{ end }}
+
+            <!-- 未开奖 -->
+            <div class="section-title">⏳ 未开奖 ({{ len .Pending }})</div>
+            {{ if .Pending }}
+            {{ range .Pending }}
+            <div class="lottery-card">
+                <div class="title-row">
+                    <span class="post-id">帖子 #{{ .PostID }}</span>
+                    <span class="badge badge-pending">等待开奖</span>
+                </div>
+                <div class="draw-time">用户: {{ .WatchUsername }} · 奖品数: {{ .Count }}</div>
+                <div class="actions">
+                    <a href="{{ .URL }}" target="_blank">查看抽奖</a>
+                    <form method="post" style="margin:0;">
+                        <input type="hidden" name="action" value="check_now" />
+                        <input type="hidden" name="id" value="{{ .ID }}" />
+                        <button type="submit">立即检查</button>
+                    </form>
+                    <form method="post" style="margin:0;">
+                        <input type="hidden" name="action" value="delete" />
+                        <input type="hidden" name="id" value="{{ .ID }}" />
+                        <button type="submit" onclick="return confirm('确认删除？')">删除</button>
+                    </form>
+                </div>
+            </div>
+            {{ end }}
+            {{ else }}
+            <div class="empty-hint">暂无待开奖监视</div>
+            {{ end }}
+
+            <!-- 已开奖（未中） -->
+            <div class="section-title">📋 已开奖 ({{ len .Drawn }})</div>
+            {{ if .Drawn }}
+            {{ range .Drawn }}
+            <div class="lottery-card" style="opacity: 0.75;">
+                <div class="title-row">
+                    <span class="post-id">帖子 #{{ .PostID }}</span>
+                    <span class="badge badge-drawn">未中奖</span>
+                </div>
+                <div class="draw-time">用户: {{ .WatchUsername }}</div>
+                <div class="note">{{ .Note }}</div>
+                <div class="actions">
+                    <a href="{{ .URL }}" target="_blank">查看抽奖</a>
+                    <form method="post" style="margin:0;">
+                        <input type="hidden" name="action" value="delete" />
+                        <input type="hidden" name="id" value="{{ .ID }}" />
+                        <button type="submit" onclick="return confirm('确认删除？')">删除</button>
+                    </form>
+                </div>
+            </div>
+            {{ end }}
+            {{ else }}
+            <div class="empty-hint">暂无已开奖记录</div>
+            {{ end }}
+        </section>
+    </main>
+</body>
+</html>
