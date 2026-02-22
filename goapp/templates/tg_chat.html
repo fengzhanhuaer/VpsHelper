@@ -131,6 +131,8 @@
     <script>
     var currentAccountID = {{ .AccountID }};
     var currentDialogID  = '';
+    var loadedMessages   = new Set();
+    var refreshTimer     = null;
 
     function switchAccount(id) {
         window.location.href = '/tg/chat?account_id=' + id;
@@ -151,30 +153,63 @@
 
         var box = document.getElementById('chat-messages');
         box.innerHTML = '<div class="chat-placeholder">加载中…</div>';
+        loadedMessages.clear();
 
+        if (refreshTimer) clearInterval(refreshTimer);
+
+        fetchMessages(true);
+        refreshTimer = setInterval(function() {
+            fetchMessages(false);
+        }, 3000); // 3 seconds refresh
+    }
+
+    function fetchMessages(isInitial) {
+        if (!currentDialogID) return;
         fetch('/tg/chat/messages?account_id=' + encodeURIComponent(currentAccountID)
-              + '&dialog_id=' + encodeURIComponent(dialogID), { credentials: 'same-origin' })
+              + '&dialog_id=' + encodeURIComponent(currentDialogID), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            var box = document.getElementById('chat-messages');
             if (!data.ok) {
-                box.innerHTML = '<div class="chat-placeholder">加载失败：' + esc(data.error || '未知') + '</div>';
+                if (isInitial) {
+                    box.innerHTML = '<div class="chat-placeholder">加载失败：' + esc(data.error || '未知') + '</div>';
+                }
                 return;
             }
             var msgs = data.messages || [];
-            if (msgs.length === 0) {
-                box.innerHTML = '<div class="chat-placeholder">暂无文字消息记录（等待新消息推送中）</div>';
-                return;
+
+            if (isInitial) {
+                if (msgs.length === 0) {
+                    box.innerHTML = '<div class="chat-placeholder">暂无文字消息记录（等待新消息推送中）</div>';
+                    return;
+                }
+                box.innerHTML = '';
+                if (data.fetched) {
+                    var note = document.createElement('div');
+                    note.className = 'chat-placeholder';
+                    note.style.fontSize = '12px';
+                    note.textContent = '↑ 以上为从 Telegram 拉取的最近 ' + msgs.length + ' 条历史消息';
+                    box.appendChild(note);
+                }
             }
-            box.innerHTML = '';
-            if (data.fetched) {
-                // Header note for pulled history
-                var note = document.createElement('div');
-                note.className = 'chat-placeholder';
-                note.style.fontSize = '12px';
-                note.textContent = '↑ 以上为从 Telegram 拉取的最近 ' + msgs.length + ' 条历史消息';
-                box.appendChild(note);
+
+            var added = 0;
+            // Detect scroll position before adding to determine if we should auto-scroll
+            var isAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 50;
+            
+            // Remove the "no messages" placeholder if it exists and we're about to add messages
+            if (!isInitial && msgs.length > 0) {
+                var ph = box.querySelector('.chat-placeholder');
+                if (ph && ph.textContent.includes('等待新消息推送中')) {
+                    ph.remove();
+                }
             }
+
             msgs.forEach(function(m) {
+                var key = m.msg_id ? String(m.msg_id) : (m.date + '_' + m.text.substring(0, 20));
+                if (loadedMessages.has(key)) return;
+                loadedMessages.add(key);
+                
                 var div = document.createElement('div');
                 div.className = 'msg ' + (m.out ? 'out' : 'in');
                 var timeStr = m.date ? new Date(m.date * 1000).toLocaleString('zh-CN', {
@@ -184,11 +219,17 @@
                 div.innerHTML = '<div class="bubble">' + esc(m.text) + '</div>'
                               + '<div class="msg-meta">' + fromLabel + timeStr + '</div>';
                 box.appendChild(div);
+                added++;
             });
-            box.scrollTop = box.scrollHeight;
+
+            if (added > 0 && (isInitial || isAtBottom)) {
+                box.scrollTop = box.scrollHeight;
+            }
         })
         .catch(function(e) {
-            box.innerHTML = '<div class="chat-placeholder">请求出错：' + String(e) + '</div>';
+            if (isInitial) {
+                document.getElementById('chat-messages').innerHTML = '<div class="chat-placeholder">请求出错：' + String(e) + '</div>';
+            }
         });
     }
 
@@ -198,7 +239,16 @@
     }
 
     function appendMessage(m) {
+        var key = m.msg_id ? String(m.msg_id) : (m.date + '_' + m.text.substring(0, 20));
+        if (loadedMessages.has(key)) return;
+        loadedMessages.add(key);
+
         var box = document.getElementById('chat-messages');
+        var ph = box.querySelector('.chat-placeholder');
+        if (ph && ph.textContent.includes('等待新消息推送中')) {
+            ph.remove();
+        }
+
         var div = document.createElement('div');
         div.className = 'msg ' + (m.out ? 'out' : 'in');
         var timeStr = m.date ? new Date(m.date * 1000).toLocaleString('zh-CN', {

@@ -529,8 +529,13 @@ func (h *autoReplyHandler) Handle(ctx context.Context, u tg.UpdatesClass) error 
 // storeMsgsToHistory persists each message and updates the dialog's last-message timestamp.
 func (h *autoReplyHandler) storeMsgsToHistory(_ context.Context, msgs []incomingMessage) error {
 	for _, m := range msgs {
-		key := peerKey(m.Peer)
-		if key == "" || m.Text == "" {
+		if m.Peer == nil || m.Text == "" {
+			continue
+		}
+		// Use the same numeric dialogID format as RefreshDialogs so that
+		// real-time messages and the dialog list share a single key.
+		dialogID, err := dialogIDFromPeer(m.Peer)
+		if err != nil || dialogID == "" {
 			continue
 		}
 		t := m.Date
@@ -553,7 +558,7 @@ func (h *autoReplyHandler) storeMsgsToHistory(_ context.Context, msgs []incoming
 			Date:  t,
 			Out:   m.Out,
 		}
-		_ = store.AppendChatMessage(h.accountID, key, cm)
+		_ = store.AppendChatMessage(h.accountID, dialogID, cm)
 
 		// Determine dialog title:
 		// - For user chats: use SenderName (the other party)
@@ -562,7 +567,7 @@ func (h *autoReplyHandler) storeMsgsToHistory(_ context.Context, msgs []incoming
 		if _, ok := m.Peer.(*tg.PeerUser); ok && m.SenderName != "" {
 			dialogTitle = m.SenderName
 		}
-		_ = store.UpdateDialogLastMsgAt(h.accountID, key, dialogTitle, t)
+		_ = store.UpdateDialogLastMsgAt(h.accountID, dialogID, dialogTitle, t)
 	}
 	return nil
 }
