@@ -11,6 +11,7 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 
+	"vpshelper-go/internal/cloudflare"
 	"vpshelper-go/internal/config"
 	"vpshelper-go/internal/d1"
 	"vpshelper-go/internal/db"
@@ -37,6 +38,7 @@ func main() {
 	tg.StartAutoSend(context.Background(), database)
 	tg.StartAutoSign(context.Background(), database)
 	tg.StartAutoReply(context.Background(), database)
+	cloudflare.StartDDNSWatch(context.Background(), database)
 
 	if os.Getenv("VPSHELPER_UPDATE_TEST") == "1" {
 		log.Printf("VPSHELPER_UPDATE_TEST is active. Running pre-flight health checks...")

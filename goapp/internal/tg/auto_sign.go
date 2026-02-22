@@ -41,6 +41,11 @@ func runAutoSignOnce(dbConn *sql.DB) {
 	}
 	defer autoSignRunning.Store(false)
 
+	// Global TG kill-switch.
+	if !isTGEnabled(dbConn) {
+		return
+	}
+
 	keys := []string{"tg_sign_auto_enabled", "tg_sign_auto_time", "tg_sign_auto_last_date"}
 	settings, err := store.GetSettings(dbConn, keys)
 	if err != nil {

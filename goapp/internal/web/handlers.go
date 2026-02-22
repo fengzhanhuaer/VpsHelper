@@ -54,6 +54,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/change_password", h.changePassword)
 	router.POST("/change_password", h.changePassword)
 	router.GET("/tg_helper", h.tgHelper)
+	router.POST("/tg_helper", h.tgHelperToggle)
 	router.GET("/tg/settings", h.tgSettings)
 	router.POST("/tg/settings", h.tgSettings)
 	router.GET("/tg/bot/settings", h.tgBotSettings)
@@ -83,6 +84,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/settings/database", h.databaseSettings)
 	router.POST("/settings/database/backup/stream", h.databaseBackupStream)
 	router.POST("/settings/database/pull/stream", h.databasePullStream)
+	router.GET("/settings/database/table/data", h.databaseTableData)
 	router.GET("/settings/ssh", h.sshSettings)
 	router.POST("/settings/ssh", h.sshSettings)
 	router.GET("/system/update", h.systemUpdate)
@@ -100,6 +102,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/cloudflare", h.cloudflarePage)
 	router.POST("/cloudflare", h.cloudflarePage)
 	router.POST("/cloudflare/sync", h.cloudflareSync)
+	router.POST("/cloudflare/addself", h.cloudflareAddSelf)
 	router.POST("/api/:secret", h.tgBotWebhook)
 }
 
@@ -291,7 +294,7 @@ func (h *Handler) tgHelper(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
-	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_bot_token", "tg_bot_admin_id"})
+	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_bot_token", "tg_bot_admin_id", "tg_enabled"})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "load settings failed")
 		return
@@ -300,14 +303,49 @@ func (h *Handler) tgHelper(c *gin.Context) {
 	apiID := settings["telegram_api_id"]
 	apiHash := settings["telegram_api_hash"]
 	configured := apiID != "" && apiHash != ""
-	
+
 	botConfigured := settings["tg_bot_token"] != "" && settings["tg_bot_admin_id"] != ""
+
+	// tg_enabled: empty or "1" means enabled, only "0" means disabled.
+	tgEnabled := strings.TrimSpace(settings["tg_enabled"]) != "0"
+
+	message := strings.TrimSpace(c.Query("message"))
+	msgOK := c.Query("status") == "ok"
 
 	c.HTML(http.StatusOK, "tg_helper.html", gin.H{
 		"Title":         "TgHelper",
 		"Configured":    configured,
 		"BotConfigured": botConfigured,
+		"TGEnabled":     tgEnabled,
+		"Message":       message,
+		"MsgOK":         msgOK,
 	})
+}
+
+func (h *Handler) tgHelperToggle(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	action := strings.TrimSpace(c.PostForm("tg_toggle"))
+	var msg string
+	msgOK := true
+	switch action {
+	case "enable":
+		_ = store.SetSetting(h.dbConn, "tg_enabled", "1")
+		msg = "TG 功能已开启，后台服务将在下一轮循环中恢复运行。"
+	case "disable":
+		_ = store.SetSetting(h.dbConn, "tg_enabled", "0")
+		msg = "TG 功能已关闭，后台服务将在下一轮循环时停止。"
+	default:
+		msg = "未知操作。"
+		msgOK = false
+	}
+	redirectURL := "/tg_helper?message=" + url.QueryEscape(msg)
+	if msgOK {
+		redirectURL += "&status=ok"
+	}
+	c.Redirect(http.StatusSeeOther, redirectURL)
 }
 
 func (h *Handler) tgLoginStart(c *gin.Context) {
@@ -1645,9 +1683,13 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		return
 	}
 
-	dbName := config.UnifiedD1DBName
-	if settings["cf_d1_database_name"] != dbName {
-		_ = store.SetSetting(h.dbConn, "cf_d1_database_name", dbName)
+	// localDBName: the on-disk SQLite filename, always fixed.
+	localDBName := config.UnifiedDBName
+	// d1Name: the Cloudflare D1 database name, editable by the user.
+	d1Name := strings.TrimSpace(settings["cf_d1_database_name"])
+	if d1Name == "" {
+		d1Name = config.UnifiedD1DBName
+		_ = store.SetSetting(h.dbConn, "cf_d1_database_name", d1Name)
 	}
 
 	cfToken := settings["cf_api_token"]
@@ -1683,6 +1725,10 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 				message = "Token 不能为空。"
 				break
 			}
+			if newD1Name := strings.TrimSpace(c.PostForm("cf_d1_database_name")); newD1Name != "" {
+				d1Name = newD1Name
+				_ = store.SetSetting(h.dbConn, "cf_d1_database_name", d1Name)
+			}
 			_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
 			message = "已保存 Token。"
 			msgOK = true
@@ -1691,6 +1737,10 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			if cfToken == "" {
 				message = "Token 不能为空。"
 				break
+			}
+			if newD1Name := strings.TrimSpace(c.PostForm("cf_d1_database_name")); newD1Name != "" {
+				d1Name = newD1Name
+				_ = store.SetSetting(h.dbConn, "cf_d1_database_name", d1Name)
 			}
 			_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
 
@@ -1705,7 +1755,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			accountID = acc
 			_ = store.SetSetting(h.dbConn, "cf_account_id", accountID)
 
-			okFind, _, foundID := cf.FindD1ByName(ctx, accountID, dbName)
+			okFind, _, foundID := cf.FindD1ByName(ctx, accountID, d1Name)
 			if okFind && foundID != "" {
 				dbID = foundID
 				_ = store.SetSetting(h.dbConn, "cf_d1_database_id", dbID)
@@ -1714,7 +1764,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 				break
 			}
 
-			okCreate, msgCreate, createdID := cf.CreateD1(ctx, accountID, dbName)
+			okCreate, msgCreate, createdID := cf.CreateD1(ctx, accountID, d1Name)
 			if !okCreate || createdID == "" {
 				message = msgCreate
 				break
@@ -1778,11 +1828,81 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		"Message":              message,
 		"MsgOK":                msgOK,
 		"CFToken":              cfToken,
-		"DBName":               dbName,
+		"DBName":               localDBName,
+		"D1Name":               d1Name,
 		"DBID":                 dbID,
 		"AutoBackupEnabled":    autoEnabled,
 		"AutoBackupTime":       autoTime,
 		"LastAutoBackupResult": lastAuto,
+	})
+}
+
+// databaseTableData returns JSON-encoded rows for a given local SQLite table.
+// Only tables listed in d1.TGTables are allowed to prevent arbitrary SQL injection.
+func (h *Handler) databaseTableData(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	tableName := strings.TrimSpace(c.Query("table"))
+	if tableName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "table parameter required"})
+		return
+	}
+
+	// Allowlist check – only permit tables we own.
+	allowed := false
+	for _, t := range d1.TGTables {
+		if t == tableName {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"ok": false, "error": "table not allowed"})
+		return
+	}
+
+	rows, err := h.dbConn.QueryContext(c.Request.Context(), "SELECT * FROM "+tableName+" LIMIT 500")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+
+	result := make([]map[string]any, 0)
+	for rows.Next() {
+		values := make([]any, len(cols))
+		valuePtrs := make([]any, len(cols))
+		for i := range valuePtrs {
+			valuePtrs[i] = &values[i]
+		}
+		if err := rows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+		row := make(map[string]any, len(cols))
+		for i, col := range cols {
+			if b, ok := values[i].([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = values[i]
+			}
+		}
+		result = append(result, row)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      true,
+		"table":   tableName,
+		"columns": cols,
+		"rows":    result,
 	})
 }
 

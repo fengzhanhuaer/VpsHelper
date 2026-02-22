@@ -5,6 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        /* ── Toggle switch ─────────────────────────── */
+        .tg-toggle-wrap {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid #eee;
+            background: #fafafa;
+            margin-bottom: 16px;
+        }
+        .toggle-label { font-weight: 600; font-size: 15px; }
+        .toggle-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .toggle-badge--on  { background: #d3f9d8; color: #2b8a3e; }
+        .toggle-badge--off { background: #ffe3e3; color: #9b1c1c; }
+
+        /* pill switch */
+        .switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #ccc; border-radius: 26px;
+            transition: background 0.2s;
+        }
+        .slider:before {
+            position: absolute; content: "";
+            height: 20px; width: 20px;
+            left: 3px; bottom: 3px;
+            background: #fff; border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        input:checked + .slider { background: #2b8a3e; }
+        input:checked + .slider:before { transform: translateX(22px); }
+        .switch-form { display: flex; align-items: center; gap: 10px; }
+    </style>
 </head>
 <body>
     <header>
@@ -17,15 +60,39 @@
         <section class="panel panel--wide">
             <h1>TgHelper</h1>
             <p class="muted">Telegram 登录与任务管理。</p>
+
+            {{ if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
+            {{ end }}
+
+            <!-- ── 一键开关 ─────────────────────────────── -->
+            <div class="tg-toggle-wrap">
+                <div style="flex:1;">
+                    <div class="toggle-label">TG 后台服务</div>
+                    <div class="muted" style="margin-top:3px;">关闭后，自动发送、自动签到、自动回复等所有后台服务将暂停。</div>
+                </div>
+                <span class="toggle-badge {{ if .TGEnabled }}toggle-badge--on{{ else }}toggle-badge--off{{ end }}">
+                    {{ if .TGEnabled }}运行中{{ else }}已停用{{ end }}
+                </span>
+                <form class="switch-form" method="post" action="/tg_helper" id="tg-toggle-form">
+                    <label class="switch" title="{{ if .TGEnabled }}点击关闭{{ else }}点击开启{{ end }}">
+                        <input type="checkbox" id="tg-toggle-cb" {{ if .TGEnabled }}checked{{ end }} />
+                        <span class="slider"></span>
+                    </label>
+                    <input type="hidden" name="tg_toggle" id="tg-toggle-val" value="{{ if .TGEnabled }}disable{{ else }}enable{{ end }}" />
+                </form>
+            </div>
+
             {{ if .Configured }}
             <p class="muted">API 已配置，可以继续接入登录与会话。</p>
             {{ else }}
             <p class="muted">请先配置 Telegram API ID 与 Hash。</p>
             {{ end }}
-			{{ if .BotConfigured }}
+            {{ if .BotConfigured }}
             <p class="muted">Bot API 已配置，Webhook 收单已激活。</p>
             {{ end }}
-            <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+
+            <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
                 <a class="btn" href="/tg/settings">API 设置</a>
                 <a class="btn" href="/tg/proxy">代理设置</a>
                 <a class="btn" href="/tg/login/start">账号登录</a>
@@ -33,9 +100,21 @@
                 <a class="btn" href="/tg/dialogs">会话列表</a>
                 <a class="btn" href="/tg/auto/send">自动发送</a>
                 <a class="btn" href="/tg/auto/reply">自动回复</a>
-				<a class="btn" href="/tg/bot/settings">Bot 设置</a>
+                <a class="btn" href="/tg/bot/settings">Bot 设置</a>
             </div>
         </section>
     </main>
+
+    <script>
+    (function () {
+        var cb   = document.getElementById('tg-toggle-cb');
+        var val  = document.getElementById('tg-toggle-val');
+        var form = document.getElementById('tg-toggle-form');
+        cb.addEventListener('change', function () {
+            val.value = cb.checked ? 'enable' : 'disable';
+            form.submit();
+        });
+    })();
+    </script>
 </body>
 </html>

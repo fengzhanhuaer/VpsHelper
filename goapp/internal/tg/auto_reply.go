@@ -59,6 +59,17 @@ func StartAutoReply(ctx context.Context, dbConn *sql.DB) {
 				}
 				mu.Unlock()
 
+				// Global TG kill-switch: stop all runners when disabled.
+				if !isTGEnabled(dbConn) {
+					mu.Lock()
+					for k, r := range runners {
+						r.cancel()
+						delete(runners, k)
+					}
+					mu.Unlock()
+					continue
+				}
+
 				accounts, err := store.ListEnabledAutoReplyAccounts(dbConn)
 				if err != nil {
 					continue

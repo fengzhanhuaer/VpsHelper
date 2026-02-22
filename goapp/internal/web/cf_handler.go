@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net"
 	"net/http"
 	"strings"
 
@@ -9,6 +10,82 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// realClientIP extracts the best-effort real IP from a gin context.
+// It respects CF-Connecting-IP (Cloudflare), X-Real-IP, X-Forwarded-For, then falls back to RemoteAddr.
+func realClientIP(c *gin.Context) string {
+	if ip := strings.TrimSpace(c.GetHeader("CF-Connecting-IP")); ip != "" {
+		return ip
+	}
+	if ip := strings.TrimSpace(c.GetHeader("X-Real-IP")); ip != "" {
+		return ip
+	}
+	if fwd := strings.TrimSpace(c.GetHeader("X-Forwarded-For")); fwd != "" {
+		parts := strings.SplitN(fwd, ",", 2)
+		if ip := strings.TrimSpace(parts[0]); ip != "" {
+			return ip
+		}
+	}
+	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return c.Request.RemoteAddr
+}
+
+// cloudflareAddSelf appends the caller's real IP to cf_allow_ips (if not already present)
+// and responds with JSON so the frontend can call it via fetch without a full page reload.
+func (h *Handler) cloudflareAddSelf(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	ip := realClientIP(c)
+	if ip == "" || net.ParseIP(ip) == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "无法获取有效的客户端 IP: " + ip})
+		return
+	}
+
+	// Normalise: ensure IPv4 gets /32
+	parsed := net.ParseIP(ip)
+	var cidrIP string
+	if v4 := parsed.To4(); v4 != nil {
+		cidrIP = v4.String() + "/32"
+	} else {
+		cidrIP = parsed.String() + "/128"
+	}
+
+	settings, err := store.GetSettings(h.dbConn, []string{"cf_allow_ips"})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "load settings failed"})
+		return
+	}
+
+	existing := strings.TrimSpace(settings["cf_allow_ips"])
+	lines := strings.Split(existing, "\n")
+
+	// Check duplicate
+	for _, line := range lines {
+		if strings.TrimSpace(line) == cidrIP || strings.TrimSpace(line) == ip {
+			c.JSON(http.StatusOK, gin.H{"ok": true, "ip": cidrIP, "message": "IP 已在白名单中: " + cidrIP})
+			return
+		}
+	}
+
+	// Append
+	if existing == "" {
+		existing = cidrIP
+	} else {
+		existing = existing + "\n" + cidrIP
+	}
+	_ = store.SetSetting(h.dbConn, "cf_allow_ips", existing)
+
+	// Reset DDNS watch key so the background service picks up the change immediately
+	_ = store.SetSetting(h.dbConn, "cf_ddns_last_key", "")
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "ip": cidrIP, "message": "已将 " + cidrIP + " 添加到白名单"})
+}
 
 func (h *Handler) cloudflarePage(c *gin.Context) {
 	if h.currentUser(c) == "" {

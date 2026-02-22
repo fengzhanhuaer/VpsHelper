@@ -36,16 +36,20 @@
                     <input id="cf_api_token" name="cf_api_token" value="{{ .CFToken }}" />
                 </div>
                 <div class="field">
-                    <label>D1 数据库名称（固定）</label>
-                    <input value="{{ .DBName }}" readonly />
+                    <label for="cf_d1_database_name">D1 云端数据库名称</label>
+                    <input id="cf_d1_database_name" name="cf_d1_database_name" value="{{ .D1Name }}" placeholder="VpsHelper" />
+                </div>
+                <div class="field">
+                    <label>本地数据库文件名（固定）</label>
+                    <input value="{{ .DBName }}" readonly style="color:#999;" />
                 </div>
                 <div class="field">
                     <label>D1 数据库 ID</label>
                     <input value="{{ .DBID }}" readonly />
                 </div>
                 <div style="display:grid; gap:8px;">
-                    <button class="btn" type="submit" name="action" value="save">保存 Token</button>
-                    <button class="ghost" type="submit" name="action" value="create">自动创建/绑定 {{ .DBName }} 数据库</button>
+                    <button class="btn" type="submit" name="action" value="save">保存配置</button>
+                    <button class="ghost" type="submit" name="action" value="create">自动创建/绑定 {{ .D1Name }} 数据库</button>
                 </div>
             </form>
 
@@ -82,16 +86,44 @@
             {{ if .LastAutoBackupResult }}
             <p class="muted" style="margin-top:12px;">最近自动备份：{{ .LastAutoBackupResult }}</p>
             {{ end }}
+
+            <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
+
+            <!-- ── 查看表数据 ─────────────────────────────────── -->
+            <h2 style="margin:0 0 12px; font-size:16px;">查看表数据</h2>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+                <select id="db-table-select" style="flex:1; min-width:160px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; font:inherit; box-sizing:border-box;">
+                    <option value="">-- 选择表 --</option>
+                    <option value="tg_accounts">tg_accounts</option>
+                    <option value="tg_dialogs">tg_dialogs</option>
+                    <option value="tg_sign_tasks">tg_sign_tasks</option>
+                    <option value="tg_auto_send_tasks">tg_auto_send_tasks</option>
+                    <option value="tg_login_flows">tg_login_flows</option>
+                    <option value="app_settings">app_settings</option>
+                </select>
+                <button id="db-view-btn" class="btn" type="button" style="white-space:nowrap;">查询数据</button>
+            </div>
+
+            <div id="db-table-status" class="muted" style="margin-bottom:8px; display:none;"></div>
+            <div id="db-table-error" class="error" style="display:none;"></div>
+
+            <div id="db-table-wrapper" style="display:none; overflow-x:auto; border-radius:10px; border:1px solid #eee;">
+                <table id="db-table-view" style="min-width:600px; font-size:13px;">
+                    <thead id="db-table-head"></thead>
+                    <tbody id="db-table-body"></tbody>
+                </table>
+            </div>
         </section>
     </main>
 
     <script>
     (function () {
-        var card    = document.getElementById('db-progress-card');
-        var textEl  = document.getElementById('db-progress-text');
-        var fillEl  = document.getElementById('db-progress-fill');
-        var pctEl   = document.getElementById('db-progress-percent');
-        var logEl   = document.getElementById('db-progress-log');
+        /* ── 备份 / 拉取进度 ──────────────────────────────────── */
+        var card      = document.getElementById('db-progress-card');
+        var textEl    = document.getElementById('db-progress-text');
+        var fillEl    = document.getElementById('db-progress-fill');
+        var pctEl     = document.getElementById('db-progress-percent');
+        var logEl     = document.getElementById('db-progress-log');
         var backupBtn = document.getElementById('db-backup-btn');
         var pullBtn   = document.getElementById('db-pull-btn');
 
@@ -133,9 +165,9 @@
                     throw new Error('请求失败（HTTP ' + res.status + '）');
                 }
 
-                var reader  = res.body.getReader();
-                var decoder = new TextDecoder();
-                var buffer  = '';
+                var reader   = res.body.getReader();
+                var decoder  = new TextDecoder();
+                var buffer   = '';
                 var finished = false;
 
                 while (true) {
@@ -173,6 +205,107 @@
         });
         pullBtn.addEventListener('click', function () {
             runStream('/settings/database/pull/stream', '开始从云端 D1 拉取...');
+        });
+
+        /* ── 查看表数据 ───────────────────────────────────────── */
+        var viewBtn     = document.getElementById('db-view-btn');
+        var tableSelect = document.getElementById('db-table-select');
+        var statusEl    = document.getElementById('db-table-status');
+        var errorEl     = document.getElementById('db-table-error');
+        var wrapper     = document.getElementById('db-table-wrapper');
+        var thead       = document.getElementById('db-table-head');
+        var tbody       = document.getElementById('db-table-body');
+
+        function esc(v) {
+            if (v === null || v === undefined) {
+                return '<span style="color:#bbb;font-style:italic;">NULL</span>';
+            }
+            return String(v)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        viewBtn.addEventListener('click', async function () {
+            var table = tableSelect.value;
+            if (!table) {
+                errorEl.textContent = '请先选择一个表。';
+                errorEl.style.display = 'block';
+                return;
+            }
+            errorEl.style.display  = 'none';
+            wrapper.style.display  = 'none';
+            statusEl.textContent   = '加载中...';
+            statusEl.style.display = 'block';
+            viewBtn.disabled       = true;
+
+            try {
+                var res  = await fetch('/settings/database/table/data?table=' + encodeURIComponent(table), {
+                    credentials: 'same-origin'
+                });
+                var data = await res.json();
+
+                if (!data.ok) {
+                    errorEl.textContent   = '查询失败：' + (data.error || '未知错误');
+                    errorEl.style.display = 'block';
+                    statusEl.style.display = 'none';
+                    return;
+                }
+
+                var cols = data.columns || [];
+                var rows = data.rows    || [];
+
+                /* 构建表头 */
+                var hHTML = '<tr><th style="padding:8px 10px;color:var(--muted);font-weight:600;">#</th>';
+                cols.forEach(function (col) {
+                    hHTML += '<th style="padding:8px 10px;color:var(--muted);font-weight:600;white-space:nowrap;">' + esc(col) + '</th>';
+                });
+                hHTML += '</tr>';
+                thead.innerHTML = hHTML;
+
+                /* 构建表体 */
+                if (rows.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="' + (cols.length + 1) +
+                        '" style="text-align:center;color:#aaa;padding:20px;">（表为空）</td></tr>';
+                } else {
+                    var bHTML = '';
+                    rows.forEach(function (row, idx) {
+                        bHTML += '<tr style="' + (idx % 2 === 0 ? 'background:#fafafa;' : '') + '">';
+                        bHTML += '<td style="padding:7px 10px;color:#bbb;font-size:12px;">' + (idx + 1) + '</td>';
+                        cols.forEach(function (col) {
+                            var val     = row[col];
+                            var display = esc(val);
+                            if (typeof val === 'string' && val.length > 80) {
+                                display = '<span title="' + val.replace(/"/g, '&quot;') + '">' +
+                                          esc(val.substring(0, 80)) + '<span style="color:#aaa;">…</span></span>';
+                            }
+                            bHTML += '<td style="padding:7px 10px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + display + '</td>';
+                        });
+                        bHTML += '</tr>';
+                    });
+                    tbody.innerHTML = bHTML;
+                }
+
+                statusEl.textContent = '表：' + table + '　共 ' + rows.length + ' 行' +
+                    (rows.length >= 500 ? '（最多显示 500 行）' : '');
+                wrapper.style.display = 'block';
+
+            } catch (err) {
+                errorEl.textContent   = '请求出错：' + (err && err.message ? err.message : String(err));
+                errorEl.style.display = 'block';
+                statusEl.style.display = 'none';
+            } finally {
+                viewBtn.disabled = false;
+            }
+        });
+
+        /* 切换表时自动清空旧结果 */
+        tableSelect.addEventListener('change', function () {
+            wrapper.style.display  = 'none';
+            statusEl.style.display = 'none';
+            errorEl.style.display  = 'none';
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
         });
     })();
     </script>

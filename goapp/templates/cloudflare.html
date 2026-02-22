@@ -138,8 +138,11 @@
                                 class="btn" form="syncForm" onclick="syncInputs()">
                             同步推送到 ZeroTrust 策略
                         </button>
+                        <button id="addself-btn" class="ghost" type="button">📍 一键添加我的 IP</button>
                         <span class="hint">更新后所有引用了该策略的 Access 应用将立即生效</span>
                     </div>
+                    <div id="addself-msg" style="display:none; margin-top:10px;"></div>
+                    <p class="hint" style="margin-top:12px;">💡 后台已自动监控白名单中域名的 IP 变化（每 5 分钟），IP 变更时将自动推送到 Cloudflare。</p>
                 </div>
 
                 <!-- ── 保存按钮 ── -->
@@ -187,6 +190,44 @@
             var el = document.getElementById('pane-' + name);
             if (el) el.classList.add('active');
         }
+
+        // ── 一键添加我的 IP ──────────────────────────────────────
+        document.getElementById('addself-btn').addEventListener('click', async function () {
+            var btn = this;
+            var msgEl = document.getElementById('addself-msg');
+            btn.disabled = true;
+            btn.textContent = '获取中...';
+            msgEl.style.display = 'none';
+
+            try {
+                var res = await fetch('/cloudflare/addself', {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+                var data = await res.json();
+                if (data.ok) {
+                    // Append IP to the textarea if not already there
+                    var ta = document.getElementById('cf_allow_ips');
+                    var current = ta.value.trim();
+                    var ip = data.ip || '';
+                    if (ip && current.indexOf(ip) === -1) {
+                        ta.value = current ? current + '\n' + ip : ip;
+                    }
+                    msgEl.className = 'success';
+                    msgEl.textContent = data.message || '已添加';
+                } else {
+                    msgEl.className = 'error';
+                    msgEl.textContent = data.error || '操作失败';
+                }
+            } catch (err) {
+                msgEl.className = 'error';
+                msgEl.textContent = '请求出错: ' + (err && err.message ? err.message : String(err));
+            } finally {
+                msgEl.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = '📍 一键添加我的 IP';
+            }
+        });
     </script>
 </body>
 </html>

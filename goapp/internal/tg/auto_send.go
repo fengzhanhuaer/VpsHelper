@@ -76,6 +76,11 @@ func runAutoSendTick(dbConn *sql.DB) {
 	}
 	defer autoSendRunning.Store(false)
 
+	// Global TG kill-switch.
+	if !isTGEnabled(dbConn) {
+		return
+	}
+
 	now := time.Now()
 	nowText := now.Format(time.RFC3339)
 	tasks, err := store.ListDueAutoSendTasks(dbConn, nowText)
@@ -312,4 +317,13 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max]
+}
+func isTGEnabled(dbConn *sql.DB) bool {
+	m, err := store.GetSettings(dbConn, []string{"tg_enabled"})
+	if err != nil {
+		return true // default: enabled
+	}
+	v := strings.TrimSpace(m["tg_enabled"])
+	// Empty (never set) or "1" -> enabled. Only "0" means disabled.
+	return v != "0"
 }
