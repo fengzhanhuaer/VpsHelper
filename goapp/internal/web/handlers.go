@@ -84,6 +84,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/settings/database", h.databaseSettings)
 	router.POST("/settings/database/backup/stream", h.databaseBackupStream)
 	router.POST("/settings/database/pull/stream", h.databasePullStream)
+	router.GET("/settings/database/tables", h.databaseTableList)
 	router.GET("/settings/database/table/data", h.databaseTableData)
 	router.GET("/settings/ssh", h.sshSettings)
 	router.POST("/settings/ssh", h.sshSettings)
@@ -1837,8 +1838,42 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 	})
 }
 
+// localUserTables returns all user-defined table names from the local SQLite database.
+// System tables (sqlite_*) are excluded.
+func localUserTables(dbConn *sql.DB) ([]string, error) {
+	rows, err := dbConn.Query(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err == nil && name != "" {
+			tables = append(tables, name)
+		}
+	}
+	return tables, nil
+}
+
+// databaseTableList returns the names of all user tables in the local SQLite DB.
+func (h *Handler) databaseTableList(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+	tables, err := localUserTables(h.dbConn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "tables": tables})
+}
+
 // databaseTableData returns JSON-encoded rows for a given local SQLite table.
-// Only tables listed in d1.TGTables are allowed to prevent arbitrary SQL injection.
+// The allowlist is dynamically built from sqlite_master, so ALL local user
+// tables are accessible — no hard-coded list needed.
 func (h *Handler) databaseTableData(c *gin.Context) {
 	if h.currentUser(c) == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
@@ -1851,16 +1886,21 @@ func (h *Handler) databaseTableData(c *gin.Context) {
 		return
 	}
 
-	// Allowlist check – only permit tables we own.
+	// Dynamic allowlist: only tables that actually exist in the local DB.
+	tables, err := localUserTables(h.dbConn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
 	allowed := false
-	for _, t := range d1.TGTables {
+	for _, t := range tables {
 		if t == tableName {
 			allowed = true
 			break
 		}
 	}
 	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"ok": false, "error": "table not allowed"})
+		c.JSON(http.StatusForbidden, gin.H{"ok": false, "error": "table not found: " + tableName})
 		return
 	}
 

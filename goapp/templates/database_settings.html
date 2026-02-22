@@ -92,14 +92,8 @@
             <!-- ── 查看表数据 ─────────────────────────────────── -->
             <h2 style="margin:0 0 12px; font-size:16px;">查看表数据</h2>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
-                <select id="db-table-select" style="flex:1; min-width:160px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; font:inherit; box-sizing:border-box;">
-                    <option value="">-- 选择表 --</option>
-                    <option value="tg_accounts">tg_accounts</option>
-                    <option value="tg_dialogs">tg_dialogs</option>
-                    <option value="tg_sign_tasks">tg_sign_tasks</option>
-                    <option value="tg_auto_send_tasks">tg_auto_send_tasks</option>
-                    <option value="tg_login_flows">tg_login_flows</option>
-                    <option value="app_settings">app_settings</option>
+                <select id="db-table-select" style="flex:1; min-width:180px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; font:inherit; box-sizing:border-box;">
+                    <option value="">-- 加载中… --</option>
                 </select>
                 <button id="db-view-btn" class="btn" type="button" style="white-space:nowrap;">查询数据</button>
             </div>
@@ -215,6 +209,24 @@
         var wrapper     = document.getElementById('db-table-wrapper');
         var thead       = document.getElementById('db-table-head');
         var tbody       = document.getElementById('db-table-body');
+
+        /* ── 动态加载全部本地表名 ──────────────────────────────── */
+        (async function loadTableList() {
+            try {
+                var res  = await fetch('/settings/database/tables', { credentials: 'same-origin' });
+                var data = await res.json();
+                if (!data.ok || !data.tables) throw new Error(data.error || '加载失败');
+                tableSelect.innerHTML = '<option value="">-- 选择表 --</option>';
+                data.tables.forEach(function (t) {
+                    var opt = document.createElement('option');
+                    opt.value       = t;
+                    opt.textContent = t;
+                    tableSelect.appendChild(opt);
+                });
+            } catch (e) {
+                tableSelect.innerHTML = '<option value="">-- 加载失败 --</option>';
+            }
+        })();
 
         function esc(v) {
             if (v === null || v === undefined) {
