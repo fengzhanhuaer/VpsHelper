@@ -262,18 +262,7 @@ func downloadAssetToTempOnce(ctx context.Context, asset SelectedAsset, token str
 	}
 
 	// Try parallel download first for large files (public repos with browser URL).
-	if accept == "" {
-		// Get file size via HEAD to decide if parallel is worthwhile.
-		headCtx, headCancel := context.WithTimeout(ctx, 10*time.Second)
-		defer headCancel()
-		if size := getContentLength(headCtx, url, token); size > 0 {
-			ok, err := downloadParallel(ctx, url, token, tmp, size, onProgress)
-			if ok {
-				return err // parallel was attempted (success or failure)
-			}
-			// ok==false means parallel not supported, fall through to single stream.
-		}
-	}
+
 
 	client := &http.Client{
 		Timeout: 0,
