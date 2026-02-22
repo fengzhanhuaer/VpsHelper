@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -20,6 +21,13 @@ import (
 func LoadTemplates(cfg config.Config) (*template.Template, error) {
 	funcs := template.FuncMap{
 		"join": strings.Join,
+		"fmtUnix": func(ts int64) string {
+			if ts == 0 {
+				return ""
+			}
+			t := time.Unix(ts, 0).Local()
+			return t.Format("01-02 15:04")
+		},
 	}
 
 	// Prefer disk templates when explicitly configured and present (dev-friendly).

@@ -200,17 +200,28 @@ func (l *lateUpdateHandler) Set(h telegram.UpdateHandler) {
 }
 
 type incomingMessage struct {
-	Peer tg.PeerClass
-	Text string
-	Out  bool
+	MsgID    int
+	Peer     tg.PeerClass
+	SenderID int64 // 0 = self / outgoing
+	Text     string
+	Date     int64 // unix timestamp
+	Out      bool
 }
 
 func extractIncomingMessages(u tg.UpdatesClass) []incomingMessage {
 	switch v := u.(type) {
 	case *tg.UpdateShortMessage:
-		return []incomingMessage{{Peer: &tg.PeerUser{UserID: v.UserID}, Text: v.Message, Out: v.Out}}
+		sid := v.UserID
+		if v.Out {
+			sid = 0
+		}
+		return []incomingMessage{{MsgID: v.ID, Peer: &tg.PeerUser{UserID: v.UserID}, SenderID: sid, Text: v.Message, Date: int64(v.Date), Out: v.Out}}
 	case *tg.UpdateShortChatMessage:
-		return []incomingMessage{{Peer: &tg.PeerChat{ChatID: v.ChatID}, Text: v.Message, Out: v.Out}}
+		sid := v.FromID
+		if v.Out {
+			sid = 0
+		}
+		return []incomingMessage{{MsgID: v.ID, Peer: &tg.PeerChat{ChatID: v.ChatID}, SenderID: sid, Text: v.Message, Date: int64(v.Date), Out: v.Out}}
 	case *tg.UpdateShort:
 		return extractFromUpdate(v.Update)
 	case *tg.Updates:
@@ -246,7 +257,13 @@ func extractFromMessage(m tg.MessageClass) []incomingMessage {
 	if !ok {
 		return nil
 	}
-	return []incomingMessage{{Peer: msg.PeerID, Text: msg.Message, Out: msg.Out}}
+	var senderID int64
+	if !msg.Out {
+		if fid, ok := msg.FromID.(*tg.PeerUser); ok {
+			senderID = fid.UserID
+		}
+	}
+	return []incomingMessage{{MsgID: msg.ID, Peer: msg.PeerID, SenderID: senderID, Text: msg.Message, Date: int64(msg.Date), Out: msg.Out}}
 }
 
 func randomID() int64 {
@@ -350,74 +367,98 @@ func (h *autoReplyHandler) Handle(ctx context.Context, u tg.UpdatesClass) error 
 	}
 	h.markMessages(len(msgs))
 
+	// ── Persist every message (in + out) to local chat history ──
+	_ = h.storeMsgsToHistory(ctx, msgs)
+
 	rules := h.getEnabledRulesCached()
-	if len(rules) == 0 {
-		return nil
-	}
-
 	api := h.getAPI()
-	if api == nil {
-		return nil
-	}
 
-	for _, m := range msgs {
-		if m.Out {
-			continue
-		}
-		text := strings.TrimSpace(m.Text)
-		if text == "" {
-			continue
-		}
-		lowerText := strings.ToLower(text)
-
-		toKey := peerKey(m.Peer)
-		if toKey == "" {
-			continue
-		}
-
-		peer := h.resolveInputPeer(ctx, toKey, m.Peer)
-		if peer == nil {
-			continue
-		}
-
-		for _, r := range rules {
-			if r.NeedleLower == "" {
+	if len(rules) > 0 && api != nil {
+		for _, m := range msgs {
+			if m.Out {
 				continue
 			}
-			if !strings.Contains(lowerText, r.NeedleLower) {
+			text := strings.TrimSpace(m.Text)
+			if text == "" {
 				continue
 			}
-			if r.Reply == "" {
+			lowerText := strings.ToLower(text)
+
+			toKey := peerKey(m.Peer)
+			if toKey == "" {
 				continue
 			}
 
-			cooldown := h.getCooldownDuration()
-			if cooldown > 0 {
-				key := toKey + "|rule:" + strconv.FormatInt(r.ID, 10)
-				if !h.allowReplyNow(key, cooldown) {
+			peer := h.resolveInputPeer(ctx, toKey, m.Peer)
+			if peer == nil {
+				continue
+			}
+
+			for _, r := range rules {
+				if r.NeedleLower == "" {
 					continue
 				}
-				// Mark right away so concurrent updates don't double-send.
-				h.markReplied(key)
-			}
-			h.markMatch()
+				if !strings.Contains(lowerText, r.NeedleLower) {
+					continue
+				}
+				if r.Reply == "" {
+					continue
+				}
 
-			_, err := api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{
-				Peer:     peer,
-				Message:  r.Reply,
-				RandomID: randomID(),
-			})
-			if err != nil {
-				h.markSendFailure()
-			} else {
-				h.markReplySent()
+				cooldown := h.getCooldownDuration()
+				if cooldown > 0 {
+					key := toKey + "|rule:" + strconv.FormatInt(r.ID, 10)
+					if !h.allowReplyNow(key, cooldown) {
+						continue
+					}
+					h.markReplied(key)
+				}
+				h.markMatch()
+
+				_, err := api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{
+					Peer:     peer,
+					Message:  r.Reply,
+					RandomID: randomID(),
+				})
+				if err != nil {
+					h.markSendFailure()
+				} else {
+					h.markReplySent()
+				}
+				break
 			}
-			break
 		}
 	}
 
 	h.maybePersistStats()
+	return nil
+}
 
+// storeMsgsToHistory persists each message and updates the dialog's last-message timestamp.
+func (h *autoReplyHandler) storeMsgsToHistory(_ context.Context, msgs []incomingMessage) error {
+	for _, m := range msgs {
+		key := peerKey(m.Peer)
+		if key == "" || m.Text == "" {
+			continue
+		}
+		t := m.Date
+		if t == 0 {
+			t = time.Now().Unix()
+		}
+		senderName := "me"
+		if !m.Out && m.SenderID != 0 {
+			senderName = strconv.FormatInt(m.SenderID, 10)
+		}
+		cm := store.ChatMessage{
+			MsgID:  m.MsgID,
+			From:   senderName,
+			Text:   m.Text,
+			Date:   t,
+			Out:    m.Out,
+		}
+		_ = store.AppendChatMessage(h.accountID, key, cm)
+		_ = store.UpdateDialogLastMsgAt(h.accountID, key, t)
+	}
 	return nil
 }
 

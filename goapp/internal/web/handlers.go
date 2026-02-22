@@ -61,6 +61,8 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/tg/bot/settings", h.tgBotSettings)
 	router.POST("/tg/bot/test", h.tgBotTestMessage)
 	router.POST("/tg/bot/webhook_info", h.tgBotWebhookInfo)
+	router.GET("/tg/chat", h.tgChat)
+	router.GET("/tg/chat/messages", h.tgChatMessages)
 	router.GET("/tg/login/start", h.tgLoginStart)
 	router.POST("/tg/login/start", h.tgLoginStart)
 	router.GET("/tg/login/verify", h.tgLoginVerify)
@@ -2891,4 +2893,65 @@ func keysFromSet(m map[string]struct{}) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// tgChat renders the chat history page (Telegram Web–style UI).
+func (h *Handler) tgChat(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	accounts, err := store.ListTGAccounts(h.dbConn, username)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "load accounts failed")
+		return
+	}
+
+	selectedAccountID := int64(0)
+	if len(accounts) > 0 {
+		selectedAccountID = accounts[0].ID
+	}
+	if v := strings.TrimSpace(c.Query("account_id")); v != "" {
+		if id, err2 := strconv.ParseInt(v, 10, 64); err2 == nil && id > 0 {
+			selectedAccountID = id
+		}
+	}
+
+	var dialogs []store.TGDialog
+	if selectedAccountID > 0 {
+		dialogs, _ = store.ListTGDialogs(h.dbConn, selectedAccountID)
+	}
+
+	c.HTML(http.StatusOK, "tg_chat.html", gin.H{
+		"Title":     "会话历史",
+		"Accounts":  accounts,
+		"AccountID": selectedAccountID,
+		"Dialogs":   dialogs,
+	})
+}
+
+// tgChatMessages returns JSON chat messages for a given account + dialog.
+func (h *Handler) tgChatMessages(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+	accountIDText := strings.TrimSpace(c.Query("account_id"))
+	dialogID := strings.TrimSpace(c.Query("dialog_id"))
+	accountID, err := strconv.ParseInt(accountIDText, 10, 64)
+	if err != nil || accountID <= 0 || dialogID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "invalid params"})
+		return
+	}
+	msgs, err := store.ListChatMessages(accountID, dialogID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	if msgs == nil {
+		msgs = []store.ChatMessage{}
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "messages": msgs})
 }

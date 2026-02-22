@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        /* Layout */
+        .chat-wrap { display:flex; height:calc(100vh - 60px); gap:0; overflow:hidden; }
+
+        /* Left panel */
+        .chat-sidebar {
+            width:280px; min-width:200px; border-right:1px solid #e5e7eb;
+            display:flex; flex-direction:column; overflow:hidden; background:#fff;
+        }
+        .chat-sidebar-top { padding:10px 12px; border-bottom:1px solid #eee; }
+        .chat-sidebar-top select { width:100%; padding:7px 10px; border:1px solid #ddd;
+            border-radius:8px; font:inherit; font-size:13px; }
+        .dialog-list { flex:1; overflow-y:auto; }
+        .dialog-item {
+            padding:10px 14px; cursor:pointer; border-bottom:1px solid #f3f4f6;
+            transition:background .12s;
+        }
+        .dialog-item:hover { background:#f0f4ff; }
+        .dialog-item.active { background:#dbeafe; }
+        .dialog-item-title { font-size:14px; font-weight:500; white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis; }
+        .dialog-item-meta { font-size:11px; color:#9ca3af; margin-top:2px;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .dialog-item-time { font-size:11px; color:#9ca3af; float:right; margin-left:8px; }
+
+        /* Right panel */
+        .chat-main { flex:1; display:flex; flex-direction:column; overflow:hidden; background:#f9fafb; }
+        .chat-header { padding:12px 18px; border-bottom:1px solid #e5e7eb; background:#fff;
+            font-weight:600; font-size:15px; }
+        .chat-messages { flex:1; overflow-y:auto; padding:14px 18px; display:flex; flex-direction:column; gap:6px; }
+        .chat-placeholder { color:#aaa; text-align:center; margin-top:60px; font-size:14px; }
+
+        /* Bubbles */
+        .msg { display:flex; flex-direction:column; max-width:72%; }
+        .msg.out { align-self:flex-end; align-items:flex-end; }
+        .msg.in  { align-self:flex-start; align-items:flex-start; }
+        .bubble {
+            padding:8px 12px; border-radius:14px; font-size:14px;
+            line-height:1.5; word-break:break-word; white-space:pre-wrap;
+        }
+        .msg.out .bubble { background:#2563eb; color:#fff; border-bottom-right-radius:4px; }
+        .msg.in  .bubble { background:#fff; color:#111; border:1px solid #e5e7eb; border-bottom-left-radius:4px; }
+        .msg-meta { font-size:11px; color:#9ca3af; margin-top:2px; padding:0 2px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/tg_helper">返回Tg助手</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <div class="chat-wrap">
+        <!-- 左侧：会话列表 -->
+        <div class="chat-sidebar">
+            <div class="chat-sidebar-top">
+                <select id="account-sel" onchange="switchAccount(this.value)">
+                    {{ range .Accounts }}
+                        <option value="{{ .ID }}" {{ if eq $.AccountID .ID }}selected{{ end }}>
+                            {{ if .AccountName }}{{ .AccountName }}{{ else }}账号 #{{ .ID }}{{ end }}
+                        </option>
+                    {{ else }}
+                        <option>暂无账号</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="dialog-list" id="dialog-list">
+                {{ range .Dialogs }}
+                <div class="dialog-item" data-dialog="{{ .DialogID }}"
+                     onclick="loadDialog('{{ .DialogID }}', '{{ if .Title }}{{ js .Title }}{{ else }}{{ .DialogID }}{{ end }}')">
+                    <span class="dialog-item-time">{{ if .LastMsgAt }}{{ fmtUnix .LastMsgAt }}{{ end }}</span>
+                    <div class="dialog-item-title">{{ if .Title }}{{ .Title }}{{ else }}{{ .DialogID }}{{ end }}</div>
+                    <div class="dialog-item-meta">{{ .DialogID }}</div>
+                </div>
+                {{ else }}
+                <div style="padding:16px;color:#aaa;font-size:13px;">暂无会话记录</div>
+                {{ end }}
+            </div>
+        </div>
+
+        <!-- 右侧：消息区 -->
+        <div class="chat-main">
+            <div class="chat-header" id="chat-title">← 选择左侧会话</div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-placeholder">选择左侧会话查看历史记录</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    var currentAccountID = {{ .AccountID }};
+    var currentDialogID  = '';
+
+    function switchAccount(id) {
+        window.location.href = '/tg/chat?account_id=' + id;
+    }
+
+    function loadDialog(dialogID, title) {
+        currentDialogID = dialogID;
+        document.getElementById('chat-title').textContent = title;
+
+        // Highlight active dialog.
+        document.querySelectorAll('.dialog-item').forEach(function(el) {
+            el.classList.toggle('active', el.dataset.dialog === dialogID);
+        });
+
+        var box = document.getElementById('chat-messages');
+        box.innerHTML = '<div class="chat-placeholder">加载中…</div>';
+
+        fetch('/tg/chat/messages?account_id=' + encodeURIComponent(currentAccountID)
+              + '&dialog_id=' + encodeURIComponent(dialogID), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.ok) {
+                box.innerHTML = '<div class="chat-placeholder">加载失败：' + esc(data.error || '未知') + '</div>';
+                return;
+            }
+            var msgs = data.messages || [];
+            if (msgs.length === 0) {
+                box.innerHTML = '<div class="chat-placeholder">暂无文字消息记录</div>';
+                return;
+            }
+            box.innerHTML = '';
+            msgs.forEach(function(m) {
+                var div = document.createElement('div');
+                div.className = 'msg ' + (m.out ? 'out' : 'in');
+                var timeStr = m.date ? new Date(m.date * 1000).toLocaleString('zh-CN', {
+                    month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
+                }) : '';
+                var fromLabel = m.out ? '' : (m.from && m.from !== 'me' ? 'ID:' + m.from + ' · ' : '');
+                div.innerHTML = '<div class="bubble">' + esc(m.text) + '</div>'
+                              + '<div class="msg-meta">' + fromLabel + timeStr + '</div>';
+                box.appendChild(div);
+            });
+            box.scrollTop = box.scrollHeight;
+        })
+        .catch(function(e) {
+            box.innerHTML = '<div class="chat-placeholder">请求出错：' + String(e) + '</div>';
+        });
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    </script>
+</body>
+</html>
