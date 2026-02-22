@@ -412,3 +412,26 @@ func inputPeerFromResolved(resolved *tg.ContactsResolvedPeer) (tg.InputPeerClass
 		return nil, fmt.Errorf("unsupported peer type: %T", resolved.Peer)
 	}
 }
+
+// peerKeyToTarget converts a peerKey string (as stored in dialog files) back to
+// a numeric target string understood by resolveTarget / findInputPeerByTarget.
+//
+//	"user:123"    → "123"
+//	"chat:123"    → "-123"
+//	"channel:123" → channelDialogID(123) as string
+func peerKeyToTarget(key string) string {
+	if after, ok := strings.CutPrefix(key, "user:"); ok {
+		return after
+	}
+	if after, ok := strings.CutPrefix(key, "chat:"); ok {
+		if n, err := strconv.ParseInt(after, 10, 64); err == nil {
+			return strconv.FormatInt(-n, 10)
+		}
+	}
+	if after, ok := strings.CutPrefix(key, "channel:"); ok {
+		if n, err := strconv.ParseInt(after, 10, 64); err == nil {
+			return strconv.FormatInt(channelDialogID(n), 10)
+		}
+	}
+	return key // fallback: pass through unchanged
+}

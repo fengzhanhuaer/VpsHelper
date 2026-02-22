@@ -1,14 +1,9 @@
 package store
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-	"unicode"
 )
 
 const maxChatMessages = 2000
@@ -22,132 +17,170 @@ type ChatMessage struct {
 	Out   bool   `json:"out"`
 }
 
-var chatMsgMu sync.Mutex
-
-func chatMsgsDir() string {
-	base := os.Getenv("VPSHELPER_DATA_DIR")
-	if base == "" {
-		wd, _ := os.Getwd()
-		base = filepath.Join(wd, "..", "userdata")
-	}
-	return filepath.Join(base, "messages")
-}
-
-// safeDialogID converts a dialog_id string to a filesystem-safe filename stem.
-// e.g. "-1001234567890" → "-1001234567890", "@username" → "_username"
-func safeDialogID(dialogID string) string {
-	var sb strings.Builder
-	for _, r := range dialogID {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
-			sb.WriteRune(r)
-		} else if r == '@' {
-			sb.WriteRune('_')
-		} else {
-			sb.WriteRune('_')
-		}
-	}
-	return sb.String()
-}
-
-func chatMsgsPath(accountID int64, dialogID string) string {
-	dir := filepath.Join(chatMsgsDir(), fmt.Sprintf("%d", accountID))
-	return filepath.Join(dir, safeDialogID(dialogID)+".json")
-}
-
-// AppendChatMessage prepends a message and trims to maxChatMessages.
-// Newest messages are at the END (for display order).
+// AppendChatMessage inserts a message into tg_messages in tg_data.db,
+// and trims older rows so at most maxChatMessages per dialog are kept.
 func AppendChatMessage(accountID int64, dialogID string, msg ChatMessage) error {
 	if msg.Text == "" {
 		return nil
 	}
-	chatMsgMu.Lock()
-	defer chatMsgMu.Unlock()
 
-	path := chatMsgsPath(accountID, dialogID)
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create chat_msgs dir: %w", err)
+	outInt := 0
+	if msg.Out {
+		outInt = 1
 	}
 
-	var msgs []ChatMessage
-	if raw, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(raw, &msgs)
+	if _, err := localDB.Exec(
+		`INSERT OR IGNORE INTO tg_messages (account_id, dialog_id, msg_id, from_name, text, date, out)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		accountID, dialogID, msg.MsgID, msg.From, msg.Text, msg.Date, outInt,
+	); err != nil {
+		return fmt.Errorf("append chat message: %w", err)
 	}
 
-	msgs = append(msgs, msg)
-	// Keep latest maxChatMessages (tail).
-	if len(msgs) > maxChatMessages {
-		msgs = msgs[len(msgs)-maxChatMessages:]
-	}
+	// Trim: keep only the latest maxChatMessages rows for this dialog.
+	_, _ = localDB.Exec(
+		`DELETE FROM tg_messages
+		 WHERE account_id = ? AND dialog_id = ?
+		   AND id NOT IN (
+		     SELECT id FROM tg_messages
+		     WHERE account_id = ? AND dialog_id = ?
+		     ORDER BY date DESC, id DESC
+		     LIMIT ?
+		 )`,
+		accountID, dialogID, accountID, dialogID, maxChatMessages,
+	)
 
-	data, err := json.MarshalIndent(msgs, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return nil
 }
 
 // ListChatMessages returns stored messages for a dialog (oldest first, max 2000).
 func ListChatMessages(accountID int64, dialogID string) ([]ChatMessage, error) {
-	data, err := os.ReadFile(chatMsgsPath(accountID, dialogID))
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
+	rows, err := localDB.Query(
+		`SELECT msg_id, from_name, text, date, out
+		   FROM tg_messages
+		  WHERE account_id = ? AND dialog_id = ?
+		  ORDER BY date ASC, id ASC`,
+		accountID, dialogID,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("read chat msgs: %w", err)
+		return nil, fmt.Errorf("list chat messages: %w", err)
 	}
+	defer rows.Close()
+
 	var msgs []ChatMessage
-	if err := json.Unmarshal(data, &msgs); err != nil {
-		return nil, fmt.Errorf("parse chat msgs: %w", err)
+	for rows.Next() {
+		var m ChatMessage
+		var outInt int
+		if err := rows.Scan(&m.MsgID, &m.From, &m.Text, &m.Date, &outInt); err != nil {
+			return nil, fmt.Errorf("scan chat message: %w", err)
+		}
+		m.Out = outInt == 1
+		msgs = append(msgs, m)
 	}
-	// Sort by Date ascending (oldest first) for chat display.
-	sort.Slice(msgs, func(i, j int) bool { return msgs[i].Date < msgs[j].Date })
 	return msgs, nil
 }
 
-// ListDialogsWithHistory returns the dialog IDs that have a local message file
+// ListDialogsWithHistory returns the dialog IDs that have any stored message
 // for the given accountID. Used at startup for catch-up fetch.
 func ListDialogsWithHistory(accountID int64) []string {
-	dir := filepath.Join(chatMsgsDir(), fmt.Sprintf("%d", accountID))
-	entries, err := os.ReadDir(dir)
+	rows, err := localDB.Query(
+		`SELECT DISTINCT dialog_id FROM tg_messages WHERE account_id = ?`,
+		accountID,
+	)
 	if err != nil {
 		return nil
 	}
+	defer rows.Close()
+
 	var ids []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
-			ids = append(ids, strings.TrimSuffix(e.Name(), ".json"))
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err == nil {
+			ids = append(ids, id)
 		}
 	}
 	return ids
 }
 
-// GetLastStoredMsgID returns the highest MsgID in the stored history for a dialog.
-// Returns 0 if no messages are stored. Used as minID for catch-up requests.
+// GetLastStoredMsgID returns the highest msg_id in the stored history for a dialog.
+// Returns 0 if no messages are stored.
 func GetLastStoredMsgID(accountID int64, dialogID string) int {
-	data, err := os.ReadFile(chatMsgsPath(accountID, dialogID))
+	var maxID int
+	err := localDB.QueryRow(
+		`SELECT COALESCE(MAX(msg_id), 0) FROM tg_messages WHERE account_id = ? AND dialog_id = ?`,
+		accountID, dialogID,
+	).Scan(&maxID)
 	if err != nil {
 		return 0
-	}
-	var msgs []ChatMessage
-	if json.Unmarshal(data, &msgs) != nil {
-		return 0
-	}
-	maxID := 0
-	for _, m := range msgs {
-		if m.MsgID > maxID {
-			maxID = m.MsgID
-		}
 	}
 	return maxID
 }
 
-// DeleteChatMsgsForAccount removes all chat message files for an account.
+// DeleteChatMsgsForAccount removes all chat messages for an account.
 func DeleteChatMsgsForAccount(accountID int64) {
-	dir := filepath.Join(chatMsgsDir(), fmt.Sprintf("%d", accountID))
-	_ = os.RemoveAll(dir)
+	_, _ = localDB.Exec("DELETE FROM tg_messages WHERE account_id = ?", accountID)
+}
+
+// SearchResult is one message hit returned by SearchChatMessages.
+type SearchResult struct {
+	DialogID    string      `json:"dialog_id"`
+	DialogTitle string      `json:"dialog_title"`
+	Msg         ChatMessage `json:"msg"`
+}
+
+// SearchChatMessages searches all stored messages for accountID that contain query
+// (case-insensitive substring match). titleMap optionally maps dialogID → human title.
+// Returns at most maxResults hits.
+func SearchChatMessages(accountID int64, query string, titleMap map[string]string, maxResults int) ([]SearchResult, error) {
+	if maxResults <= 0 {
+		maxResults = 200
+	}
+	lq := strings.ToLower(query)
+
+	rows, err := localDB.Query(
+		`SELECT dialog_id, msg_id, from_name, text, date, out
+		   FROM tg_messages
+		  WHERE account_id = ? AND text LIKE ?
+		  ORDER BY date DESC
+		  LIMIT ?`,
+		accountID, "%"+lq+"%", maxResults,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search chat messages: %w", err)
+	}
+	defer rows.Close()
+
+	// LIKE in SQLite is case-insensitive for ASCII; for full unicode we do an extra Go filter.
+	var results []SearchResult
+	for rows.Next() {
+		var dialogID string
+		var m ChatMessage
+		var outInt int
+		if err := rows.Scan(&dialogID, &m.MsgID, &m.From, &m.Text, &m.Date, &outInt); err != nil {
+			continue
+		}
+		// Extra Go-level filter for non-ASCII unicode case-insensitivity.
+		if !strings.Contains(strings.ToLower(m.Text), lq) {
+			continue
+		}
+		m.Out = outInt == 1
+		title := dialogID
+		if titleMap != nil {
+			if t, ok := titleMap[dialogID]; ok && t != "" {
+				title = t
+			}
+		}
+		results = append(results, SearchResult{
+			DialogID:    dialogID,
+			DialogTitle: title,
+			Msg:         m,
+		})
+	}
+
+	// Sort by date DESC for consistent ordering.
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Msg.Date > results[j].Msg.Date
+	})
+
+	return results, nil
 }

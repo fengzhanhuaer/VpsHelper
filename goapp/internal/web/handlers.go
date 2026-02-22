@@ -63,6 +63,8 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/tg/bot/webhook_info", h.tgBotWebhookInfo)
 	router.GET("/tg/chat", h.tgChat)
 	router.GET("/tg/chat/messages", h.tgChatMessages)
+	router.GET("/tg/chat/search", h.tgChatSearch)
+	router.POST("/tg/chat/send", h.tgChatSend)
 	router.GET("/tg/login/start", h.tgLoginStart)
 	router.POST("/tg/login/start", h.tgLoginStart)
 	router.GET("/tg/login/verify", h.tgLoginVerify)
@@ -1877,7 +1879,7 @@ func (h *Handler) databaseTableList(c *gin.Context) {
 var obsoleteTables = []string{
 	"tg_sign_tasks",           // merged into tg_auto_send_tasks
 	"tg_login_flows",          // moved to in-memory store
-	"tg_dialogs",              // moved to userdata/dialogs/<id>.json
+	"tg_dialogs",              // moved to tg_data.db (local DB, not backed up to D1)
 	"tg_auto_reply_rules_old", // placeholder for future retirements
 }
 
@@ -2970,4 +2972,69 @@ func (h *Handler) tgChatMessages(c *gin.Context) {
 		msgs = []store.ChatMessage{}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "messages": msgs, "fetched": fetched})
+}
+
+// tgChatSearch serves as a JSON API to search across all chat messages for a specific account.
+func (h *Handler) tgChatSearch(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+	accountIDText := strings.TrimSpace(c.Query("account_id"))
+	query := strings.TrimSpace(c.Query("q"))
+
+	accountID, err := strconv.ParseInt(accountIDText, 10, 64)
+	if err != nil || accountID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "invalid account_id"})
+		return
+	}
+	if query == "" {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "results": []store.SearchResult{}})
+		return
+	}
+
+	// Fetch dialog titles for better display in search results.
+	dialogs, _ := store.ListTGDialogs(h.dbConn, accountID)
+	titleMap := make(map[string]string)
+	for _, d := range dialogs {
+		titleMap[d.DialogID] = d.Title
+	}
+
+	results, err := store.SearchChatMessages(accountID, query, titleMap, 100)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "search failed: " + err.Error()})
+		return
+	}
+	if results == nil {
+		results = []store.SearchResult{}
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "results": results})
+}
+
+// tgChatSend sends a text message to a dialog on behalf of the logged-in user.
+func (h *Handler) tgChatSend(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+	accountIDText := strings.TrimSpace(c.PostForm("account_id"))
+	dialogID := strings.TrimSpace(c.PostForm("dialog_id"))
+	text := strings.TrimSpace(c.PostForm("text"))
+
+	accountID, err := strconv.ParseInt(accountIDText, 10, 64)
+	if err != nil || accountID <= 0 || dialogID == "" || text == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "invalid params"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	sent, err := tg.SendChatMessageFromPage(ctx, h.dbConn, username, accountID, dialogID, text)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": sent})
 }

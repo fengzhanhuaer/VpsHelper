@@ -216,7 +216,18 @@ func catchUpAccountDialogs(ctx context.Context, api *tg.Client, accountID int64)
 			continue
 		}
 		nameMap := buildSenderNameMap(historyUsersFromResponse(res))
+
+		// Determine a dialog title from the name map (only for user: dialogs).
+		dialogTitle := ""
+		if strings.HasPrefix(dialogID, "user:") {
+			idStr := strings.TrimPrefix(dialogID, "user:")
+			if uid, err2 := strconv.ParseInt(idStr, 10, 64); err2 == nil {
+				dialogTitle = nameMap[uid]
+			}
+		}
+
 		raw := historyMessagesFromResponse(res)
+		var latestMsgAt int64
 		// Telegram returns newest-first; store oldest-first.
 		for i := len(raw) - 1; i >= 0; i-- {
 			m, ok := raw[i].(*tg.Message)
@@ -240,6 +251,12 @@ func catchUpAccountDialogs(ctx context.Context, api *tg.Client, accountID int64)
 				Date:  int64(m.Date),
 				Out:   m.Out,
 			})
+			if int64(m.Date) > latestMsgAt {
+				latestMsgAt = int64(m.Date)
+			}
+		}
+		if latestMsgAt > 0 {
+			_ = store.UpdateDialogLastMsgAt(accountID, dialogID, dialogTitle, latestMsgAt)
 		}
 	}
 }
@@ -537,7 +554,15 @@ func (h *autoReplyHandler) storeMsgsToHistory(_ context.Context, msgs []incoming
 			Out:   m.Out,
 		}
 		_ = store.AppendChatMessage(h.accountID, key, cm)
-		_ = store.UpdateDialogLastMsgAt(h.accountID, key, t)
+
+		// Determine dialog title:
+		// - For user chats: use SenderName (the other party)
+		// - For group/channel: no easy name here, pass "" to keep existing title
+		dialogTitle := ""
+		if _, ok := m.Peer.(*tg.PeerUser); ok && m.SenderName != "" {
+			dialogTitle = m.SenderName
+		}
+		_ = store.UpdateDialogLastMsgAt(h.accountID, key, dialogTitle, t)
 	}
 	return nil
 }

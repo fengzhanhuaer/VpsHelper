@@ -48,6 +48,28 @@
         .msg.out .bubble { background:#2563eb; color:#fff; border-bottom-right-radius:4px; }
         .msg.in  .bubble { background:#fff; color:#111; border:1px solid #e5e7eb; border-bottom-left-radius:4px; }
         .msg-meta { font-size:11px; color:#9ca3af; margin-top:2px; padding:0 2px; }
+
+        /* Send input area */
+        .chat-input-area {
+            display:none; /* hidden until a dialog is selected */
+            padding:10px 16px; border-top:1px solid #e5e7eb;
+            background:#fff; gap:8px; align-items:flex-end;
+        }
+        .chat-input-area.visible { display:flex; }
+        .chat-input-area textarea {
+            flex:1; resize:none; border:1px solid #d1d5db; border-radius:10px;
+            padding:9px 12px; font:inherit; font-size:14px; line-height:1.5;
+            max-height:120px; overflow-y:auto; outline:none;
+            transition:border-color .15s;
+        }
+        .chat-input-area textarea:focus { border-color:#2563eb; }
+        .chat-input-area button {
+            padding:9px 18px; border-radius:10px; font-size:14px;
+            background:#2563eb; color:#fff; border:none; cursor:pointer;
+            white-space:nowrap; transition:background .15s;
+        }
+        .chat-input-area button:hover { background:#1d4ed8; }
+        .chat-input-area button:disabled { background:#93c5fd; cursor:not-allowed; }
     </style>
 </head>
 <body>
@@ -73,8 +95,12 @@
                         <option>暂无账号</option>
                     {{ end }}
                 </select>
+                <div style="margin-top:8px;">
+                    <input type="text" id="chat-search" class="input" style="width:100%;font-size:13px;padding:6px 10px;" placeholder="搜索会话名称或消息内容..." oninput="debounceSearch()" />
+                </div>
             </div>
             <div class="dialog-list" id="dialog-list">
+
                 {{ range .Dialogs }}
                 <div class="dialog-item" data-dialog="{{ .DialogID }}"
                      onclick="loadDialog('{{ .DialogID }}', '{{ if .Title }}{{ js .Title }}{{ else }}{{ .DialogID }}{{ end }}')">
@@ -94,6 +120,11 @@
             <div class="chat-messages" id="chat-messages">
                 <div class="chat-placeholder">选择左侧会话查看历史记录</div>
             </div>
+            <!-- 发送消息 -->
+            <div class="chat-input-area" id="chat-input-area">
+                <textarea id="chat-input-text" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行..."></textarea>
+                <button id="chat-send-btn" onclick="sendMessage()">发送</button>
+            </div>
         </div>
     </div>
 
@@ -108,6 +139,10 @@
     function loadDialog(dialogID, title) {
         currentDialogID = dialogID;
         document.getElementById('chat-title').textContent = title;
+
+        // Show send input area.
+        var inputArea = document.getElementById('chat-input-area');
+        inputArea.classList.add('visible');
 
         // Highlight active dialog.
         document.querySelectorAll('.dialog-item').forEach(function(el) {
@@ -161,6 +196,138 @@
         if (!s) return '';
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
-    </script>
-</body>
+
+    function appendMessage(m) {
+        var box = document.getElementById('chat-messages');
+        var div = document.createElement('div');
+        div.className = 'msg ' + (m.out ? 'out' : 'in');
+        var timeStr = m.date ? new Date(m.date * 1000).toLocaleString('zh-CN', {
+            month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
+        }) : '';
+        var fromLabel = m.out ? '' : (m.from && m.from !== 'me' ? m.from + ' · ' : '');
+        div.innerHTML = '<div class="bubble">' + esc(m.text) + '</div>'
+                      + '<div class="msg-meta">' + fromLabel + timeStr + '</div>';
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function sendMessage() {
+        if (!currentDialogID) { alert('请先选择会话'); return; }
+        var textarea = document.getElementById('chat-input-text');
+        var btn      = document.getElementById('chat-send-btn');
+        var text     = textarea.value.trim();
+        if (!text) return;
+
+        btn.disabled    = true;
+        btn.textContent = '发送中…';
+
+        var fd = new FormData();
+        fd.set('account_id', currentAccountID);
+        fd.set('dialog_id',  currentDialogID);
+        fd.set('text',       text);
+
+        fetch('/tg/chat/send', { method:'POST', body: fd, credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                textarea.value = '';
+                textarea.style.height = '';
+                appendMessage(data.message);
+            } else {
+                alert('发送失败：' + (data.error || '未知错误'));
+            }
+        })
+        .catch(function(e) { alert('请求出错：' + String(e)); })
+        .finally(function() {
+            btn.disabled    = false;
+            btn.textContent = '发送';
+        });
+    }
+
+    // Enter sends; Shift+Enter inserts newline.
+    document.addEventListener('DOMContentLoaded', function() {
+        var ta = document.getElementById('chat-input-text');
+        if (!ta) return;
+        ta.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        // Auto-grow textarea height.
+        ta.addEventListener('input', function() {
+            ta.style.height = '';
+            ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+        });
+    });
+
+    var searchTimer = null;
+    function debounceSearch() {
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(doSearch, 400);
+    }
+
+    function doSearch() {
+        var query = document.getElementById('chat-search').value.trim();
+        var lq = query.toLowerCase();
+        
+        // 1. Filter local dialog list by title matching.
+        var countLocal = 0;
+        document.querySelectorAll('.dialog-item').forEach(function(el) {
+            if (el.id === 'search-results-hdr' || el.classList.contains('search-msg-item')) {
+                return; // ignore injected search results
+            }
+            var titleText = (el.querySelector('.dialog-item-title').textContent || '').toLowerCase();
+            var idText = (el.querySelector('.dialog-item-meta').textContent || '').toLowerCase();
+            if (lq === '' || titleText.includes(lq) || idText.includes(lq)) {
+                el.style.display = '';
+                countLocal++;
+            } else {
+                el.style.display = 'none';
+            }
+        });
+
+        // Clear previous backend search results.
+        var list = document.getElementById('dialog-list');
+        list.querySelectorAll('.search-msg-item, #search-results-hdr').forEach(e => e.remove());
+
+        if (query === '') return;
+
+        // 2. Fetch backend message search results.
+        fetch('/tg/chat/search?account_id=' + currentAccountID + '&q=' + encodeURIComponent(query))
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok || !data.results || data.results.length === 0) return;
+            
+            var hdr = document.createElement('div');
+            hdr.id = 'search-results-hdr';
+            hdr.style.padding = '8px 14px';
+            hdr.style.fontSize = '12px';
+            hdr.style.fontWeight = '600';
+            hdr.style.color = '#6b7280';
+            hdr.style.backgroundColor = '#f3f4f6';
+            hdr.textContent = '消息搜索结果 (' + data.results.length + '条)';
+            list.appendChild(hdr);
+
+            data.results.forEach(hit => {
+                var el = document.createElement('div');
+                el.className = 'dialog-item search-msg-item';
+                var titleStr = hit.dialog_title && hit.dialog_title !== hit.dialog_id ? hit.dialog_title : hit.dialog_id;
+                var timeStr = hit.msg.date ? new Date(hit.msg.date*1000).toLocaleString('zh-CN', {month:'2-digit', day:'2-digit'}) : '';
+                
+                el.innerHTML = '<span class="dialog-item-time">' + timeStr + '</span>' +
+                               '<div class="dialog-item-title">在: ' + esc(titleStr) + '</div>' + 
+                               '<div class="dialog-item-meta" style="color:#2563eb; white-space:normal; overflow:visible;">' + esc(hit.msg.text) + '</div>';
+                
+                // Click jumps to the specific dialog
+                el.onclick = function() {
+                    document.getElementById('chat-search').value = '';
+                    doSearch(); // clear search
+                    loadDialog(hit.dialog_id, titleStr);
+                };
+                list.appendChild(el);
+            });
+        }).catch(err => console.error(err));
+    }
+    </script></body>
 </html>

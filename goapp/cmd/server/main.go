@@ -16,6 +16,7 @@ import (
 	"vpshelper-go/internal/d1"
 	"vpshelper-go/internal/db"
 	"vpshelper-go/internal/routes"
+	appstore "vpshelper-go/internal/store"
 	"vpshelper-go/internal/tg"
 	"vpshelper-go/internal/version"
 )
@@ -32,6 +33,15 @@ func main() {
 	if err := db.Migrate(database); err != nil {
 		log.Fatalf("migrate db: %v", err)
 	}
+
+	// Open the local tg_data.db (dialogs, messages, send history).
+	// This DB is intentionally kept separate and NOT backed up to D1.
+	localDB, err := db.OpenLocal(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("open local db: %v", err)
+	}
+	defer localDB.Close()
+	appstore.SetLocalDB(localDB)
 
 	// Background tasks.
 	d1.StartAutoBackup(context.Background(), database)
