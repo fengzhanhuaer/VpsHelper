@@ -42,6 +42,9 @@ func main() {
 	}
 	defer localDB.Close()
 	appstore.SetLocalDB(localDB)
+	if err := appstore.MigrateLegacyPeerKeys(); err != nil {
+		log.Printf("warn: migrate legacy peer keys: %v", err)
+	}
 
 	// Background tasks.
 	d1.StartAutoBackup(context.Background(), database)
