@@ -102,18 +102,6 @@ func NormalizeStoredTargetsByDialogs(dbConn *sql.DB, owner string, accountID int
 		return migrated, nil
 	}
 
-	if signTask, ok, err := store.GetSignTask(dbConn, owner, accountID); err != nil {
-		return migrated, err
-	} else if ok && !IsDialogID(signTask.DialogID) {
-		key := strings.ToLower(NormalizeUsername(signTask.DialogID))
-		if dialogID, ok := usernameToID[key]; ok && dialogID != strings.TrimSpace(signTask.DialogID) {
-			if err := store.UpsertSignTask(dbConn, owner, accountID, dialogID, signTask.Message); err != nil {
-				return migrated, err
-			}
-			migrated++
-		}
-	}
-
 	autoTasks, err := store.ListAutoSendTasks(dbConn, owner)
 	if err != nil {
 		return migrated, err

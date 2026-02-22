@@ -2,69 +2,93 @@
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
-	"time"
+	"os"
+	"path/filepath"
+	"sync"
 )
 
+// TGDialog represents one Telegram conversation entry.
 type TGDialog struct {
-	ID        int64
-	AccountID int64
-	DialogID  string
-	Title     string
-	Username  string
-	UpdatedAt string
+	ID        int64  `json:"id,omitempty"` // legacy field, unused in file storage
+	AccountID int64  `json:"account_id"`
+	DialogID  string `json:"dialog_id"`
+	Title     string `json:"title"`
+	Username  string `json:"username"`
+	UpdatedAt string `json:"updated_at"`
 }
 
-func ListTGDialogs(dbConn *sql.DB, accountID int64) ([]TGDialog, error) {
-	rows, err := dbConn.Query(
-		"SELECT id, account_id, dialog_id, COALESCE(title,''), COALESCE(username,''), updated_at FROM tg_dialogs WHERE account_id = ? ORDER BY title ASC",
-		accountID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list tg dialogs: %w", err)
+// dialogsDir returns the directory where dialog JSON files are stored.
+// Respects VPSHELPER_DATA_DIR, otherwise defaults to ../userdata relative
+// to the process working directory (identical logic to config.Load).
+func dialogsDir() string {
+	base := os.Getenv("VPSHELPER_DATA_DIR")
+	if base == "" {
+		wd, _ := os.Getwd()
+		base = filepath.Join(wd, "..", "userdata")
 	}
-	defer rows.Close()
-
-	var out []TGDialog
-	for rows.Next() {
-		var d TGDialog
-		if err := rows.Scan(&d.ID, &d.AccountID, &d.DialogID, &d.Title, &d.Username, &d.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("scan tg dialog: %w", err)
-		}
-		out = append(out, d)
-	}
-	return out, nil
+	return filepath.Join(base, "dialogs")
 }
 
-func ReplaceTGDialogs(dbConn *sql.DB, accountID int64, dialogs []TGDialog) error {
-	tx, err := dbConn.Begin()
+// dialogFilePath returns the JSON file path for a given account.
+func dialogFilePath(accountID int64) string {
+	return filepath.Join(dialogsDir(), fmt.Sprintf("%d.json", accountID))
+}
+
+// dialogFileMu serialises concurrent writes to the same file.
+var dialogFileMu sync.Mutex
+
+// ListTGDialogs reads all dialogs for accountID from its JSON file.
+// The dbConn parameter is retained for signature compatibility but is not used.
+func ListTGDialogs(_ *sql.DB, accountID int64) ([]TGDialog, error) {
+	path := dialogFilePath(accountID)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil // empty list – normal for a fresh account
+	}
 	if err != nil {
-		return fmt.Errorf("begin: %w", err)
+		return nil, fmt.Errorf("read dialogs file: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	var dialogs []TGDialog
+	if err := json.Unmarshal(data, &dialogs); err != nil {
+		return nil, fmt.Errorf("parse dialogs file: %w", err)
+	}
+	return dialogs, nil
+}
 
-	if _, err := tx.Exec("DELETE FROM tg_dialogs WHERE account_id = ?", accountID); err != nil {
-		return fmt.Errorf("clear dialogs: %w", err)
+// ReplaceTGDialogs atomically replaces all dialogs for accountID with dialogs.
+// The dbConn parameter is retained for signature compatibility but is not used.
+func ReplaceTGDialogs(_ *sql.DB, accountID int64, dialogs []TGDialog) error {
+	dir := dialogsDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create dialogs dir: %w", err)
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO tg_dialogs (account_id, dialog_id, title, username, updated_at) VALUES (?, ?, ?, ?, ?)")
+	data, err := json.MarshalIndent(dialogs, "", "  ")
 	if err != nil {
-		return fmt.Errorf("prepare: %w", err)
-	}
-	defer stmt.Close()
-
-	for _, d := range dialogs {
-		updated := d.UpdatedAt
-		if updated == "" {
-			updated = time.Now().Format(time.RFC3339)
-		}
-		if _, err := stmt.Exec(accountID, d.DialogID, d.Title, d.Username, updated); err != nil {
-			return fmt.Errorf("insert dialog: %w", err)
-		}
+		return fmt.Errorf("marshal dialogs: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
+	// Write atomically: temp file → rename.
+	target := dialogFilePath(accountID)
+	tmp := target + ".tmp"
+
+	dialogFileMu.Lock()
+	defer dialogFileMu.Unlock()
+
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write dialogs tmp: %w", err)
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("rename dialogs file: %w", err)
 	}
 	return nil
+}
+
+// DeleteTGDialogsFile removes the JSON file for accountID.
+// Called when a TG account is deleted.
+func DeleteTGDialogsFile(accountID int64) {
+	_ = os.Remove(dialogFilePath(accountID))
 }

@@ -72,20 +72,20 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/tg/dialogs", h.tgDialogs)
 	router.POST("/tg/dialogs", h.tgDialogs)
 	router.POST("/tg/dialogs/refresh/stream", h.tgDialogsRefreshStream)
-	router.GET("/tg/sign", h.tgSign)
-	router.POST("/tg/sign", h.tgSign)
 	router.GET("/tg/auto/reply", h.tgAutoReply)
 	router.POST("/tg/auto/reply", h.tgAutoReply)
 	router.GET("/tg/auto/send", h.tgAutoSend)
 	router.POST("/tg/auto/send", h.tgAutoSend)
 	router.GET("/tg/auto/send/new", h.tgAutoSendNew)
 	router.POST("/tg/auto/send/new", h.tgAutoSendNew)
+	router.GET("/tg/auto/send/history", h.tgAutoSendHistory)
 	router.GET("/settings/database", h.databaseSettings)
 	router.POST("/settings/database", h.databaseSettings)
 	router.POST("/settings/database/backup/stream", h.databaseBackupStream)
 	router.POST("/settings/database/pull/stream", h.databasePullStream)
 	router.GET("/settings/database/tables", h.databaseTableList)
 	router.GET("/settings/database/table/data", h.databaseTableData)
+	router.POST("/settings/database/cleanup", h.databaseCleanup)
 	router.GET("/settings/ssh", h.sshSettings)
 	router.POST("/settings/ssh", h.sshSettings)
 	router.GET("/system/update", h.systemUpdate)
@@ -380,6 +380,69 @@ func (h *Handler) tgLoginStart(c *gin.Context) {
 		return
 	}
 
+	// ── Session Text import (fast path, no phone code needed) ────
+	if strings.TrimSpace(c.PostForm("action")) == "session" {
+		sessionText := strings.TrimSpace(c.PostForm("session_text"))
+		accountName := strings.TrimSpace(c.PostForm("account_name"))
+		if sessionText == "" {
+			c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
+				"Title": "TG Login",
+				"Error": "请粘贴 session_text。",
+				"Tab":   "session",
+			})
+			return
+		}
+		apiID, err := strconv.Atoi(apiIDText)
+		if err != nil {
+			c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
+				"Title": "TG Login",
+				"Error": "API ID 格式不正确。",
+				"Tab":   "session",
+			})
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		defer cancel()
+		self, canonical, err := tg.GetSelfFromSessionText(ctx, apiID, apiHash, sessionText, allProxy)
+		if err != nil {
+			c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
+				"Title":        "TG Login",
+				"Error":        "Session 验证失败：" + err.Error(),
+				"Tab":          "session",
+				"SessionText":  sessionText,
+				"AccountName":  accountName,
+			})
+			return
+		}
+		// Auto-fill account name from TG user if not provided.
+		if accountName == "" && self != nil {
+			accountName = strings.TrimSpace(self.Username)
+			if accountName == "" {
+				accountName = strings.TrimSpace(strings.TrimSpace(self.FirstName + " " + self.LastName))
+			}
+			if accountName == "" {
+				accountName = strings.TrimSpace(self.Phone)
+			}
+		}
+		var tgUserID int64
+		if self != nil {
+			tgUserID = self.ID
+		}
+		if err := store.CreateTGAccount(h.dbConn, username, accountName, canonical, tgUserID); err != nil {
+			c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
+				"Title":       "TG Login",
+				"Error":       "保存账号失败：" + err.Error(),
+				"Tab":         "session",
+				"SessionText": sessionText,
+				"AccountName": accountName,
+			})
+			return
+		}
+		c.Redirect(http.StatusFound, "/tg_helper")
+		return
+	}
+
+	// ── Phone code flow ───────────────────────────────────────────
 	phone := strings.TrimSpace(c.PostForm("phone"))
 	accountName := strings.TrimSpace(c.PostForm("account_name"))
 	if phone == "" {
@@ -1160,153 +1223,6 @@ func (h *Handler) tgDialogsRefreshStream(c *gin.Context) {
 	_ = send(100, finalMsg, true, true)
 }
 
-func (h *Handler) tgSign(c *gin.Context) {
-	username := h.currentUser(c)
-	if username == "" {
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
-
-	accounts, err := store.ListTGAccounts(h.dbConn, username)
-	if err != nil {
-		c.String(http.StatusInternalServerError, "load accounts failed")
-		return
-	}
-	if len(accounts) == 0 {
-		c.HTML(http.StatusOK, "tg_sign.html", gin.H{
-			"Title":       "签到任务",
-			"Message":     "请先登录添加一个 TG 账号。",
-			"Accounts":    accounts,
-			"AccountID":   int64(0),
-			"Dialogs":     []store.TGDialog{},
-			"DialogID":    "",
-			"SignMessage": "",
-			"CreatedAt":   "",
-		})
-		return
-	}
-
-	accountID := accounts[0].ID
-	if idText := strings.TrimSpace(c.Query("account_id")); idText != "" {
-		if id, err := strconv.ParseInt(idText, 10, 64); err == nil && id > 0 {
-			accountID = id
-		}
-	}
-	if c.Request.Method == http.MethodPost {
-		idText := strings.TrimSpace(c.PostForm("account_id"))
-		if id, err := strconv.ParseInt(idText, 10, 64); err == nil && id > 0 {
-			accountID = id
-		}
-	}
-
-	dialogs, _ := store.ListTGDialogs(h.dbConn, accountID)
-
-	saved, okSaved, _ := store.GetSignTask(h.dbConn, username, accountID)
-	dialogID := ""
-	signMsg := ""
-	createdAt := ""
-	if okSaved {
-		dialogID = saved.DialogID
-		signMsg = saved.Message
-		createdAt = saved.CreatedAt
-	}
-
-	message := ""
-	msgOK := false
-	autoLast := ""
-	if s, err := store.GetSettings(h.dbConn, []string{"tg_sign_auto_last_result"}); err == nil {
-		autoLast = s["tg_sign_auto_last_result"]
-	}
-	if c.Request.Method == http.MethodPost {
-		action := strings.TrimSpace(c.PostForm("action"))
-		pick := strings.TrimSpace(c.PostForm("dialog_pick"))
-		input := strings.TrimSpace(c.PostForm("dialog_id"))
-		if pick != "" {
-			dialogID = pick
-		} else {
-			dialogID = input
-		}
-		signMsg = strings.TrimSpace(c.PostForm("msg"))
-
-		switch action {
-		case "save":
-			if dialogID == "" {
-				message = "请选择/填写目标。"
-				break
-			}
-			resolveCtx, resolveCancel := context.WithTimeout(c.Request.Context(), 35*time.Second)
-			resolvedDialogID, resolveErr := tg.ResolveDialogIDForAccount(resolveCtx, h.dbConn, username, accountID, dialogID)
-			resolveCancel()
-			if resolveErr != nil {
-				message = "目标解析失败: " + resolveErr.Error()
-				break
-			}
-			dialogID = resolvedDialogID
-			if err := store.UpsertSignTask(h.dbConn, username, accountID, dialogID, signMsg); err != nil {
-				message = "保存失败。"
-			} else {
-				message = "已保存。"
-				msgOK = true
-			}
-		case "delete":
-			if err := store.DeleteSignTask(h.dbConn, username, accountID); err != nil {
-				message = "删除失败。"
-			} else {
-				message = "已删除。"
-				msgOK = true
-				dialogID = ""
-				signMsg = ""
-				createdAt = ""
-			}
-		case "run":
-			if dialogID == "" {
-				message = "请选择/填写目标。"
-				break
-			}
-			submittedDialogID := dialogID
-			ctx, cancel := context.WithTimeout(c.Request.Context(), 40*time.Second)
-			defer cancel()
-			ok, msg, resolvedDialogID := tg.SendOnceWithResolvedDialogID(ctx, h.dbConn, username, accountID, dialogID, signMsg)
-			if ok {
-				message = msg
-				msgOK = true
-				if resolvedDialogID != "" {
-					dialogID = resolvedDialogID
-					if savedTask, okSavedNow, _ := store.GetSignTask(h.dbConn, username, accountID); okSavedNow {
-						sameTarget := strings.TrimSpace(savedTask.DialogID) == strings.TrimSpace(submittedDialogID) ||
-							strings.EqualFold(tg.NormalizeUsername(savedTask.DialogID), tg.NormalizeUsername(submittedDialogID))
-						if sameTarget && strings.TrimSpace(savedTask.DialogID) != strings.TrimSpace(resolvedDialogID) {
-							_ = store.UpsertSignTask(h.dbConn, username, accountID, resolvedDialogID, savedTask.Message)
-						}
-					}
-				}
-			} else {
-				message = "执行失败: " + msg
-			}
-		default:
-			message = "未知操作。"
-		}
-
-		// reload saved
-		if t2, ok2, _ := store.GetSignTask(h.dbConn, username, accountID); ok2 {
-			saved = t2
-			createdAt = t2.CreatedAt
-		}
-	}
-
-	c.HTML(http.StatusOK, "tg_sign.html", gin.H{
-		"Title":       "签到任务",
-		"Message":     message,
-		"MsgOK":       msgOK,
-		"AutoLast":    autoLast,
-		"Accounts":    accounts,
-		"AccountID":   accountID,
-		"Dialogs":     dialogs,
-		"DialogID":    dialogID,
-		"SignMessage": signMsg,
-		"CreatedAt":   createdAt,
-	})
-}
 
 func (h *Handler) tgAutoReply(c *gin.Context) {
 	username := h.currentUser(c)
@@ -1350,11 +1266,23 @@ func (h *Handler) tgAutoReply(c *gin.Context) {
 				message = "请先选择账号。"
 			} else if matchText == "" || replyText == "" {
 				message = "匹配文本和回复内容不能为空。"
-			} else if err := store.CreateAutoReplyRule(h.dbConn, username, accountID, matchText, replyText, true); err != nil {
-				message = "创建失败。"
 			} else {
-				message = "已创建并启用。"
-				msgOK = true
+				acct, acctErr := store.GetTGAccountByID(h.dbConn, username, accountID)
+				tgCfg, _ := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+				var sessionText, apiID, apiHash, allProxy, accountName string
+				if acctErr == nil {
+					sessionText = acct.SessionText
+					accountName = acct.AccountName
+				}
+				apiID = strings.TrimSpace(tgCfg["telegram_api_id"])
+				apiHash = strings.TrimSpace(tgCfg["telegram_api_hash"])
+				allProxy = strings.TrimSpace(tgCfg["tg_all_proxy"])
+				if err := store.CreateAutoReplyRule(h.dbConn, username, accountID, accountName, matchText, replyText, true, sessionText, apiID, apiHash, allProxy); err != nil {
+					message = "创建失败。"
+				} else {
+					message = "已创建并启用。"
+					msgOK = true
+				}
 			}
 		case "enable", "disable", "delete":
 			idText := strings.TrimSpace(c.PostForm("id"))
@@ -1460,6 +1388,42 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 				} else {
 					message = "立即执行失败: " + msg
 				}
+			case "edit":
+				newMsg := strings.TrimSpace(c.PostForm("message"))
+				schedType := strings.TrimSpace(c.PostForm("schedule_type"))
+				timeOfDay := strings.TrimSpace(c.PostForm("time_of_day"))
+				intervalText := strings.TrimSpace(c.PostForm("interval_seconds"))
+				jitterText := strings.TrimSpace(c.PostForm("jitter_seconds"))
+				intervalSec, _ := strconv.Atoi(intervalText)
+				jitterSec, _ := strconv.Atoi(jitterText)
+				if newMsg == "" {
+					message = "发送内容不能为空。"
+				} else if schedType == "daily" {
+					if _, err := time.Parse("15:04", timeOfDay); err != nil {
+						message = "定时时间格式不正确（HH:MM）。"
+					} else {
+						err = store.UpdateAutoSendTask(h.dbConn, username, id, newMsg, schedType, timeOfDay, 0, jitterSec)
+						if err != nil {
+							message = "更新失败：" + err.Error()
+						} else {
+							message = "已更新。"
+							msgOK = true
+						}
+					}
+				} else {
+					schedType = "interval"
+					if intervalSec <= 0 {
+						message = "间隔秒数必须 > 0。"
+					} else {
+						err = store.UpdateAutoSendTask(h.dbConn, username, id, newMsg, schedType, "", intervalSec, jitterSec)
+						if err != nil {
+							message = "更新失败：" + err.Error()
+						} else {
+							message = "已更新。"
+							msgOK = true
+						}
+					}
+				}
 			default:
 				message = "未知操作。"
 			}
@@ -1478,6 +1442,29 @@ func (h *Handler) tgAutoSend(c *gin.Context) {
 		"MsgOK":   msgOK,
 		"Tasks":   tasks,
 	})
+}
+
+// tgAutoSendHistory returns the JSON execution history of a task (max 1000 entries).
+func (h *Handler) tgAutoSendHistory(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+	idText := strings.TrimSpace(c.Query("task_id"))
+	taskID, err := strconv.ParseInt(idText, 10, 64)
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "invalid task_id"})
+		return
+	}
+	entries, err := store.ListSendHistory(h.dbConn, taskID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	if entries == nil {
+		entries = []store.SendHistoryEntry{}
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "entries": entries})
 }
 
 func (h *Handler) tgAutoSendNew(c *gin.Context) {
@@ -1576,7 +1563,8 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
 	}
-	if _, err := store.GetTGAccountByID(h.dbConn, username, selectedAccountID); err != nil {
+	account, err := store.GetTGAccountByID(h.dbConn, username, selectedAccountID)
+	if err != nil {
 		view["Error"] = "账号不存在或不属于当前用户。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
@@ -1643,8 +1631,18 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 		}
 	}
 
+	// Load global TG settings to embed in the task.
+	tgSettings, _ := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+	apiID := strings.TrimSpace(tgSettings["telegram_api_id"])
+	apiHash := strings.TrimSpace(tgSettings["telegram_api_hash"])
+	allProxy := strings.TrimSpace(tgSettings["tg_all_proxy"])
+
 	next := time.Now().Format(time.RFC3339)
-	if err := store.CreateAutoSendTask(h.dbConn, username, selectedAccountID, dialogID, msg, intervalSeconds, jitterSeconds, scheduleType, timeOfDay, enabled, next); err != nil {
+	if err := store.CreateAutoSendTask(
+		h.dbConn, username, selectedAccountID, account.AccountName,
+		dialogID, msg, intervalSeconds, jitterSeconds, scheduleType, timeOfDay, enabled, next,
+		account.SessionText, apiID, apiHash, allProxy,
+	); err != nil {
 		view["Error"] = "创建失败。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)
 		return
@@ -1869,6 +1867,100 @@ func (h *Handler) databaseTableList(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "tables": tables})
+}
+
+// obsoleteTables lists tables that have been removed from the application but may
+// still exist in older databases. databaseCleanup will DROP them if present.
+// Add entries here whenever a table is retired.
+var obsoleteTables = []string{
+	"tg_sign_tasks",           // merged into tg_auto_send_tasks
+	"tg_login_flows",          // moved to in-memory store
+	"tg_dialogs",              // moved to userdata/dialogs/<id>.json
+	"tg_auto_reply_rules_old", // placeholder for future retirements
+}
+
+// databaseCleanup drops any obsolete tables that still exist in the local SQLite DB,
+// then synchronises Cloudflare D1 by dropping any tables present in D1 but absent locally.
+// Both steps are idempotent.
+func (h *Handler) databaseCleanup(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
+		return
+	}
+
+	// ── Step 1: local SQLite cleanup ─────────────────────────────
+	existing, err := localUserTables(h.dbConn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "enumerate tables: " + err.Error()})
+		return
+	}
+	existSet := make(map[string]bool, len(existing))
+	for _, t := range existing {
+		existSet[t] = true
+	}
+
+	type result struct {
+		Table   string `json:"table"`
+		Dropped bool   `json:"dropped"`
+		Skipped bool   `json:"skipped"`
+		Cloud   bool   `json:"cloud,omitempty"` // true when this was a D1-only drop
+		Error   string `json:"error,omitempty"`
+	}
+
+	var results []result
+	droppedCount := 0
+
+	for _, t := range obsoleteTables {
+		if !existSet[t] {
+			results = append(results, result{Table: t, Skipped: true})
+			continue
+		}
+		if _, err := h.dbConn.Exec("DROP TABLE IF EXISTS " + t); err != nil {
+			results = append(results, result{Table: t, Error: err.Error()})
+		} else {
+			results = append(results, result{Table: t, Dropped: true})
+			droppedCount++
+			delete(existSet, t) // no longer exists locally
+		}
+	}
+
+	// Re-fetch local table list after cleanup (the obsolete ones may have been dropped)
+	localTables, _ := localUserTables(h.dbConn)
+
+	// ── Step 2: D1 sync – drop tables that are in D1 but not local ──
+	d1Dropped := 0
+	d1Warning := ""
+	settings, _ := store.GetSettings(h.dbConn, []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"})
+	cfToken := strings.TrimSpace(settings["cf_api_token"])
+	accountID := strings.TrimSpace(settings["cf_account_id"])
+	dbID := strings.TrimSpace(settings["cf_d1_database_id"])
+
+	if cfToken != "" && accountID != "" && dbID != "" {
+		ctx := c.Request.Context()
+		cf := d1.Client{Token: cfToken}
+		dropped, syncErr := d1.SyncDropExtraD1Tables(ctx, cf, accountID, dbID, localTables)
+		if syncErr != nil {
+			d1Warning = "D1 同步失败: " + syncErr.Error()
+		} else {
+			for _, name := range dropped {
+				results = append(results, result{Table: name, Dropped: true, Cloud: true})
+				d1Dropped++
+			}
+		}
+	} else {
+		d1Warning = "D1 未配置，跳过云端同步"
+	}
+
+	resp := gin.H{
+		"ok":         true,
+		"dropped":    droppedCount,
+		"d1_dropped": d1Dropped,
+		"results":    results,
+	}
+	if d1Warning != "" {
+		resp["d1_warning"] = d1Warning
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // databaseTableData returns JSON-encoded rows for a given local SQLite table.

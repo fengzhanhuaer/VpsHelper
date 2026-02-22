@@ -6,8 +6,14 @@ import (
 	"fmt"
 
 	"github.com/gotd/td/session"
+
+	"vpshelper-go/internal/store"
 )
 
+// LoginFlowSessionStorage implements telegram.SessionStorage backed by the
+// in-memory LoginFlow store instead of the SQLite database.
+// The dbConn field is retained for signature compatibility with
+// NewLoginFlowSessionStorage callers but is not used.
 type LoginFlowSessionStorage struct {
 	dbConn *sql.DB
 	flowID int64
@@ -17,42 +23,26 @@ func NewLoginFlowSessionStorage(dbConn *sql.DB, flowID int64) *LoginFlowSessionS
 	return &LoginFlowSessionStorage{dbConn: dbConn, flowID: flowID}
 }
 
-func (s *LoginFlowSessionStorage) LoadSession(ctx context.Context) ([]byte, error) {
-	var sessionText string
-	err := s.dbConn.QueryRowContext(
-		ctx,
-		"SELECT session_text FROM tg_login_flows WHERE id = ?",
-		s.flowID,
-	).Scan(&sessionText)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, session.ErrNotFound
-		}
-		return nil, fmt.Errorf("load session: %w", err)
-	}
-	if sessionText == "" {
+func (s *LoginFlowSessionStorage) LoadSession(_ context.Context) ([]byte, error) {
+	text, ok := store.GetLoginFlowSessionText(s.flowID)
+	if !ok || text == "" {
 		return nil, session.ErrNotFound
 	}
-	data, err := decodeSessionText(sessionText)
+	data, err := decodeSessionText(text)
 	if err != nil {
 		return nil, fmt.Errorf("decode session: %w", err)
 	}
-	// Auto-migrate legacy session text to the current canonical format.
-	if shouldRewriteSessionText(sessionText, data) {
-		_ = s.StoreSession(ctx, data)
+	// Auto-migrate legacy session encoding if needed.
+	if shouldRewriteSessionText(text, data) {
+		_ = s.StoreSession(context.Background(), data)
 	}
 	return data, nil
 }
 
-func (s *LoginFlowSessionStorage) StoreSession(ctx context.Context, data []byte) error {
+func (s *LoginFlowSessionStorage) StoreSession(_ context.Context, data []byte) error {
 	encoded := encodeSessionText(data)
-	if _, err := s.dbConn.ExecContext(
-		ctx,
-		"UPDATE tg_login_flows SET session_text = ? WHERE id = ?",
-		encoded,
-		s.flowID,
-	); err != nil {
-		return fmt.Errorf("store session: %w", err)
+	if !store.SetLoginFlowSessionText(s.flowID, encoded) {
+		return fmt.Errorf("store session: flow %d not found", s.flowID)
 	}
 	return nil
 }

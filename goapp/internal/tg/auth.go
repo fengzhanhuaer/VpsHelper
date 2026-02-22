@@ -129,3 +129,41 @@ func GetAccountSelf(ctx context.Context, appID int, appHash string, storage tele
 	}
 	return self, nil
 }
+
+// GetSelfFromSessionText validates a raw session_text string by connecting to
+// Telegram and calling Self. Returns the user info and the canonical
+// (re-encoded) session_text to store. Supports gotd JSON, Telethon
+// StringSession, and any base64 variant accepted by decodeSessionText.
+func GetSelfFromSessionText(ctx context.Context, appID int, appHash, sessionText, allProxy string) (user *tg.User, canonicalSession string, err error) {
+	data, err := decodeSessionText(sessionText)
+	if err != nil {
+		return nil, "", fmt.Errorf("decode session: %w", err)
+	}
+
+	storage := &inMemorySessionStorage{data: data}
+	self, err := GetAccountSelf(ctx, appID, appHash, storage, allProxy)
+	if err != nil {
+		return nil, "", err
+	}
+
+	canonicalSession = encodeSessionText(storage.data)
+	return self, canonicalSession, nil
+}
+
+// inMemorySessionStorage is a simple in-memory SessionStorage used for one-off
+// session validation without touching any database or file.
+type inMemorySessionStorage struct {
+	data []byte
+}
+
+func (s *inMemorySessionStorage) LoadSession(_ context.Context) ([]byte, error) {
+	if len(s.data) == 0 {
+		return nil, fmt.Errorf("no session data")
+	}
+	return s.data, nil
+}
+
+func (s *inMemorySessionStorage) StoreSession(_ context.Context, data []byte) error {
+	s.data = data
+	return nil
+}

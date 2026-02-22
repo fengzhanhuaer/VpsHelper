@@ -89,6 +89,16 @@
 
             <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
 
+            <!-- ── 废弃表清理 ──────────────────────────────────── -->
+            <h2 style="margin:0 0 10px; font-size:16px;">废弃表清理</h2>
+            <p class="muted" style="margin-bottom:12px;">自动识别并删除旧版本遗留的废弃数据表（例如已合并功能的表），不会影响当前正在使用的数据。</p>
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <button id="db-cleanup-btn" class="ghost" type="button">🗑 一键清理废弃表</button>
+            </div>
+            <div id="db-cleanup-result" style="display:none; margin-top:12px;"></div>
+
+            <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
+
             <!-- ── 查看表数据 ─────────────────────────────────── -->
             <h2 style="margin:0 0 12px; font-size:16px;">查看表数据</h2>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
@@ -227,6 +237,95 @@
                 tableSelect.innerHTML = '<option value="">-- 加载失败 --</option>';
             }
         })();
+
+        /* ── 废弃表清理 ───────────────────────────────────────── */
+        document.getElementById('db-cleanup-btn').addEventListener('click', async function () {
+            if (!confirm('确认清理所有废弃表？此操作不可撤销。')) return;
+
+            var btn       = this;
+            var resultEl  = document.getElementById('db-cleanup-result');
+            btn.disabled  = true;
+            btn.textContent = '清理中...';
+            resultEl.style.display = 'none';
+            resultEl.innerHTML = '';
+
+            try {
+                var res  = await fetch('/settings/database/cleanup', {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+                var data = await res.json();
+
+                if (!data.ok) {
+                    resultEl.innerHTML = '<div class="error">清理失败：' + (data.error || '未知错误') + '</div>';
+                    resultEl.style.display = 'block';
+                    return;
+                }
+
+                var rows = data.results || [];
+                var intro = '';
+                var totalLocal = data.dropped || 0;
+                var totalD1    = data.d1_dropped || 0;
+                if (totalLocal > 0 || totalD1 > 0) {
+                    intro = '<div class="success" style="margin-bottom:8px;">本地已清理 ' + totalLocal + ' 个废弃表'
+                          + (totalD1 > 0 ? '，云端 D1 已同步删除 ' + totalD1 + ' 个表' : '') + '</div>';
+                } else {
+                    intro = '<div class="muted" style="margin-bottom:8px;">无需清理，本地与 D1 均已是最新状态</div>';
+                }
+                if (data.d1_warning) {
+                    intro += '<div class="muted" style="margin-bottom:8px;font-size:12px;">☁ ' + data.d1_warning + '</div>';
+                }
+
+                if (rows.length === 0) {
+                    resultEl.innerHTML = intro;
+                } else {
+                    var html = '<table style="width:100%;font-size:13px;border-collapse:collapse;">'
+                        + '<thead><tr>'
+                        + '<th style="text-align:left;padding:6px 10px;border-bottom:1px solid #eee;">表名</th>'
+                        + '<th style="text-align:left;padding:6px 10px;border-bottom:1px solid #eee;">位置</th>'
+                        + '<th style="text-align:left;padding:6px 10px;border-bottom:1px solid #eee;">结果</th>'
+                        + '</tr></thead><tbody>';
+                    rows.forEach(function (r) {
+                        var badge, color, location;
+                        location = r.cloud ? '☁ D1' : '🖥 本地';
+                        if (r.dropped) {
+                            badge = '✅ 已清理'; color = '#2b8a3e';
+                        } else if (r.skipped) {
+                            badge = '– 不存在'; color = '#888';
+                        } else {
+                            badge = '❌ ' + (r.error || '失败'); color = '#c0392b';
+                        }
+                        html += '<tr><td style="padding:5px 10px;font-family:monospace;">' + r.table
+                            + '</td><td style="padding:5px 10px;color:#666;">' + location
+                            + '</td><td style="padding:5px 10px;color:' + color + ';">' + badge + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                    resultEl.innerHTML = intro + html;
+                }
+                resultEl.style.display = 'block';
+
+                // Refresh the table list dropdown
+                if (data.dropped > 0) {
+                    fetch('/settings/database/tables', { credentials: 'same-origin' })
+                        .then(function(r) { return r.json(); })
+                        .then(function(d) {
+                            if (!d.ok || !d.tables) return;
+                            tableSelect.innerHTML = '<option value="">-- 选择表 --</option>';
+                            d.tables.forEach(function(t) {
+                                var opt = document.createElement('option');
+                                opt.value = t; opt.textContent = t;
+                                tableSelect.appendChild(opt);
+                            });
+                        });
+                }
+            } catch (err) {
+                resultEl.innerHTML = '<div class="error">请求出错: ' + (err && err.message ? err.message : String(err)) + '</div>';
+                resultEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🗑 一键清理废弃表';
+            }
+        });
 
         function esc(v) {
             if (v === null || v === undefined) {

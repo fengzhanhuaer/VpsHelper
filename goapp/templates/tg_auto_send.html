@@ -5,6 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .tabs { display:flex; gap:0; margin-bottom:20px; border-bottom:2px solid #eee; }
+        .tab-btn {
+            padding:9px 22px; font:inherit; font-size:14px; background:none;
+            border:none; border-bottom:3px solid transparent; margin-bottom:-2px;
+            cursor:pointer; color:var(--muted); transition:color .15s, border-color .15s;
+        }
+        .tab-btn.active { color:var(--primary,#2563eb); border-bottom-color:var(--primary,#2563eb); font-weight:600; }
+        .tab-panel { display:none; }
+        .tab-panel.active { display:block; }
+
+        /* Inline edit drawer */
+        .edit-drawer { display:none; background:#f8f9fa; border-radius:10px; padding:14px 16px; margin-top:8px; }
+        .edit-drawer.open { display:grid; gap:8px; }
+        .edit-drawer label { font-size:13px; color:var(--muted); margin-bottom:2px; display:block; }
+        .edit-drawer input, .edit-drawer select, .edit-drawer textarea {
+            font:inherit; font-size:13px; padding:7px 10px; border:1px solid #ddd;
+            border-radius:8px; width:100%; box-sizing:border-box;
+        }
+        .edit-drawer textarea { min-height:70px; resize:vertical; }
+        .edit-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+
+        /* History tab */
+        #history-select { padding:8px 12px; border:1px solid #ddd; border-radius:8px; font:inherit; font-size:13px; width:100%; max-width:360px; }
+        .hist-table { width:100%; font-size:13px; border-collapse:collapse; margin-top:12px; }
+        .hist-table th { text-align:left; padding:7px 10px; border-bottom:1px solid #eee; color:var(--muted); font-weight:600; white-space:nowrap; }
+        .hist-table td { padding:7px 10px; border-bottom:1px solid #f3f4f6; vertical-align:top; word-break:break-all; }
+        .hist-table tr:hover td { background:#f9fafb; }
+        .muted-sm { color:#aaa; font-size:12px; }
+    </style>
 </head>
 <body>
     <header>
@@ -17,65 +47,212 @@
     </header>
 
     <main>
-        <section class="panel">
+        <section class="panel panel--wide">
             <h1>自动发送任务</h1>
-            <p class="muted">任务目标优先使用会话ID；若历史任务仍是 @username，执行成功后会自动转换并保存为会话ID。</p>
 
             {{ if .Message }}
-            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom:14px;">{{ .Message }}</div>
             {{ end }}
 
-            <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
-                <a class="btn" href="/tg/auto/send/new">新建任务</a>
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" id="tab-tasks-btn" type="button">📋 任务列表</button>
+                <button class="tab-btn" id="tab-history-btn" type="button">📜 发送历史</button>
             </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>账号ID</th>
-                        <th>目标</th>
-                        <th>计划</th>
-                        <th>状态</th>
-                        <th>结果</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {{ range .Tasks }}
-                    <tr>
-                        <td>{{ .ID }}</td>
-                        <td>{{ .AccountID }}</td>
-                        <td>{{ if .DialogTitle }}{{ .DialogTitle }}{{ else }}{{ .DialogID }}{{ end }}</td>
-                        <td>
-                            <div class="muted">type={{ .ScheduleType }} interval={{ .IntervalSeconds }}s jitter={{ .JitterSeconds }}s</div>
-                            {{ if .TimeOfDay }}<div class="muted">time={{ .TimeOfDay }}</div>{{ end }}
-                            <div class="muted">next={{ .NextRunAt }}</div>
-                        </td>
-                        <td>{{ if .Enabled }}启用{{ else }}停用{{ end }}</td>
-                        <td>
-                            <div class="muted">{{ .LastRunAt }}</div>
-                            <div class="muted">{{ if .LastReply }}{{ .LastReply }}{{ else }}（无回复）{{ end }}</div>
-                        </td>
-                        <td>
-                            <form method="post" action="/tg/auto/send" style="display:flex; gap:8px; flex-wrap:wrap;">
-                                <input type="hidden" name="id" value="{{ .ID }}" />
-                                {{ if .Enabled }}
-                                <button class="ghost" type="submit" name="action" value="disable">停用</button>
-                                {{ else }}
-                                <button class="ghost" type="submit" name="action" value="enable">启用</button>
-                                {{ end }}
-                                <button class="ghost" type="submit" name="action" value="run">立即执行</button>
-                                <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除该任务吗？');">删除</button>
-                            </form>
-                        </td>
-                    </tr>
-                {{ else }}
-                    <tr><td colspan="7" class="muted">暂无任务</td></tr>
-                {{ end }}
-                </tbody>
-            </table>
+            <!-- ── Tab: 任务列表 ──────────────────────────────────── -->
+            <div class="tab-panel active" id="tab-tasks">
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+                    <a class="btn" href="/tg/auto/send/new">新建任务</a>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>账号ID</th>
+                            <th>目标</th>
+                            <th>计划</th>
+                            <th>状态</th>
+                            <th>最近结果</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {{ range .Tasks }}
+                        <tr id="row-{{ .ID }}">
+                            <td>{{ .ID }}</td>
+                            <td>{{ if .AccountName }}{{ .AccountName }}{{ else }}#{{ .AccountID }}{{ end }}</td>
+                            <td title="{{ .DialogID }}">{{ .DialogID }}</td>
+                            <td>
+                                <div class="muted">{{ .ScheduleType }}
+                                    {{ if eq .ScheduleType "daily" }} @ {{ .TimeOfDay }}
+                                    {{ else }} 每 {{ .IntervalSeconds }}s{{ end }}
+                                    {{ if .JitterSeconds }} ±{{ .JitterSeconds }}s{{ end }}
+                                </div>
+                                <div class="muted-sm">下次: {{ .NextRunAt }}</div>
+                            </td>
+                            <td>{{ if .Enabled }}<span style="color:#2b8a3e;">启用</span>{{ else }}<span style="color:#aaa;">停用</span>{{ end }}</td>
+                            <td>
+                                <div class="muted-sm">{{ .LastRunAt }}</div>
+                                <div class="muted-sm">{{ if .LastReply }}{{ .LastReply }}{{ else }}（无回复）{{ end }}</div>
+                            </td>
+                            <td>
+                                <form method="post" action="/tg/auto/send" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                                    <input type="hidden" name="id" value="{{ .ID }}" />
+                                    {{ if .Enabled }}
+                                    <button class="ghost" type="submit" name="action" value="disable">停用</button>
+                                    {{ else }}
+                                    <button class="ghost" type="submit" name="action" value="enable">启用</button>
+                                    {{ end }}
+                                    <button class="ghost" type="submit" name="action" value="run">执行</button>
+                                    <button class="ghost" type="button" onclick="toggleEdit({{ .ID }}, '{{ js .Message }}', '{{ .ScheduleType }}', '{{ .TimeOfDay }}', {{ .IntervalSeconds }}, {{ .JitterSeconds }})">编辑</button>
+                                    <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除（{{ .ID }}）？');">删除</button>
+                                </form>
+                                <!-- Inline edit drawer -->
+                                <div class="edit-drawer" id="edit-{{ .ID }}">
+                                    <form method="post" action="/tg/auto/send">
+                                        <input type="hidden" name="action" value="edit" />
+                                        <input type="hidden" name="id" value="{{ .ID }}" />
+                                        <label>发送内容</label>
+                                        <textarea name="message" id="edit-msg-{{ .ID }}"></textarea>
+                                        <label>计划类型</label>
+                                        <select name="schedule_type" id="edit-stype-{{ .ID }}" onchange="onSchedChange({{ .ID }})">
+                                            <option value="interval">间隔（秒）</option>
+                                            <option value="daily">每天定时</option>
+                                        </select>
+                                        <div id="edit-interval-wrap-{{ .ID }}">
+                                            <label>间隔秒数</label>
+                                            <input type="number" name="interval_seconds" id="edit-interval-{{ .ID }}" min="1" />
+                                        </div>
+                                        <div id="edit-daily-wrap-{{ .ID }}" style="display:none;">
+                                            <label>每日时间（HH:MM）</label>
+                                            <input type="text" name="time_of_day" id="edit-time-{{ .ID }}" placeholder="03:30" />
+                                        </div>
+                                        <label>随机延时（秒）</label>
+                                        <input type="number" name="jitter_seconds" id="edit-jitter-{{ .ID }}" min="0" />
+                                        <div class="edit-actions">
+                                            <button class="btn" type="submit">保存</button>
+                                            <button class="ghost" type="button" onclick="toggleEdit({{ .ID }})">取消</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {{ else }}
+                        <tr><td colspan="7" class="muted">暂无任务</td></tr>
+                    {{ end }}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- ── Tab: 发送历史 ──────────────────────────────────── -->
+            <div class="tab-panel" id="tab-history">
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+                    <select id="history-select">
+                        <option value="">-- 选择任务 --</option>
+                        {{ range .Tasks }}
+                        <option value="{{ .ID }}">{{ .ID }} - {{ if .DialogTitle }}{{ .DialogTitle }}{{ else }}{{ .DialogID }}{{ end }}</option>
+                        {{ end }}
+                    </select>
+                    <button class="ghost" id="history-load-btn" type="button">加载历史</button>
+                </div>
+                <div id="history-content">
+                    <p class="muted">请选择任务后点击"加载历史"。</p>
+                </div>
+            </div>
         </section>
     </main>
+
+    <script>
+    /* ── Tab 切换 ─────────────────────────────────────────── */
+    (function () {
+        var taskBtn    = document.getElementById('tab-tasks-btn');
+        var histBtn    = document.getElementById('tab-history-btn');
+        var taskPanel  = document.getElementById('tab-tasks');
+        var histPanel  = document.getElementById('tab-history');
+        function activate(tab) {
+            var isHist = tab === 'history';
+            taskBtn.classList.toggle('active', !isHist);
+            histBtn.classList.toggle('active', isHist);
+            taskPanel.classList.toggle('active', !isHist);
+            histPanel.classList.toggle('active', isHist);
+        }
+        taskBtn.addEventListener('click', function() { activate('tasks'); });
+        histBtn.addEventListener('click', function() { activate('history'); });
+    })();
+
+    /* ── 内联编辑 ─────────────────────────────────────────── */
+    var openDrawer = null;
+    function toggleEdit(id, msg, stype, tod, interval, jitter) {
+        var drawer = document.getElementById('edit-' + id);
+        if (!drawer) return;
+        // Close previously open drawer
+        if (openDrawer && openDrawer !== drawer) {
+            openDrawer.classList.remove('open');
+        }
+        if (drawer.classList.contains('open')) {
+            drawer.classList.remove('open');
+            openDrawer = null;
+            return;
+        }
+        // Populate fields
+        if (msg !== undefined) {
+            document.getElementById('edit-msg-' + id).value = msg || '';
+            var stypeEl = document.getElementById('edit-stype-' + id);
+            stypeEl.value = stype || 'interval';
+            document.getElementById('edit-interval-' + id).value = interval || '';
+            document.getElementById('edit-time-' + id).value = tod || '';
+            document.getElementById('edit-jitter-' + id).value = jitter || 0;
+            onSchedChange(id);
+        }
+        drawer.classList.add('open');
+        openDrawer = drawer;
+    }
+
+    function onSchedChange(id) {
+        var stype = document.getElementById('edit-stype-' + id).value;
+        document.getElementById('edit-interval-wrap-' + id).style.display = stype === 'interval' ? '' : 'none';
+        document.getElementById('edit-daily-wrap-'    + id).style.display = stype === 'daily'    ? '' : 'none';
+    }
+
+    /* ── 发送历史 ─────────────────────────────────────────── */
+    document.getElementById('history-load-btn').addEventListener('click', async function () {
+        var taskID = document.getElementById('history-select').value;
+        if (!taskID) { alert('请选择任务。'); return; }
+        var content = document.getElementById('history-content');
+        content.innerHTML = '<p class="muted">加载中…</p>';
+        try {
+            var res  = await fetch('/tg/auto/send/history?task_id=' + encodeURIComponent(taskID), { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok) { content.innerHTML = '<div class="error">加载失败：' + (data.error || '未知') + '</div>'; return; }
+            var entries = data.entries || [];
+            if (entries.length === 0) {
+                content.innerHTML = '<p class="muted">暂无历史记录。</p>';
+                return;
+            }
+            var html = '<table class="hist-table"><thead><tr>'
+                + '<th>时间</th><th>结果</th><th>回复</th>'
+                + '</tr></thead><tbody>';
+            entries.forEach(function (e) {
+                html += '<tr>'
+                    + '<td style="white-space:nowrap;font-size:12px;">' + esc(e.time) + '</td>'
+                    + '<td>' + esc(e.result) + '</td>'
+                    + '<td>' + esc(e.reply) + '</td>'
+                    + '</tr>';
+            });
+            html += '</tbody></table>';
+            html = '<p class="muted-sm" style="margin-bottom:6px;">共 ' + entries.length + ' 条（最多显示 1000 条）</p>' + html;
+            content.innerHTML = html;
+        } catch (err) {
+            content.innerHTML = '<div class="error">请求出错：' + String(err) + '</div>';
+        }
+    });
+
+    function esc(v) {
+        if (!v) return '<span style="color:#bbb;">—</span>';
+        return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    </script>
 </body>
 </html>

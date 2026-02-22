@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .tabs { display:flex; gap:0; margin-bottom:20px; border-bottom:2px solid #eee; }
+        .tab-btn {
+            padding:9px 22px; font:inherit; font-size:14px; background:none;
+            border:none; border-bottom:3px solid transparent; margin-bottom:-2px;
+            cursor:pointer; color:var(--muted); transition:color .15s, border-color .15s;
+        }
+        .tab-btn.active { color:var(--primary,#2563eb); border-bottom-color:var(--primary,#2563eb); font-weight:600; }
+        .tab-panel { display:none; }
+        .tab-panel.active { display:block; }
+        textarea { width:100%; min-height:90px; resize:vertical; font-family:monospace; font-size:12px;
+                   padding:10px; border:1px solid #ddd; border-radius:10px; box-sizing:border-box; }
+    </style>
 </head>
 <body>
     <header>
@@ -16,22 +29,76 @@
     <main>
         <section class="panel panel--center">
             <h1>Telegram 登录</h1>
-            <p class="muted">输入手机号以接收验证码。</p>
+
             {{ if .Error }}
-            <div class="error">{{ .Error }}</div>
+            <div class="error" style="margin-bottom:14px;">{{ .Error }}</div>
             {{ end }}
-            <form method="post">
-                <div class="field">
-                    <label for="phone">手机号</label>
-                    <input id="phone" name="phone" value="{{ .Phone }}" placeholder="+8613812345678" required />
-                </div>
-                <div class="field">
-                    <label for="account_name">账号备注（可选）</label>
-                    <input id="account_name" name="account_name" value="{{ .AccountName }}" placeholder="工作号" />
-                </div>
-                <button class="btn" type="submit">发送验证码</button>
-            </form>
+
+            <!-- Tab 导航 -->
+            <div class="tabs">
+                <button class="tab-btn" id="tab-phone-btn" type="button">📱 手机号验证码</button>
+                <button class="tab-btn" id="tab-session-btn" type="button">🔑 粘贴 Session</button>
+            </div>
+
+            <!-- Tab 1: 手机号 -->
+            <div class="tab-panel" id="tab-phone">
+                <p class="muted" style="margin-bottom:14px;">输入手机号以接收验证码。</p>
+                <form method="post">
+                    <div class="field">
+                        <label for="phone">手机号</label>
+                        <input id="phone" name="phone" value="{{ .Phone }}" placeholder="+8613812345678" required />
+                    </div>
+                    <div class="field">
+                        <label for="account_name_phone">账号备注（可选）</label>
+                        <input id="account_name_phone" name="account_name" value="{{ .AccountName }}" placeholder="工作号" />
+                    </div>
+                    <button class="btn" type="submit">发送验证码</button>
+                </form>
+            </div>
+
+            <!-- Tab 2: Session Text -->
+            <div class="tab-panel" id="tab-session">
+                <p class="muted" style="margin-bottom:14px;">
+                    粘贴已有的 <code>session_text</code>（支持 gotd JSON、Telethon StringSession）。
+                    将直接验证并导入，无需手机验证码。
+                </p>
+                <form method="post">
+                    <input type="hidden" name="action" value="session" />
+                    <div class="field">
+                        <label for="session_text">Session Text</label>
+                        <textarea id="session_text" name="session_text" placeholder="粘贴 session_text …" required>{{ .SessionText }}</textarea>
+                    </div>
+                    <div class="field">
+                        <label for="account_name_session">账号备注（可选，留空自动读取用户名）</label>
+                        <input id="account_name_session" name="account_name" value="{{ .AccountName }}" placeholder="工作号" />
+                    </div>
+                    <button class="btn" type="submit">验证并导入</button>
+                </form>
+            </div>
         </section>
     </main>
+
+    <script>
+    (function () {
+        var initialTab = '{{ .Tab }}' || 'phone';
+        var phoneBtn   = document.getElementById('tab-phone-btn');
+        var sessionBtn = document.getElementById('tab-session-btn');
+        var phonePanel   = document.getElementById('tab-phone');
+        var sessionPanel = document.getElementById('tab-session');
+
+        function activate(tab) {
+            var isSession = (tab === 'session');
+            phoneBtn.classList.toggle('active', !isSession);
+            sessionBtn.classList.toggle('active', isSession);
+            phonePanel.classList.toggle('active', !isSession);
+            sessionPanel.classList.toggle('active', isSession);
+        }
+
+        phoneBtn.addEventListener('click', function () { activate('phone'); });
+        sessionBtn.addEventListener('click', function () { activate('session'); });
+
+        activate(initialTab === 'session' ? 'session' : 'phone');
+    })();
+    </script>
 </body>
 </html>

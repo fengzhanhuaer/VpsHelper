@@ -70,9 +70,8 @@ func DeleteTGAccount(dbConn *sql.DB, owner string, accountID int64) error {
 		return fmt.Errorf("delete tg account: %w", err)
 	}
 	// best-effort cleanup
-	_, _ = dbConn.Exec("DELETE FROM tg_dialogs WHERE account_id = ?", accountID)
+	DeleteTGDialogsFile(accountID) // JSON file, no error handling needed
 	_, _ = dbConn.Exec("DELETE FROM tg_auto_send_tasks WHERE owner = ? AND account_id = ?", owner, accountID)
-	_, _ = dbConn.Exec("DELETE FROM tg_sign_tasks WHERE owner = ? AND account_id = ?", owner, accountID)
 	_, _ = dbConn.Exec("DELETE FROM tg_auto_reply_rules WHERE owner = ? AND account_id = ?", owner, accountID)
 	return nil
 }

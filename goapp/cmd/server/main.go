@@ -36,7 +36,6 @@ func main() {
 	// Background tasks.
 	d1.StartAutoBackup(context.Background(), database)
 	tg.StartAutoSend(context.Background(), database)
-	tg.StartAutoSign(context.Background(), database)
 	tg.StartAutoReply(context.Background(), database)
 	cloudflare.StartDDNSWatch(context.Background(), database)
 

@@ -94,8 +94,22 @@ func Migrate(dbConn *sql.DB) error {
 		}
 	}
 
-	_ = dbConn.QueryRow("SELECT tg_user_id FROM tg_accounts LIMIT 1").Scan(new(int)) // trigger syntax check? no, actually just run ALTER
+	_ = dbConn.QueryRow("SELECT tg_user_id FROM tg_accounts LIMIT 1").Scan(new(int))
 	_, _ = dbConn.Exec("ALTER TABLE tg_accounts ADD COLUMN tg_user_id INTEGER DEFAULT 0;")
+
+	// v2: embed credentials directly into auto-send tasks so tasks are self-contained.
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_send_tasks ADD COLUMN session_text TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_send_tasks ADD COLUMN api_id TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_send_tasks ADD COLUMN api_hash TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_send_tasks ADD COLUMN all_proxy TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_send_tasks ADD COLUMN account_name TEXT NOT NULL DEFAULT '';")
+
+	// v2: same for auto-reply rules.
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_reply_rules ADD COLUMN session_text TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_reply_rules ADD COLUMN api_id TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_reply_rules ADD COLUMN api_hash TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_reply_rules ADD COLUMN all_proxy TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE tg_auto_reply_rules ADD COLUMN account_name TEXT NOT NULL DEFAULT '';")
 
 	return nil
 }

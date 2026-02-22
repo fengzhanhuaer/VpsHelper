@@ -1,93 +1,125 @@
 ﻿package store
 
 import (
-    "database/sql"
-    "fmt"
-    "time"
+	"database/sql"
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
+// LoginFlow holds in-progress Telegram auth data.
+// It is kept entirely in memory; the data is intentionally ephemeral
+// (Telegram phone_code_hash expires in ~5 minutes, so persistence
+// across restarts is neither necessary nor useful).
 type LoginFlow struct {
-    ID            int64
-    Owner         string
-    Phone         string
-    AccountName   string
-    SessionText   string
-    PhoneCodeHash string
-    CreatedAt     string
+	ID            int64
+	Owner         string
+	Phone         string
+	AccountName   string
+	SessionText   string
+	PhoneCodeHash string
+	CreatedAt     string
 }
 
-func CreateLoginFlow(dbConn *sql.DB, owner, phone, accountName string) (int64, error) {
-    createdAt := time.Now().Format(time.RFC3339)
-    res, err := dbConn.Exec(
-        "INSERT INTO tg_login_flows (owner, phone, account_name, session_text, phone_code_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        owner,
-        phone,
-        accountName,
-        "",
-        "",
-        createdAt,
-    )
-    if err != nil {
-        return 0, fmt.Errorf("create login flow: %w", err)
-    }
-    id, err := res.LastInsertId()
-    if err != nil {
-        return 0, fmt.Errorf("get login flow id: %w", err)
-    }
-    return id, nil
+// loginFlowStore is the process-global in-memory store for active login flows.
+var loginFlowStore = struct {
+	mu      sync.RWMutex
+	counter atomic.Int64
+	flows   map[int64]*LoginFlow
+}{
+	flows: make(map[int64]*LoginFlow),
 }
 
-func GetLoginFlow(dbConn *sql.DB, id int64, owner string) (*LoginFlow, error) {
-    row := dbConn.QueryRow(
-        "SELECT id, owner, phone, account_name, session_text, phone_code_hash, created_at FROM tg_login_flows WHERE id = ? AND owner = ?",
-        id,
-        owner,
-    )
-
-    flow := &LoginFlow{}
-    if err := row.Scan(
-        &flow.ID,
-        &flow.Owner,
-        &flow.Phone,
-        &flow.AccountName,
-        &flow.SessionText,
-        &flow.PhoneCodeHash,
-        &flow.CreatedAt,
-    ); err != nil {
-        return nil, fmt.Errorf("get login flow: %w", err)
-    }
-    return flow, nil
+// CreateLoginFlow creates a new in-flight login flow and returns its ID.
+// The dbConn parameter is kept for signature compatibility but is not used.
+func CreateLoginFlow(_ *sql.DB, owner, phone, accountName string) (int64, error) {
+	id := loginFlowStore.counter.Add(1)
+	flow := &LoginFlow{
+		ID:          id,
+		Owner:       owner,
+		Phone:       phone,
+		AccountName: accountName,
+		CreatedAt:   time.Now().Format(time.RFC3339),
+	}
+	loginFlowStore.mu.Lock()
+	loginFlowStore.flows[id] = flow
+	loginFlowStore.mu.Unlock()
+	return id, nil
 }
 
-func UpdateLoginFlowCodeHash(dbConn *sql.DB, id int64, codeHash string) error {
-    if _, err := dbConn.Exec(
-        "UPDATE tg_login_flows SET phone_code_hash = ? WHERE id = ?",
-        codeHash,
-        id,
-    ); err != nil {
-        return fmt.Errorf("update login flow code hash: %w", err)
-    }
-    return nil
+// GetLoginFlow retrieves a login flow by ID and owner.
+// The dbConn parameter is kept for signature compatibility but is not used.
+func GetLoginFlow(_ *sql.DB, id int64, owner string) (*LoginFlow, error) {
+	loginFlowStore.mu.RLock()
+	flow, ok := loginFlowStore.flows[id]
+	loginFlowStore.mu.RUnlock()
+	if !ok || flow.Owner != owner {
+		return nil, fmt.Errorf("get login flow: not found")
+	}
+	// Return a copy to avoid data races.
+	cp := *flow
+	return &cp, nil
 }
 
-func UpdateLoginFlowSession(dbConn *sql.DB, id int64, sessionText string) error {
-    if _, err := dbConn.Exec(
-        "UPDATE tg_login_flows SET session_text = ? WHERE id = ?",
-        sessionText,
-        id,
-    ); err != nil {
-        return fmt.Errorf("update login flow session: %w", err)
-    }
-    return nil
+// UpdateLoginFlowCodeHash updates the phone_code_hash field of a flow.
+// The dbConn parameter is kept for signature compatibility but is not used.
+func UpdateLoginFlowCodeHash(_ *sql.DB, id int64, codeHash string) error {
+	loginFlowStore.mu.Lock()
+	defer loginFlowStore.mu.Unlock()
+	flow, ok := loginFlowStore.flows[id]
+	if !ok {
+		return fmt.Errorf("update login flow code hash: not found")
+	}
+	flow.PhoneCodeHash = codeHash
+	return nil
 }
 
-func DeleteLoginFlow(dbConn *sql.DB, id int64, owner string) error {
-    if _, err := dbConn.Exec(
-        "DELETE FROM tg_login_flows WHERE id = ? AND owner = ?",
-        id,
-        owner,
-    ); err != nil {
-        return fmt.Errorf("delete login flow: %w", err)
-    }
-    return nil
+// UpdateLoginFlowSession updates the session_text field of a flow.
+// The dbConn parameter is kept for signature compatibility but is not used.
+func UpdateLoginFlowSession(_ *sql.DB, id int64, sessionText string) error {
+	loginFlowStore.mu.Lock()
+	defer loginFlowStore.mu.Unlock()
+	flow, ok := loginFlowStore.flows[id]
+	if !ok {
+		return fmt.Errorf("update login flow session: not found")
+	}
+	flow.SessionText = sessionText
+	return nil
+}
+
+// DeleteLoginFlow removes the flow from memory (no error if already gone).
+// The dbConn parameter is kept for signature compatibility but is not used.
+func DeleteLoginFlow(_ *sql.DB, id int64, owner string) error {
+	loginFlowStore.mu.Lock()
+	defer loginFlowStore.mu.Unlock()
+	if flow, ok := loginFlowStore.flows[id]; ok && flow.Owner == owner {
+		delete(loginFlowStore.flows, id)
+	}
+	return nil
+}
+
+// GetLoginFlowSessionText returns the current session_text for the given flow.
+// Used by tg.LoginFlowSessionStorage to implement SessionStorage.
+func GetLoginFlowSessionText(id int64) (string, bool) {
+	loginFlowStore.mu.RLock()
+	defer loginFlowStore.mu.RUnlock()
+	flow, ok := loginFlowStore.flows[id]
+	if !ok {
+		return "", false
+	}
+	return flow.SessionText, true
+}
+
+// SetLoginFlowSessionText overwrites the session_text for the given flow.
+// Used by tg.LoginFlowSessionStorage to implement SessionStorage.
+func SetLoginFlowSessionText(id int64, text string) bool {
+	loginFlowStore.mu.Lock()
+	defer loginFlowStore.mu.Unlock()
+	flow, ok := loginFlowStore.flows[id]
+	if !ok {
+		return false
+	}
+	flow.SessionText = text
+	return true
 }

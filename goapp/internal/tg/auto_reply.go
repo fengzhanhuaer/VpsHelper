@@ -88,7 +88,8 @@ func StartAutoReply(ctx context.Context, dbConn *sql.DB) {
 					}
 				}
 				// Start new.
-				for k := range want {
+				for _, a := range accounts {
+					k := autoReplyKey{owner: a.Owner, accountID: a.AccountID}
 					if _, ok := runners[k]; ok {
 						continue
 					}
@@ -96,10 +97,10 @@ func StartAutoReply(ctx context.Context, dbConn *sql.DB) {
 					cctx, cancel := context.WithCancel(ctx)
 					runner := autoReplyRunner{id: nextRunnerID, cancel: cancel, done: make(chan struct{})}
 					runners[k] = runner
-					go func(key autoReplyKey, r autoReplyRunner) {
+					go func(acct store.OwnerAccount, r autoReplyRunner) {
 						defer close(r.done)
-						runAutoReplyListener(cctx, dbConn, key.owner, key.accountID)
-					}(k, runner)
+						runAutoReplyListener(cctx, dbConn, acct)
+					}(a, runner)
 				}
 				mu.Unlock()
 			}
@@ -107,24 +108,44 @@ func StartAutoReply(ctx context.Context, dbConn *sql.DB) {
 	}()
 }
 
-func runAutoReplyListener(ctx context.Context, dbConn *sql.DB, owner string, accountID int64) {
-	settings, err := store.GetSettings(dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
-	if err != nil {
-		return
-	}
-	apiIDText := strings.TrimSpace(settings["telegram_api_id"])
-	apiHash := strings.TrimSpace(settings["telegram_api_hash"])
-	allProxy := strings.TrimSpace(settings["tg_all_proxy"])
+func runAutoReplyListener(ctx context.Context, dbConn *sql.DB, acct store.OwnerAccount) {
+	// Prefer task-embedded credentials; fall back to global config for old rules.
+	apiIDText := acct.APIID
+	apiHash := acct.APIHash
+	allProxy := acct.AllProxy
+
 	if apiIDText == "" || apiHash == "" {
-		return
+		// Legacy path: load from app_settings.
+		settings, err := store.GetSettings(dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+		if err != nil {
+			return
+		}
+		apiIDText = strings.TrimSpace(settings["telegram_api_id"])
+		apiHash = strings.TrimSpace(settings["telegram_api_hash"])
+		allProxy = strings.TrimSpace(settings["tg_all_proxy"])
+		if apiIDText == "" || apiHash == "" {
+			return
+		}
 	}
 	apiID, err := parseInt(apiIDText)
 	if err != nil {
 		return
 	}
 
-	storage := NewAccountSessionStorage(dbConn, owner, accountID)
-	h := newAutoReplyHandler(dbConn, owner, accountID)
+	// Build session storage.
+	var storage telegram.SessionStorage
+	if acct.SessionText != "" {
+		data, err := decodeSessionText(acct.SessionText)
+		if err != nil {
+			return
+		}
+		storage = &inMemorySessionStorage{data: data}
+	} else {
+		// Legacy path: load from tg_accounts.
+		storage = NewAccountSessionStorage(dbConn, acct.Owner, acct.AccountID)
+	}
+
+	h := newAutoReplyHandler(dbConn, acct.Owner, acct.AccountID)
 	late := &lateUpdateHandler{}
 	opts, err := newTelegramOptions(storage, false, allProxy)
 	if err != nil {
@@ -136,7 +157,6 @@ func runAutoReplyListener(ctx context.Context, dbConn *sql.DB, owner string, acc
 	h.setAPI(client.API())
 
 	_ = client.Run(ctx, func(ctx context.Context) error {
-		// peers.Manager improves peer resolving (e.g. access_hash), and UpdateHook keeps it fresh.
 		pm := peers.Options{
 			Storage: new(peers.InmemoryStorage),
 			Cache:   new(peers.InmemoryCache),
@@ -148,7 +168,6 @@ func runAutoReplyListener(ctx context.Context, dbConn *sql.DB, owner string, acc
 			late.Set(h)
 		}
 
-		// Best-effort prefill: contacts list provides access_hash for many peers.
 		if res, err := client.API().ContactsGetContacts(ctx, 0); err == nil {
 			h.applyContacts(res)
 		}

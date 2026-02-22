@@ -10,10 +10,7 @@ import (
 
 var TGTables = []string{
     "tg_accounts",
-    "tg_dialogs",
-    "tg_sign_tasks",
     "tg_auto_send_tasks",
-    "tg_login_flows",
     "app_settings",
 }
 
@@ -277,4 +274,39 @@ func indexInsensitive(s, sub string) int {
     ls := strings.ToLower(s)
     lsub := strings.ToLower(sub)
     return strings.Index(ls, lsub)
+}
+
+// SyncDropExtraD1Tables drops every table in D1 that is NOT present in
+// localTableNames. This keeps the cloud schema in sync with the local DB.
+// Returns the list of dropped table names and any hard error encountered.
+func SyncDropExtraD1Tables(ctx context.Context, cf Client, accountID, dbID string, localTableNames []string) (dropped []string, err error) {
+    // Build local set
+    localSet := make(map[string]bool, len(localTableNames))
+    for _, t := range localTableNames {
+        localSet[t] = true
+    }
+
+    // Query D1 for all user tables
+    ok, rows, msg := cf.D1Query(ctx, accountID, dbID,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", nil)
+    if !ok {
+        return nil, fmt.Errorf("list D1 tables: %s", msg)
+    }
+
+    for _, row := range rows {
+        name, _ := row["name"].(string)
+        if name == "" || localSet[name] {
+            continue // keep
+        }
+        // This table does not exist locally → drop it from D1
+        okDrop, _, dropMsg := cf.D1Query(ctx, accountID, dbID,
+            "DROP TABLE IF EXISTS "+name, nil)
+        if !okDrop {
+            // non-fatal: log and continue
+            dropped = append(dropped, name+"(failed: "+dropMsg+")")
+        } else {
+            dropped = append(dropped, name)
+        }
+    }
+    return dropped, nil
 }
