@@ -11,8 +11,10 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/probe/dashboard">探针状态</a>
             <a class="ghost" href="/probe/nodes">探针节点</a>
+            <a class="ghost" href="/probe/tasks">拨测任务</a>
+            <a class="ghost" href="/probe/dashboard">探针状态</a>
+            <a class="ghost" href="/probe/pings" style="color:var(--color-primary); font-weight:bold;">拨测监控</a>
             <a class="ghost" href="/home">返回主菜单</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
@@ -171,7 +173,7 @@
                         pointHitRadius: 10,
                         stepped: true,
                         fill: false,
-                        hidden: true // hide loss by default to reduce clutter
+                        hidden: false // show by default
                     });
                     
                     nc.taskMapping[taskId] = { 
