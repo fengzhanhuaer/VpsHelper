@@ -1,15 +1,15 @@
 ﻿package firewall
 
 import (
-    "bytes"
-    "fmt"
-    "os"
-    "os/exec"
-    "regexp"
-    "runtime"
-    "sort"
-    "strconv"
-    "strings"
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+	"regexp"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 type PortRow struct {
@@ -386,82 +386,205 @@ func CollectOpenPortsAndStatus(firewallType string) (ports []map[string]string, 
 }
 
 func Enable(firewallType string) (bool, string) {
-    if firewallType == "UFW" {
-        ok, out := run("ufw", "--force", "enable")
-        if ok {
-            return true, "UFW 已启用。"
-        }
-        return false, "启用 UFW 失败：" + out
-    }
+	if firewallType == "未知" || firewallType == "" {
+		if runtime.GOOS == "windows" {
+			return false, "当前为 Windows 环境，暂不自动安装防火墙。"
+		}
+		installLog := ""
+		// 尝试自动安装防火墙
+		if which("apt-get") {
+			run("apt-get", "update")
+			ok, out := run("apt-get", "install", "-y", "ufw")
+			if !ok {
+				installLog = " apt 安装 UFW 失败：" + out
+			}
+		} else if which("yum") {
+			ok, out := run("yum", "install", "-y", "firewalld")
+			if !ok {
+				installLog = " yum 安装 firewalld 失败：" + out
+			}
+		} else if which("dnf") {
+			ok, out := run("dnf", "install", "-y", "firewalld")
+			if !ok {
+				installLog = " dnf 安装 firewalld 失败：" + out
+			}
+		}
 
-    if firewallType == "firewalld" {
-        ok, out := run("systemctl", "enable", "--now", "firewalld")
-        if ok {
-            return true, "firewalld 已启用并启动。"
-        }
-        ok2, out2 := run("service", "firewalld", "start")
-        if ok2 {
-            return true, "firewalld 已启动。"
-        }
-        if out == "" {
-            out = out2
-        }
-        return false, "启用 firewalld 失败：" + out
-    }
+		firewallType = DetectType()
+		if firewallType == "未知" {
+			return false, "系统中未检测到可启用的防火墙工具，自动尝试安装由于以下原因失败：" + installLog + "。请自行使用命令行手动安装 ufw 或 firewalld。"
+		}
+	}
 
-    if firewallType == "iptables" {
-        return true, "iptables 无独立启用步骤，规则即时生效。"
-    }
+	if firewallType == "UFW" {
+		ok, out := run("ufw", "--force", "enable")
+		if ok {
+			return true, "UFW 防火墙已成功安装并启用。"
+		}
+		return false, "尝试启用 UFW 失败：" + out
+	}
 
-    return false, "未检测到可启用的防火墙工具。"
+	if firewallType == "firewalld" {
+		ok, out := run("systemctl", "enable", "--now", "firewalld")
+		if ok {
+			return true, "firewalld 防火墙已成功安装、启用并启动。"
+		}
+		ok2, out2 := run("service", "firewalld", "start")
+		if ok2 {
+			return true, "firewalld 已启动。"
+		}
+		if out == "" {
+			out = out2
+		}
+		return false, "启用 firewalld 失败：" + out
+	}
+
+	if firewallType == "iptables" {
+		return true, "iptables 无独立启用步骤，规则即时生效。"
+	}
+
+	return false, "当前已安装防识别墙由于不可预见的错误无法启用 (" + firewallType + ")。"
 }
 
-func OpenPort(firewallType string, port int, protocol string) (bool, string) {
-    if port < 1 || port > 65535 {
-        return false, "端口范围必须在 1-65535。"
-    }
-    protocol = strings.ToLower(strings.TrimSpace(protocol))
-    if protocol != "tcp" && protocol != "udp" {
-        return false, "端口类型仅支持 tcp 或 udp。"
-    }
+func OpenPort(firewallType string, port int, protocol string, sourceIP string) (bool, string) {
+	if port < 1 || port > 65535 {
+		return false, "端口范围必须在 1-65535。"
+	}
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if protocol != "tcp" && protocol != "udp" {
+		return false, "端口类型仅支持 tcp 或 udp。"
+	}
 
-    if firewallType == "UFW" {
-        ok, out := run("ufw", "allow", fmt.Sprintf("%d/%s", port, protocol))
-        if ok {
-            return true, fmt.Sprintf("UFW 已开放 %d/%s。", port, protocol)
-        }
-        return false, "UFW 开放端口失败：" + out
-    }
+	if firewallType == "UFW" {
+		if sourceIP != "" {
+			ok, out := run("ufw", "allow", "from", sourceIP, "to", "any", "port", strconv.Itoa(port), "proto", protocol)
+			if ok {
+				return true, fmt.Sprintf("UFW 仅为 IP %s 限制开放了 %d/%s。", sourceIP, port, protocol)
+			}
+			return false, "UFW 限制端口开放失败：" + out
+		}
+		
+		ok, out := run("ufw", "allow", fmt.Sprintf("%d/%s", port, protocol))
+		if ok {
+			return true, fmt.Sprintf("UFW 已全局开放 %d/%s。", port, protocol)
+		}
+		return false, "UFW 开放端口失败：" + out
+	}
 
-    if firewallType == "firewalld" {
-        okAdd, outAdd := run("firewall-cmd", "--permanent", fmt.Sprintf("--add-port=%d/%s", port, protocol))
-        if !okAdd {
-            return false, "firewalld 添加端口失败：" + outAdd
-        }
-        okReload, outReload := run("firewall-cmd", "--reload")
-        if !okReload {
-            return false, "firewalld 重载失败：" + outReload
-        }
-        return true, fmt.Sprintf("firewalld 已开放 %d/%s。", port, protocol)
-    }
+	if firewallType == "firewalld" {
+		if sourceIP != "" {
+			rule := fmt.Sprintf("rule family=\"ipv4\" source address=\"%s\" port port=\"%d\" protocol=\"%s\" accept", sourceIP, port, protocol)
+			okAdd, outAdd := run("firewall-cmd", "--permanent", "--add-rich-rule", rule)
+			if !okAdd {
+				return false, "firewalld 添加限源规则失败：" + outAdd
+			}
+			run("firewall-cmd", "--reload")
+			return true, fmt.Sprintf("firewalld 仅为 IP %s 限制开放了 %d/%s。", sourceIP, port, protocol)
+		}
 
-    if firewallType == "iptables" {
-        // Check existing rule.
-        okCheck, _ := run("iptables", "-C", "INPUT", "-p", protocol, "--dport", strconv.Itoa(port), "-j", "ACCEPT")
-        if !okCheck {
-            okAdd, outAdd := run("iptables", "-I", "INPUT", "-p", protocol, "--dport", strconv.Itoa(port), "-j", "ACCEPT")
-            if !okAdd {
-                return false, "iptables 开放端口失败：" + outAdd
-            }
-        }
-        okPersist, persistMsg := persistIptables()
-        if !okPersist {
-            return false, persistMsg
-        }
-        return true, fmt.Sprintf("iptables 已开放 %d/%s。%s", port, protocol, persistMsg)
-    }
+		okAdd, outAdd := run("firewall-cmd", "--permanent", fmt.Sprintf("--add-port=%d/%s", port, protocol))
+		if !okAdd {
+			return false, "firewalld 添加端口失败：" + outAdd
+		}
+		run("firewall-cmd", "--reload")
+		return true, fmt.Sprintf("firewalld 已全局开放 %d/%s。", port, protocol)
+	}
 
-    return false, "未检测到可用防火墙工具。"
+	if firewallType == "iptables" {
+		if sourceIP != "" {
+			okAdd, outAdd := run("iptables", "-I", "INPUT", "-p", protocol, "-s", sourceIP, "--dport", strconv.Itoa(port), "-j", "ACCEPT")
+			if !okAdd {
+				return false, "iptables 限制源 IP 开放端口失败：" + outAdd
+			}
+			persistIptables()
+			return true, fmt.Sprintf("iptables 仅为 IP %s 限制开放了 %d/%s。", sourceIP, port, protocol)
+		}
+
+		// Check existing rule.
+		okCheck, _ := run("iptables", "-C", "INPUT", "-p", protocol, "--dport", strconv.Itoa(port), "-j", "ACCEPT")
+		if !okCheck {
+			okAdd, outAdd := run("iptables", "-I", "INPUT", "-p", protocol, "--dport", strconv.Itoa(port), "-j", "ACCEPT")
+			if !okAdd {
+				return false, "iptables 开放端口失败：" + outAdd
+			}
+		}
+		okPersist, persistMsg := persistIptables()
+		if !okPersist {
+			return false, persistMsg
+		}
+		return true, fmt.Sprintf("iptables 已开全局放 %d/%s。%s", port, protocol, persistMsg)
+	}
+
+	return false, "未检测到可用防火墙工具。"
+}
+
+func DeletePort(firewallType string, port int, protocol string, sourceIP string) (bool, string) {
+	if port < 1 || port > 65535 {
+		return false, "端口范围必须在 1-65535。"
+	}
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if protocol != "tcp" && protocol != "udp" {
+		return false, "端口类型仅支持 tcp 或 udp。"
+	}
+
+	if firewallType == "UFW" {
+		if sourceIP != "" {
+			ok, out := run("ufw", "delete", "allow", "from", sourceIP, "to", "any", "port", strconv.Itoa(port), "proto", protocol)
+			if ok {
+				return true, fmt.Sprintf("UFW 删除了源 IP %s 对 %d/%s 的限制放行规则。", sourceIP, port, protocol)
+			}
+			return false, "UFW 删除规则失败：" + out
+		}
+		
+		ok, out := run("ufw", "delete", "allow", fmt.Sprintf("%d/%s", port, protocol))
+		if ok {
+			return true, fmt.Sprintf("UFW 已删除全局 %d/%s 放行规则。", port, protocol)
+		}
+		return false, "UFW 删除规则失败：" + out
+	}
+
+	if firewallType == "firewalld" {
+		if sourceIP != "" {
+			rule := fmt.Sprintf("rule family=\"ipv4\" source address=\"%s\" port port=\"%d\" protocol=\"%s\" accept", sourceIP, port, protocol)
+			okRm, outRm := run("firewall-cmd", "--permanent", "--remove-rich-rule", rule)
+			if !okRm {
+				return false, "firewalld 删除限源规则失败：" + outRm
+			}
+			run("firewall-cmd", "--reload")
+			return true, fmt.Sprintf("firewalld 已删除供源 IP %s 放行的 %d/%s。", sourceIP, port, protocol)
+		}
+
+		okRm, outRm := run("firewall-cmd", "--permanent", fmt.Sprintf("--remove-port=%d/%s", port, protocol))
+		if !okRm {
+			return false, "firewalld 删除端口失败：" + outRm
+		}
+		run("firewall-cmd", "--reload")
+		return true, fmt.Sprintf("firewalld 已关闭 %d/%s。", port, protocol)
+	}
+
+	if firewallType == "iptables" {
+		if sourceIP != "" {
+			okRm, outRm := run("iptables", "-D", "INPUT", "-p", protocol, "-s", sourceIP, "--dport", strconv.Itoa(port), "-j", "ACCEPT")
+			if !okRm {
+				return false, "iptables 删除限源规则失败：" + outRm
+			}
+			persistIptables()
+			return true, fmt.Sprintf("iptables 已删除源 IP %s 放行的 %d/%s。", sourceIP, port, protocol)
+		}
+
+		// Delete global rule
+		okRm, outRm := run("iptables", "-D", "INPUT", "-p", protocol, "--dport", strconv.Itoa(port), "-j", "ACCEPT")
+		if !okRm {
+			return false, "iptables 删除端口失败：" + outRm
+		}
+		okPersist, persistMsg := persistIptables()
+		if !okPersist {
+			return false, persistMsg
+		}
+		return true, fmt.Sprintf("iptables 已删除全局 %d/%s。%s", port, protocol, persistMsg)
+	}
+
+	return false, "未检测到可用防火墙工具。"
 }
 
 func persistIptables() (bool, string) {

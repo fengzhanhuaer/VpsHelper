@@ -42,6 +42,12 @@
                 </div>
 
                 <div class="field">
+                    <label for="ssh_listen_address">监听接口与允许登录的IP界限 (白名单)</label>
+                    <textarea id="ssh_listen_address" name="ssh_listen_address" rows="2" placeholder="默认留空表示全网皆可访问（0.0.0.0 和 ::）&#10;您可在此输入特定允许的广域网IP/域名（多条空格逗号隔开），后台将自动解析限制。">{{ .ListenAddress }}</textarea>
+                    <div class="muted">如果你不想让此机器 SSH 裸露于公网被随意爆破，只输入你家的独立IP或DDNS地址是最高级防护（利用 sshd ListenAddress 结合动态域名追踪）。一旦写入系统立即切断其它网络握手。</div>
+                </div>
+
+                <div class="field">
                     <label for="ssh_public_key">SSH 公钥</label>
                     <textarea id="ssh_public_key" name="ssh_public_key" rows="4" placeholder="例如：ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host">{{ .SSHPublicKey }}</textarea>
                     <div class="muted">会尝试写入当前运行用户的 ~/.ssh/authorized_keys。</div>
@@ -58,6 +64,18 @@
                 <input type="hidden" name="ssh_port" value="{{ .SSHPort }}" />
                 <button class="ghost" type="submit" name="action" value="diagnose_ssh" style="width:100%;">诊断 SSH 连通性</button>
             </form>
+
+            <div style="margin-top: 32px;">
+                <h3 style="margin-bottom:8px; font-size:16px;">Fail2ban 守护状态</h3>
+                <div style="padding:12px; border:1px solid var(--color-border); border-radius:var(--radius); background:var(--color-bg-alt); display:flex; gap:8px;">
+                    <strong>{{ .Fail2banStatus }}</strong>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px;">
+                <h3 style="margin-bottom:8px; font-size:16px;">最近终端登录记录表</h3>
+                <textarea rows="11" readonly style="width:100%; font-family:monospace; background: #2b2b2b; color:#a9b7c6; border:none; padding:12px; border-radius:var(--radius); resize:none; font-size:12px;">{{ .LoginRecords }}</textarea>
+            </div>
         </section>
     </main>
 </body>

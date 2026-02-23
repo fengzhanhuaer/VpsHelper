@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -2591,6 +2593,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 		default:
 			portText := strings.TrimSpace(c.PostForm("ssh_port"))
 			pub := strings.TrimSpace(c.PostForm("ssh_public_key"))
+			listenAddrsRaw := strings.TrimSpace(c.PostForm("ssh_listen_address"))
 			allowPass := c.PostForm("allow_password_login") == "on"
 			allowKey := c.PostForm("allow_key_login") == "on"
 			p, err := strconv.Atoi(portText)
@@ -2598,13 +2601,28 @@ func (h *Handler) sshSettings(c *gin.Context) {
 				message = "SSH 端口范围必须在 1-65535。"
 				break
 			}
+			var addrs []string
+			if listenAddrsRaw != "" {
+				parts := regexp.MustCompile(`[,\s]+`).Split(listenAddrsRaw, -1)
+				for _, part := range parts {
+					if part != "" {
+						// Wait! If part is domain, do we want to resolve it inside ssh.ApplySettings,
+						// or just pass it in? Note: ListenAddress must be an IP or resolvable hostname by sshd itself!
+						// We'll trust whatever is input (we could parse dynamically if it's DDNS, but usually
+						// sshd requires IPs to bind. If it's pure limiting, using Firewall `OpenPort` is much better.
+						// Here we just write what's given).
+						addrs = append(addrs, part)
+					}
+				}
+			}
 
-			// Only store public key in database (for backup)
+			// Only store public key and listen address in database (for backup)
 			_ = store.SetSetting(h.dbConn, "ssh_public_key", pub)
+			_ = store.SetSetting(h.dbConn, "ssh_listen_address", listenAddrsRaw)
 
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 45*time.Second)
 			defer cancel()
-			ok, msg := ssh.ApplySettings(ctx, p, allowPass, allowKey, pub)
+			ok, msg := ssh.ApplySettings(ctx, p, addrs, allowPass, allowKey, pub)
 			if ok {
 				message = "SSH 设置已应用到系统。"
 				msgOK = true
@@ -2617,23 +2635,48 @@ func (h *Handler) sshSettings(c *gin.Context) {
 	// Read port, password/key auth from actual system config
 	sysCfg := ssh.ReadSystemConfig()
 
-	// Read public key from database (backup & editable)
-	dbSettings, _ := store.GetSettings(h.dbConn, []string{"ssh_public_key"})
+	// Read public key and listener configs from database (backup & editable)
+	dbSettings, _ := store.GetSettings(h.dbConn, []string{"ssh_public_key", "ssh_listen_address"})
 	pubKey := dbSettings["ssh_public_key"]
+	listenDbValue := dbSettings["ssh_listen_address"]
 	// If database has no public key stored yet, show system authorized_keys
 	if pubKey == "" {
 		pubKey = sysCfg.AuthorizedKeys
 	}
+	if listenDbValue == "" && len(sysCfg.ListenAddress) > 0 {
+		listenDbValue = strings.Join(sysCfg.ListenAddress, ", ")
+	}
+
+	fail2banStat := ssh.Fail2banStatus(c.Request.Context())
+	
+	// Try fetching Last Logs (Fallback depending on platform)
+	loginRecords := getLoginRecords()
 
 	c.HTML(http.StatusOK, "ssh_settings.html", gin.H{
-		"Title":              "SSH 设置",
+		"Title":              "SSH 设置与安防",
 		"Message":            message,
 		"MsgOK":              msgOK,
 		"SSHPort":            strconv.Itoa(sysCfg.Port),
+		"ListenAddress":      listenDbValue,
 		"SSHPublicKey":       pubKey,
 		"AllowPasswordLogin": sysCfg.AllowPassword,
 		"AllowKeyLogin":      sysCfg.AllowPubkey,
+		"Fail2banStatus":     fail2banStat,
+		"LoginRecords":       loginRecords,
 	})
+}
+
+func getLoginRecords() string {
+	if runtime.GOOS == "windows" {
+		return "Windows 系统不支持读取 auth log"
+	}
+	// Try last command
+	cmd := exec.Command("last", "-n", "10", "-i")
+	out, err := cmd.Output()
+	if err == nil && len(out) > 0 {
+		return string(out)
+	}
+	return "无最近登录记录或最后登陆读取失败。"
 }
 
 
@@ -2840,17 +2883,81 @@ func (h *Handler) firewallPage(c *gin.Context) {
 		case "open_port":
 			portText := strings.TrimSpace(c.PostForm("port"))
 			proto := strings.TrimSpace(c.PostForm("protocol"))
+			sourceInput := strings.TrimSpace(c.PostForm("source_ip"))
 			port, err := strconv.Atoi(portText)
 			if err != nil {
 				message = "端口必须是数字。"
 				break
 			}
-			ok, msg := firewall.OpenPort(fwType, port, proto)
-			if ok {
-				message = msg
+			
+			if sourceInput == "" {
+				// Global open
+				ok, msg := firewall.OpenPort(fwType, port, proto, "")
+				if ok {
+					message = msg
+					msgOK = true
+				} else {
+					message = "操作失败: " + msg
+				}
+				break
+			}
+
+			// Supports multiples separated by comma or space
+			sources := regexp.MustCompile(`[,\s]+`).Split(sourceInput, -1)
+			var successMsgs []string
+			var errorMsgs []string
+
+			for _, src := range sources {
+				src = strings.TrimSpace(src)
+				if src == "" {
+					continue
+				}
+
+				if net.ParseIP(src) != nil {
+					// Static IP
+					ok, msg := firewall.OpenPort(fwType, port, proto, src)
+					if ok {
+						successMsgs = append(successMsgs, msg)
+					} else {
+						errorMsgs = append(errorMsgs, msg)
+					}
+				} else {
+					// Treat as Domain
+					ips, err := net.LookupIP(src)
+					initialIP := ""
+					if err == nil && len(ips) > 0 {
+						for _, ip := range ips {
+							if ip.To4() != nil {
+								initialIP = ip.String()
+								break
+							}
+						}
+						if initialIP == "" {
+							initialIP = ips[0].String()
+						}
+						// Open current IP directly
+						firewall.OpenPort(fwType, port, proto, initialIP)
+					}
+					// Add to Watcher Loop
+					if err := firewall.AddDomainRule(h.dbConn, src, port, proto, initialIP); err != nil {
+						errorMsgs = append(errorMsgs, src+" 保存动态域名观察队列失败: "+err.Error())
+					} else {
+						msg := fmt.Sprintf("域名 %s 已加入防护观察。", src)
+						if initialIP != "" {
+							msg += " (当前 IP: " + initialIP + ")"
+						} else {
+							msg += " (当前无法解析，稍后后台将自动重试)"
+						}
+						successMsgs = append(successMsgs, msg)
+					}
+				}
+			}
+
+			if len(errorMsgs) > 0 {
+				message = "有部分操作失败: " + strings.Join(errorMsgs, "；")
+			} else if len(successMsgs) > 0 {
+				message = strings.Join(successMsgs, "；")
 				msgOK = true
-			} else {
-				message = "操作失败: " + msg
 			}
 		}
 	}

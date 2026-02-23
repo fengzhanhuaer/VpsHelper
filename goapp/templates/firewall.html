@@ -38,11 +38,12 @@
 
             <form method="post" action="/firewall" style="display:grid; gap:8px; margin-bottom:14px;">
                 <div style="display:flex; gap:8px; align-items:center;">
-                    <input name="port" placeholder="输入要开放的端口，例如 8080" />
-                    <select name="protocol" style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px;">
+                    <input name="port" placeholder="端口(必填), 如 80" style="width:130px;" />
+                    <select name="protocol" style="padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; width:80px;">
                         <option value="tcp">tcp</option>
                         <option value="udp">udp</option>
                     </select>
+                    <input name="source_ip" placeholder="多IP或动态域名用逗号分隔(选填)" style="flex:1;" />
                     <button class="btn" type="submit" name="action" value="open_port" style="width:auto;">开放端口</button>
                 </div>
             </form>

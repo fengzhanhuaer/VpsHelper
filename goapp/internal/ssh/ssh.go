@@ -19,6 +19,7 @@ import (
 // SystemSSHConfig holds SSH settings read directly from the OS.
 type SystemSSHConfig struct {
 	Port           int
+	ListenAddress  []string
 	AllowPassword  bool
 	AllowPubkey    bool
 	AuthorizedKeys string // contents of ~/.ssh/authorized_keys
@@ -53,6 +54,8 @@ func ReadSystemConfig() SystemSSHConfig {
 			if p, err := strconv.Atoi(fields[1]); err == nil && p > 0 && p <= 65535 {
 				cfg.Port = p
 			}
+		case "listenaddress":
+			cfg.ListenAddress = append(cfg.ListenAddress, fields[1])
 		case "passwordauthentication":
 			cfg.AllowPassword = val == "yes"
 		case "pubkeyauthentication":
@@ -126,8 +129,37 @@ func InstallFail2ban(ctx context.Context) (bool, string) {
 
 	return false, "未检测到 apt-get，暂不支持自动安装。"
 }
+func Fail2banStatus(ctx context.Context) string {
+	if runtime.GOOS == "windows" {
+		return "不支持 (Windows)"
+	}
+	if _, err := exec.LookPath("fail2ban-client"); err != nil {
+		return "未安装"
+	}
+	ok, out := run(ctx, "fail2ban-client", "status", "sshd")
+	if !ok {
+		return "运行异常或未启动"
+	}
 
-func ApplySettings(ctx context.Context, port int, allowPassword, allowKey bool, publicKey string) (bool, string) {
+	totalFailed := "0"
+	banned := "0"
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "Total failed:") {
+			parts := strings.Split(line, ":")
+			if len(parts) == 2 {
+				totalFailed = strings.TrimSpace(parts[1])
+			}
+		} else if strings.Contains(line, "Currently banned:") {
+			parts := strings.Split(line, ":")
+			if len(parts) == 2 {
+				banned = strings.TrimSpace(parts[1])
+			}
+		}
+	}
+	return fmt.Sprintf("运行中 (累计失败: %s, 当前封禁: %s)", totalFailed, banned)
+}
+
+func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPassword, allowKey bool, publicKey string) (bool, string) {
 	if runtime.GOOS == "windows" {
 		return false, "当前系统为 Windows，无法修改 Linux sshd 配置。"
 	}
@@ -145,7 +177,30 @@ func ApplySettings(ctx context.Context, port int, allowPassword, allowKey bool, 
 	_ = os.WriteFile(backup, b, 0o600)
 
 	content := string(b)
+	
+	// Strip all existing ListenAddress lines
+	lines := strings.Split(content, "\n")
+	var newLines []string
+	for _, ln := range lines {
+		trim := strings.TrimSpace(ln)
+		if strings.HasPrefix(strings.ToLower(trim), "listenaddress") {
+			continue
+		}
+		newLines = append(newLines, ln)
+	}
+	content = strings.Join(newLines, "\n")
+
 	content = setConfigOption(content, "Port", strconv.Itoa(port))
+	if len(listenAddrs) > 0 {
+		for _, addr := range listenAddrs {
+			content += fmt.Sprintf("\nListenAddress %s", addr)
+		}
+		content += "\n"
+	} else {
+		// Open to all if empty
+		content += "\nListenAddress 0.0.0.0\nListenAddress ::\n"
+	}
+
 	content = setConfigOption(content, "PasswordAuthentication", yesNo(allowPassword))
 	content = setConfigOption(content, "PubkeyAuthentication", yesNo(allowKey))
 

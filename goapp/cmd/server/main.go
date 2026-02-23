@@ -15,6 +15,7 @@ import (
 	"vpshelper-go/internal/config"
 	"vpshelper-go/internal/d1"
 	"vpshelper-go/internal/db"
+	"vpshelper-go/internal/firewall"
 	"vpshelper-go/internal/ns"
 	"vpshelper-go/internal/routes"
 	appstore "vpshelper-go/internal/store"
@@ -57,6 +58,7 @@ func main() {
 	tg.StartAutoReply(context.Background(), database)
 	cloudflare.StartDDNSWatch(context.Background(), database)
 	ns.StartLotteryWatcher(context.Background(), database)
+	firewall.StartDomainWatch(context.Background(), database)
 
 	if os.Getenv("VPSHELPER_UPDATE_TEST") == "1" {
 		log.Printf("VPSHELPER_UPDATE_TEST is active. Running pre-flight health checks...")
