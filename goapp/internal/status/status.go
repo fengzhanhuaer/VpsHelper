@@ -42,6 +42,8 @@ type ProcessStats struct {
     User    string `json:"user"`
     CPU     string `json:"cpu"`
     Mem     string `json:"mem"`
+    MemSize string `json:"mem_size"` // in bytes
+    Threads string `json:"threads"`
     Command string `json:"command"`
 }
 
@@ -276,7 +278,7 @@ func readTopProcesses() []ProcessStats {
         return nil
     }
 
-    cmd := exec.Command("ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%cpu")
+    cmd := exec.Command("ps", "-eo", "pid,user,%cpu,%mem,nlwp,rss,comm", "--sort=-%cpu")
     out, err := cmd.Output()
     if err != nil {
         return nil
@@ -292,13 +294,16 @@ func readTopProcesses() []ProcessStats {
             continue
         }
         fields := strings.Fields(line)
-        if len(fields) >= 5 {
+        if len(fields) >= 7 {
+            rssKb, _ := strconv.ParseUint(fields[5], 10, 64)
             procs = append(procs, ProcessStats{
                 PID:     fields[0],
                 User:    fields[1],
                 CPU:     fields[2],
                 Mem:     fields[3],
-                Command: strings.Join(fields[4:], " "),
+                Threads: fields[4],
+                MemSize: strconv.FormatUint(rssKb*1024, 10),
+                Command: strings.Join(fields[6:], " "),
             })
             count++
             // 只取前 10 个进程

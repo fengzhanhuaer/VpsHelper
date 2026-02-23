@@ -49,6 +49,15 @@ func main() {
 		log.Printf("warn: migrate legacy peer keys: %v", err)
 	}
 
+	// Open the probe_data.db (probe status and telemetry history).
+	// This DB is strictly for probe data and is NOT backed up to D1.
+	probeDB, err := db.OpenProbe(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("open probe db: %v", err)
+	}
+	defer probeDB.Close()
+	appstore.SetProbeDB(probeDB)
+
 	// Background tasks.
 	if err := tunnel.StartServer(context.Background(), database); err != nil {
 		log.Printf("[warn] tunnel server start failed: %v", err)

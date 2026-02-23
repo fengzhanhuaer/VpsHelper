@@ -112,6 +112,22 @@ func MigrateLocal(db *sql.DB) error {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )`,
+
+		// ── probe telemetry history (NOT backed up to D1) ────────────────────
+		`CREATE TABLE IF NOT EXISTS probe_node_stats_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            node_id INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            cpu REAL NOT NULL,
+            mem_pct REAL NOT NULL,
+            disk_pct REAL NOT NULL,
+            net_in INTEGER NOT NULL,
+            net_out INTEGER NOT NULL
+        )`,
+		`CREATE INDEX IF NOT EXISTS idx_pnsh_node
+            ON probe_node_stats_history(node_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_pnsh_created
+            ON probe_node_stats_history(created_at)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

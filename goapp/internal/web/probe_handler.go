@@ -82,16 +82,33 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			}
 			name := strings.TrimSpace(c.PostForm("name"))
 			note := strings.TrimSpace(c.PostForm("note"))
+			vendor := strings.TrimSpace(c.PostForm("vendor"))
+			price := strings.TrimSpace(c.PostForm("price"))
+			expiredAt := strings.TrimSpace(c.PostForm("expired_at"))
+			intervalStr := strings.TrimSpace(c.PostForm("report_interval"))
+			
 			if name == "" {
 				message = "节点名称不能为空。"
 				break
 			}
-			if err := store.UpdateProbeNodeInfo(h.dbConn, id, name, note); err != nil {
+			
+			intervalVal, _ := strconv.Atoi(intervalStr)
+			if intervalVal < 1 {
+				intervalVal = 60
+			}
+
+			if err := store.UpdateProbeNodeDetails(h.dbConn, id, name, note, vendor, price, expiredAt, intervalVal); err != nil {
 				message = "更新失败：" + err.Error()
 				break
 			}
 			message = "节点信息已更新。"
 			msgOK = true
+			
+			// 尝试给在线节点实时推送新的汇报周期
+			pushErr := tunnel.PushConfigToNode(id, "config", map[string]int{"report_interval": intervalVal})
+			if pushErr == nil {
+				message += "（新汇报周期已实时应用。）"
+			}
 
 		case "regen_secret":
 			idStr := strings.TrimSpace(c.PostForm("id"))
@@ -112,32 +129,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			message = "密钥已重新生成。"
 			msgOK = true
 
-		case "set_interval":
-			idStr := strings.TrimSpace(c.PostForm("id"))
-			id, err := strconv.ParseInt(idStr, 10, 64)
-			if err != nil || id <= 0 {
-				message = "无效的节点 ID。"
-				break
-			}
-			intervalStr := strings.TrimSpace(c.PostForm("report_interval"))
-			intervalVal, err := strconv.Atoi(intervalStr)
-			if err != nil || intervalVal < 1 || intervalVal > 3600 {
-				message = "汇报周期须为 1-3600 秒之间的整数。"
-				break
-			}
-			if err := store.UpdateProbeNodeInterval(h.dbConn, id, intervalVal); err != nil {
-				message = "保存汇报周期失败：" + err.Error()
-				break
-			}
-			message = fmt.Sprintf("汇报周期已设置为 %d 秒。", intervalVal)
-			msgOK = true
-			// Push the new config to the node immediately if it's online
-			pushErr := tunnel.PushConfigToNode(id, "config", map[string]int{"report_interval": intervalVal})
-			if pushErr != nil {
-				message += "（节点当前离线，下次连接时将自动应用。）"
-			} else {
-				message += "（已实时推送给在线节点。）"
-			}
 
 		case "upgrade":
 			idStr := strings.TrimSpace(c.PostForm("id"))
@@ -205,17 +196,22 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			if privatePort == "" {
 				privatePort = "15019"
 			}
-			
 			var publicAddress, ddnsDomain string
 			if enableDDNS {
 				ddnsDomain = addressIn
 			} else {
 				publicAddress = addressIn
 			}
+			
+			historyDays := strings.TrimSpace(c.PostForm("probe_history_days"))
+			if historyDays == "" {
+				historyDays = "90"
+			}
 
 			_ = store.SetSetting(h.dbConn, "probe_private_port", privatePort)
 			_ = store.SetSetting(h.dbConn, "probe_public_address", publicAddress)
 			_ = store.SetSetting(h.dbConn, "probe_ddns_domain", ddnsDomain)
+			_ = store.SetSetting(h.dbConn, "probe_history_days", historyDays)
 			
 			message = "设置已保存，端口更改需重启服务生效。"
 			msgOK = true
@@ -247,7 +243,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		}
 	}
 
-	settings, err := store.GetSettings(h.dbConn, []string{"probe_private_port", "probe_public_address", "probe_ddns_domain"})
+	settings, err := store.GetSettings(h.dbConn, []string{"probe_private_port", "probe_public_address", "probe_ddns_domain", "probe_history_days"})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "加载设置失败")
 		return
@@ -258,6 +254,10 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	}
 	publicAddress := settings["probe_public_address"]
 	ddnsDomain := settings["probe_ddns_domain"]
+	historyDays := settings["probe_history_days"]
+	if historyDays == "" {
+		historyDays = "90"
+	}
 
 	nodes, err := store.ListProbeNodes(h.dbConn)
 	if err != nil {
@@ -292,6 +292,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"PrivatePort":   privatePort,
 		"Address":       combinedAddress,
 		"EnableDDNS":    enableDDNS,
+		"HistoryDays":   historyDays,
 	})
 }
 

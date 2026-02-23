@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -66,6 +67,21 @@ func StartServer(ctx context.Context, dbConn *sql.DB) error {
 		<-ctx.Done()
 		log.Printf("[Tunnel] Shutting down...")
 		_ = server.Shutdown(context.Background())
+	}()
+
+	go func() {
+		// Run a cleanup once on startup, then every 24 hours.
+		store.CleanupProbeStatsHistory(dbConn)
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				store.CleanupProbeStatsHistory(dbConn)
+			}
+		}
 	}()
 
 	return nil
@@ -199,6 +215,7 @@ func handleStatsStream(nodeID int64, reader *bufio.Reader) {
 			ns.NodeID = nodeID
 			ns.Online = true
 			StatsBroadcast <- ns
+			store.InsertProbeStatsHistory(nodeID, ns.CPU, ns.MemPct, ns.DiskPct, ns.NetIn, ns.NetOut)
 		default:
 			log.Printf("[Tunnel] unknown telemetry type '%s' from node %d", msg.Type, nodeID)
 		}

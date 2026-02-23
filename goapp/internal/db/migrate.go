@@ -123,5 +123,10 @@ func Migrate(dbConn *sql.DB) error {
 	// v2: add configurable report interval per node (seconds, default 60)
 	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN report_interval INTEGER NOT NULL DEFAULT 60;")
 
+	// v3: additional fields (vendor, price, expiration)
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN vendor TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN price TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN expired_at TEXT NOT NULL DEFAULT '';")
+
 	return nil
 }

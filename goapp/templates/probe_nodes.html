@@ -134,9 +134,15 @@
                                 自动同步该域名到 Cloudflare (DDNS)
                             </label>
                         </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
+                        <div class="field" style="flex: 1; min-width: 150px;">
+                            <label>历史数据保存天数</label>
+                            <input name="probe_history_days" value="{{ .HistoryDays }}" placeholder="默认：90" type="number" min="1" required />
+                            <div class="muted">探针的状态历史保存在本地，设置自动清理周期</div>
+                        </div>
                     </div>
                     <div>
-                        <button class="btn" type="submit" name="action" value="save_settings">保存设置并应用 (需重启 VpsHelper 生效)</button>
+                        <button class="btn" type="submit" name="action" value="save_settings">保存设置并应用 (端口更改需重启生效)</button>
                     </div>
                 </form>
             </div>
@@ -152,67 +158,113 @@
             {{ if eq (len .Nodes) 0 }}
                 <p class="muted">尚未添加任何探针节点。</p>
             {{ else }}
-                {{ range .Nodes }}
-                <div class="node-card">
-                    <div class="node-header">
-                        <div class="node-title">
-                            {{ .Name }} 
-                            {{ if .Note }}<span style="font-weight:normal; font-size:0.9em; color:var(--color-text-muted);">({{.Note}})</span>{{ end }}
-                        </div>
-                        <div>
-                            {{ if .Online }}
-                                <span class="status-badge status-online">在线</span>
-                            {{ else }}
-                                <span class="status-badge status-offline">离线</span>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--color-border); text-align: left;">
+                                <th style="padding: 8px;">ID</th>
+                                <th style="padding: 8px;">状态</th>
+                                <th style="padding: 8px;">节点名称</th>
+                                <th style="padding: 8px;">厂商</th>
+                                <th style="padding: 8px;">价格</th>
+                                <th style="padding: 8px;">到期时间</th>
+                                <th style="padding: 8px;">周期</th>
+                                <th style="padding: 8px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{ range .Nodes }}
+                            <tr style="border-bottom: 1px solid var(--color-border);">
+                                <td style="padding: 8px;">{{ .ID }}</td>
+                                <td style="padding: 8px;">
+                                    {{ if .Online }}
+                                        <span class="status-badge status-online">在线</span>
+                                    {{ else }}
+                                        <span class="status-badge status-offline">离线</span>
+                                    {{ end }}
+                                </td>
+                                <td style="padding: 8px;">
+                                    <strong>{{ .Name }}</strong>
+                                    {{ if .Note }}<br><span style="font-size:0.85em; color:var(--color-text-muted);">{{.Note}}</span>{{ end }}
+                                </td>
+                                <td style="padding: 8px;">{{ if .Vendor }}{{ .Vendor }}{{ else }}--{{ end }}</td>
+                                <td style="padding: 8px;">{{ if .Price }}{{ .Price }}{{ else }}--{{ end }}</td>
+                                <td style="padding: 8px;">{{ if .ExpiredAt }}{{ .ExpiredAt }}{{ else }}--{{ end }}</td>
+                                <td style="padding: 8px;">{{ .ReportInterval }}s</td>
+                                <td style="padding: 8px;">
+                                    <!-- 隐藏一键安装命令用于复制 -->
+                                    <div id="cmd-{{.ID}}" style="display:none;">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
+                                    
+                                    <div class="actions">
+                                        <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}')">⚙️ 设置</button>
+                                        
+                                        <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-{{.ID}}')">复制命令</button>
+                                        
+                                        <form method="post" action="/probe/nodes" style="display:inline;">
+                                            <input type="hidden" name="id" value="{{ .ID }}" />
+                                            <input type="hidden" name="secret_for_upgrade" value="{{ .Secret }}" />
+                                            <button class="ghost btn-sm" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')" style="color: #2563eb;">升级</button>
+                                        </form>
+
+                                        <form method="post" action="/probe/nodes" style="display:inline;">
+                                            <input type="hidden" name="id" value="{{ .ID }}" />
+                                            <button class="ghost btn-sm" type="submit" name="action" value="delete" onclick="return confirm('确认删除该节点吗？')" style="color:var(--color-error);">删除</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
                             {{ end }}
-                        </div>
-                    </div>
-                    <div class="node-meta">
-                        ID: {{ .ID }} &nbsp;|&nbsp; 
-                        创建于: {{ .CreatedAt }} &nbsp;|&nbsp; 
-                        最后心跳: {{ if gt .LastPing 0 }}1分钟内 ({{ .LastPing }}){{ else }}无记录{{ end }}
-                    </div>
-                    
-                    <div><strong>节点密钥 (Secret):</strong></div>
-                    <div class="secret-box">{{ .Secret }}</div>
-
-                    <div><strong>一键安装命令 (推荐):</strong></div>
-                    <div class="install-cmd" id="cmd-{{.ID}}">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
-                    
-                    <div style="margin-bottom: 12px;">
-                        <form method="post" action="/probe/nodes" style="display:flex; align-items:center; gap:8px;">
-                            <input type="hidden" name="id" value="{{ .ID }}" />
-                            <label style="font-weight:bold; font-size:0.9em;">汇报周期(秒):</label>
-                            <input type="number" name="report_interval" value="{{ .ReportInterval }}" min="1" max="3600" style="width:80px; padding:4px;" required />
-                            <button class="ghost btn-sm" type="submit" name="action" value="set_interval">更新周期</button>
-                        </form>
-                    </div>
-
-                    <div class="actions">
-                        <button class="btn btn-sm" type="button" onclick="copyCmd('cmd-{{.ID}}')">复制安装命令</button>
-                        
-                        <form method="post" action="/probe/nodes" style="display:inline;">
-                            <input type="hidden" name="id" value="{{ .ID }}" />
-                            <input type="hidden" name="secret_for_upgrade" value="{{ .Secret }}" />
-                            <button class="ghost btn-sm" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？如不在线将导致升级失败。')" style="color: #2563eb;">一键升级</button>
-                        </form>
-
-                        <form method="post" action="/probe/nodes" style="display:inline;">
-                            <input type="hidden" name="id" value="{{ .ID }}" />
-                            <button class="ghost btn-sm" type="submit" name="action" value="regen_secret" onclick="return confirm('警告：重新生成密钥将导致旧密钥失效，探针将掉线且需重新配置并重启，确认操作？')">重置密钥</button>
-                        </form>
-                        
-                        <form method="post" action="/probe/nodes" style="display:inline;">
-                            <input type="hidden" name="id" value="{{ .ID }}" />
-                            <button class="ghost btn-sm" type="submit" name="action" value="delete" onclick="return confirm('确认删除该节点吗？这不会卸载探针，但探针将无法连接。')" style="color:var(--color-error);">删除</button>
-                        </form>
-                    </div>
+                        </tbody>
+                    </table>
                 </div>
-                {{ end }}
             {{ end }}
 
         </section>
     </main>
+
+    <!-- Modal for Settings -->
+    <div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+        <div class="card" style="background:var(--color-bg); width:400px; max-width:90%; padding:24px;">
+            <h3 style="margin-top:0;">节点设置</h3>
+            <form method="post" action="/probe/nodes" style="display: flex; flex-direction: column; gap: 12px;">
+                <input type="hidden" name="id" id="edit-id" value="" />
+                
+                <div class="field">
+                    <label>节点名称(必填)</label>
+                    <input type="text" name="name" id="edit-name" required />
+                </div>
+                <div class="field">
+                    <label>备注名</label>
+                    <input type="text" name="note" id="edit-note" />
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="field" style="flex: 1;">
+                        <label>厂商</label>
+                        <input type="text" name="vendor" id="edit-vendor" placeholder="如：搬瓦工" />
+                    </div>
+                    <div class="field" style="flex: 1;">
+                        <label>价格</label>
+                        <input type="text" name="price" id="edit-price" placeholder="如：$49.9/yr" />
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="field" style="flex: 1;">
+                        <label>到期时间</label>
+                        <input type="date" name="expired_at" id="edit-expired" />
+                    </div>
+                    <div class="field" style="flex: 1;">
+                        <label>汇报周期(秒)</label>
+                        <input type="number" name="report_interval" id="edit-interval" min="1" max="3600" required />
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                    <button type="button" class="ghost" onclick="closeEditModal()">取消</button>
+                    <button class="btn" type="submit" name="action" value="edit">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         function copyCmd(elementId) {
@@ -224,6 +276,22 @@
             }).catch(err => {
                 prompt("请手动复制以下命令：", text);
             });
+        }
+
+        function openEditModal(id, name, note, vendor, price, expiredAt, interval) {
+            document.getElementById('edit-id').value = id;
+            document.getElementById('edit-name').value = name;
+            document.getElementById('edit-note').value = note;
+            document.getElementById('edit-vendor').value = vendor;
+            document.getElementById('edit-price').value = price;
+            document.getElementById('edit-expired').value = expiredAt;
+            document.getElementById('edit-interval').value = interval;
+            
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
         }
     </script>
 </body>
