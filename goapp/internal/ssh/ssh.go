@@ -222,12 +222,22 @@ func ApplySettings(ctx context.Context, port int, allowPassword, allowKey bool, 
 	}
 
 	// Validate prior to restarting
+	// Fix "Missing privilege separation directory: /run/sshd" on lightweight or containerized OS
+	if runtime.GOOS != "windows" {
+		run(ctx, "mkdir", "-p", "/run/sshd")
+	}
+
 	var validateOut string
 	if runtime.GOOS != "windows" {
 		ok, out1 := run(ctx, "sshd", "-t", "-f", configPath)
 		if !ok {
-			_, out2 := run(ctx, "/usr/sbin/sshd", "-t", "-f", configPath)
-			validateOut = out1 + " " + out2
+			ok2, out2 := run(ctx, "/usr/sbin/sshd", "-t", "-f", configPath)
+			if !ok2 {
+				// Avoid merging if it's identical or just blank
+				validateOut = strings.TrimSpace(out1 + " " + out2)
+			} else {
+				validateOut = "ok"
+			}
 		} else {
 			validateOut = "ok"
 		}
