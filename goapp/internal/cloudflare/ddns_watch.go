@@ -86,6 +86,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 		"cf_allow_ips", "cf_policy_id",
 		"cf_block_ips", "cf_block_uris",
 		"cf_ddns_allow_key", "cf_ddns_block_key",
+		"probe_ddns_domain", "probe_ddns_last_ip",
 	}
 	settings, err := store.GetSettings(dbConn, keys)
 	if err != nil {
@@ -154,6 +155,34 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 				} else {
 					_ = store.SetSetting(dbConn, "cf_ddns_block_key", currentBlockKey)
 					log.Printf("[ddns-watch] blocklist IP change detected, pushed update")
+				}
+			}
+		}
+	}
+
+	// ── 3. Probe DDNS (Auto Update A/AAAA) ─────────────────
+	probeDDNSDomain := strings.TrimSpace(settings["probe_ddns_domain"])
+	if probeDDNSDomain != "" && cfToken != "" {
+		if zoneID == "" && zoneDomain != "" {
+			if id, err := client.LookupZoneID(zoneDomain); err == nil && id != "" {
+				zoneID = id
+				_ = store.SetSetting(dbConn, "cf_zone_id", zoneID)
+				client = NewAPIClient(cfToken, accountID, zoneID)
+			}
+		}
+
+		if zoneID != "" {
+			ips := GetPublicIPs()
+			currentIPKey := ips.IPv4 + "|" + ips.IPv6
+			lastIPKey := settings["probe_ddns_last_ip"]
+
+			if currentIPKey != "|" && currentIPKey != lastIPKey {
+				err := client.SyncDDNSRecord(probeDDNSDomain, ips)
+				if err != nil {
+					log.Printf("[ddns-watch] probe DDNS sync failed: %v", err)
+				} else {
+					_ = store.SetSetting(dbConn, "probe_ddns_last_ip", currentIPKey)
+					log.Printf("[ddns-watch] probe DDNS updated for %s: v4=%s, v6=%s", probeDDNSDomain, ips.IPv4, ips.IPv6)
 				}
 			}
 		}

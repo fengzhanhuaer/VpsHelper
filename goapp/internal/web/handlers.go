@@ -110,6 +110,11 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/cloudflare/addself", h.cloudflareAddSelf)
 	router.GET("/ns/lottery", h.nsLottery)
 	router.POST("/ns/lottery", h.nsLottery)
+	router.GET("/probe/nodes", h.probeNodes)
+	router.POST("/probe/nodes", h.probeNodes)
+	router.GET("/probe/dashboard", h.probeDashboard)
+	router.GET("/probe/ws", h.probeDashboardWS)
+	router.GET("/api/probe/discover", h.probeDiscover)
 	router.POST("/api/:secret", h.tgBotWebhook)
 }
 

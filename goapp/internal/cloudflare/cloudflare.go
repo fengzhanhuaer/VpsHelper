@@ -477,3 +477,89 @@ func (c *APIClient) SyncReusablePolicy(policyID string, ips []string) (string, e
 
 	return policyID, nil
 }
+
+// SyncDDNSRecord updates or creates A and AAAA records for a specific domain pointing to the host's current IPs.
+func (c *APIClient) SyncDDNSRecord(domain string, ips PublicIPs) error {
+	if c.ZoneID == "" {
+		return fmt.Errorf("Zone ID is required for DDNS")
+	}
+	if domain == "" {
+		return fmt.Errorf("domain is required for DDNS")
+	}
+
+	// Fetch existing records for the domain
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records?name=%s", c.ZoneID, domain)
+	respBytes, err := c.doRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("fetch dns records for %s failed: %v", domain, err)
+	}
+
+	type dnsRecord struct {
+		ID      string `json:"id"`
+		Type    string `json:"type"`
+		Content string `json:"content"`
+	}
+	var fetchResult struct {
+		Success bool        `json:"success"`
+		Result  []dnsRecord `json:"result"`
+	}
+	if err := json.Unmarshal(respBytes, &fetchResult); err != nil {
+		return fmt.Errorf("parse dns records failed: %v", err)
+	}
+
+	existingV4 := ""
+	existingV6 := ""
+	idV4 := ""
+	idV6 := ""
+
+	for _, rec := range fetchResult.Result {
+		if rec.Type == "A" {
+			existingV4 = rec.Content
+			idV4 = rec.ID
+		} else if rec.Type == "AAAA" {
+			existingV6 = rec.Content
+			idV6 = rec.ID
+		}
+	}
+
+	// Helper to create or patch
+	upsertRecord := func(recType, content, id string) error {
+		if content == "" {
+			return nil
+		}
+		payload := map[string]interface{}{
+			"type":    recType,
+			"name":    domain,
+			"content": content,
+			"proxied": false, // Probe port connect should NOT be proxied if it's not on a standard HTTPS port natively supported by CF
+		}
+		bodyBytes, _ := json.Marshal(payload)
+
+		if id == "" {
+			// CREATE
+			postURL := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records", c.ZoneID)
+			_, err := c.doRequest("POST", postURL, bodyBytes)
+			return err
+		}
+		// UPDATE
+		patchURL := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", c.ZoneID, id)
+		_, err := c.doRequest("PUT", patchURL, bodyBytes)
+		return err
+	}
+
+	var errV4, errV6 error
+	if ips.IPv4 != "" && ips.IPv4 != existingV4 {
+		errV4 = upsertRecord("A", ips.IPv4, idV4)
+	}
+	if ips.IPv6 != "" && ips.IPv6 != existingV6 {
+		errV6 = upsertRecord("AAAA", ips.IPv6, idV6)
+	}
+
+	if errV4 != nil {
+		return fmt.Errorf("A record update failed: %v", errV4)
+	}
+	if errV6 != nil {
+		return fmt.Errorf("AAAA record update failed: %v", errV6)
+	}
+	return nil
+}

@@ -62,12 +62,12 @@ jobs:
           - goos: linux
             goarch: amd64
             ext: ''
-          - goos: linux
-            goarch: arm64
-            ext: ''
-          - goos: windows
-            goarch: amd64
-            ext: '.exe'
+#          - goos: linux
+#            goarch: arm64
+#            ext: ''
+#          - goos: windows
+#            goarch: amd64
+#            ext: '.exe'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -88,15 +88,16 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          OUTPUT="dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
-          go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}" -o "${OUTPUT}" ./cmd/server
-          echo "Built ${OUTPUT}"
+          SRV_OUT="dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
+          PRB_OUT="dist/vpsprobe_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
+          go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}" -o "${SRV_OUT}" ./cmd/server
+          go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}" -o "${PRB_OUT}" ./cmd/probe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}
-          path: goapp/dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}
+          name: binaries_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: goapp/dist/*
           if-no-files-found: error
 
   release:
@@ -111,7 +112,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: vpshelper_*
+          pattern: binaries_*
           path: goapp/dist
           merge-multiple: true
 

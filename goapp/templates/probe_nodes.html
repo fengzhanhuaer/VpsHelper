@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .node-card {
+            background-color: var(--color-bg-alt);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .node-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 8px;
+        }
+        .node-title {
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        .status-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #fff;
+        }
+        .status-online { background-color: #28a745; }
+        .status-offline { background-color: #dc3545; }
+        .node-meta {
+            font-size: 0.9em;
+            color: var(--color-text-muted);
+            margin-bottom: 8px;
+        }
+        .secret-box {
+            background: #000;
+            color: #0f0;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            word-break: break-all;
+            margin-bottom: 12px;
+        }
+        .install-cmd {
+            background-color: var(--color-bg);
+            border: 1px dashed var(--color-border);
+            padding: 10px;
+            font-family: monospace;
+            border-radius: 4px;
+            font-size: 0.9em;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            margin-bottom: 12px;
+        }
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 0.8em;
+        }
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/probe/nodes">探针节点</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel panel--wide">
+            <h1>探针节点管理</h1>
+            <p class="muted">管理您的分布式探针节点。节点密钥用于建立安全的双向 WebSocket 隧道。</p>
+
+            {{ if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom: 16px;">{{ .Message }}</div>
+            {{ end }}
+
+            <!-- 添加节点表单 -->
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-top:0;">添加新节点</h3>
+                <form method="post" action="/probe/nodes" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
+                    <div class="field" style="flex: 1; min-width: 200px;">
+                        <label>节点名称(必填)</label>
+                        <input name="name" placeholder="例如：US-West-01" required />
+                    </div>
+                    <div class="field" style="flex: 2; min-width: 250px;">
+                        <label>备注名</label>
+                        <input name="note" placeholder="例如：搬瓦工 GIA" />
+                    </div>
+                    <div style="padding-bottom: 5px;">
+                        <button class="btn" type="submit" name="action" value="add">添加节点生成密钥</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 探针通信地址配置 -->
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-top:0;">WebSocket 通信设置 (双端口隔离)</h3>
+                <p class="muted" style="margin-top:-5px; margin-bottom: 12px; font-size: 0.9em;">
+                    由于 CDN 会切断长连接并掩盖真实 IP，探针服务运行时会建立第二条直连底层通信隧道：
+                </p>
+                <form method="post" action="/probe/nodes" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <div class="field" style="flex: 1; min-width: 150px;">
+                            <label>本地监听端口</label>
+                            <input name="probe_private_port" value="{{ .PrivatePort }}" placeholder="例如：15019" required />
+                            <div class="muted">控制中心用于建立直连 WS 的独立端口</div>
+                        </div>
+                        <div class="field" style="flex: 2; min-width: 300px;">
+                            <label>指定公网访问地址 (可选)</label>
+                            <input name="probe_public_address" value="{{ .PublicAddress }}" placeholder="例如：1.2.3.4:15019 或 wss://my-ws.com:443" />
+                            <div class="muted">优先级最高，直接发送给探针拨号</div>
+                        </div>
+                        <div class="field" style="flex: 2; min-width: 300px;">
+                            <label>自动 DDNS 域名 (可选)</label>
+                            <input name="probe_ddns_domain" value="{{ .DDNSDomain }}" placeholder="例如：probe.example.com" />
+                            <div class="muted">面板将自动解析本身公网 IP 并更新 Cloudflare DNS 记录。优先级次于公网访问地址。</div>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn" type="submit" name="action" value="save_settings">保存设置并应用 (需重启 VpsHelper 生效)</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 节点列表 -->
+            <h3 style="margin-top: 32px;">已有节点 ({{ len .Nodes }})</h3>
+            {{ if eq (len .Nodes) 0 }}
+                <p class="muted">尚未添加任何探针节点。</p>
+            {{ else }}
+                {{ range .Nodes }}
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-title">
+                            {{ .Name }} 
+                            {{ if .Note }}<span style="font-weight:normal; font-size:0.9em; color:var(--color-text-muted);">({{.Note}})</span>{{ end }}
+                        </div>
+                        <div>
+                            {{ if .Online }}
+                                <span class="status-badge status-online">在线</span>
+                            {{ else }}
+                                <span class="status-badge status-offline">离线</span>
+                            {{ end }}
+                        </div>
+                    </div>
+                    <div class="node-meta">
+                        ID: {{ .ID }} &nbsp;|&nbsp; 
+                        创建于: {{ .CreatedAt }} &nbsp;|&nbsp; 
+                        最后心跳: {{ if gt .LastPing 0 }}1分钟内 ({{ .LastPing }}){{ else }}无记录{{ end }}
+                    </div>
+                    
+                    <div><strong>节点密钥 (Secret):</strong></div>
+                    <div class="secret-box">{{ .Secret }}</div>
+
+                    <div><strong>一键安装命令 (推荐):</strong></div>
+                    <div class="install-cmd" id="cmd-{{.ID}}">curl -sSL {{ $.BaseURL }}/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
+                    
+                    <div class="actions">
+                        <button class="btn btn-sm" type="button" onclick="copyCmd('cmd-{{.ID}}')">复制安装命令</button>
+                        
+                        <form method="post" action="/probe/nodes" style="display:inline;">
+                            <input type="hidden" name="id" value="{{ .ID }}" />
+                            <button class="ghost btn-sm" type="submit" name="action" value="regen_secret" onclick="return confirm('警告：重新生成密钥将导致旧密钥失效，探针将掉线且需重新配置并重启，确认操作？')">重置密钥</button>
+                        </form>
+                        
+                        <form method="post" action="/probe/nodes" style="display:inline;">
+                            <input type="hidden" name="id" value="{{ .ID }}" />
+                            <button class="ghost btn-sm" type="submit" name="action" value="delete" onclick="return confirm('确认删除该节点吗？这不会卸载探针，但探针将无法连接。')" style="color:var(--color-error);">删除</button>
+                        </form>
+                    </div>
+                </div>
+                {{ end }}
+            {{ end }}
+
+        </section>
+    </main>
+
+    <script>
+        function copyCmd(elementId) {
+            const elm = document.getElementById(elementId);
+            if (!elm) return;
+            const text = elm.innerText || elm.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert("安装命令已复制到剪贴板。");
+            }).catch(err => {
+                prompt("请手动复制以下命令：", text);
+            });
+        }
+    </script>
+</body>
+</html>

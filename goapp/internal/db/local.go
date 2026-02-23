@@ -99,6 +99,13 @@ func MigrateLocal(db *sql.DB) error {
             ON ns_lottery_watches(owner, draw_time DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_nslw_pending
             ON ns_lottery_watches(status, draw_time ASC)`,
+
+		// ── probe node runtime status (NOT backed up to D1) ──────────────────
+		`CREATE TABLE IF NOT EXISTS probe_node_status (
+            node_id   INTEGER PRIMARY KEY,
+            online    INTEGER NOT NULL DEFAULT 0,
+            last_ping INTEGER NOT NULL DEFAULT 0
+        )`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

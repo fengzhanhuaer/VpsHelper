@@ -5,7 +5,9 @@ go 1.24.0
 require (
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.10.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/gotd/td v0.139.0
+	github.com/hashicorp/yamux v0.1.2
 	golang.org/x/crypto v0.47.0
 	modernc.org/sqlite v1.29.0
 )

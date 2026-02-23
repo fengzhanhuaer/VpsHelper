@@ -19,6 +19,7 @@ import (
 	"vpshelper-go/internal/routes"
 	appstore "vpshelper-go/internal/store"
 	"vpshelper-go/internal/tg"
+	"vpshelper-go/internal/tunnel"
 	"vpshelper-go/internal/version"
 )
 
@@ -48,6 +49,9 @@ func main() {
 	}
 
 	// Background tasks.
+	if err := tunnel.StartServer(context.Background(), database); err != nil {
+		log.Printf("[warn] tunnel server start failed: %v", err)
+	}
 	d1.StartAutoBackup(context.Background(), database)
 	tg.StartAutoSend(context.Background(), database)
 	tg.StartAutoReply(context.Background(), database)

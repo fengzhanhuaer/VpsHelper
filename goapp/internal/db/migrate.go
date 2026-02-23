@@ -111,5 +111,14 @@ func Migrate(dbConn *sql.DB) error {
 	_, _ = dbConn.Exec("ALTER TABLE tg_auto_reply_rules ADD COLUMN all_proxy TEXT NOT NULL DEFAULT '';")
 	_, _ = dbConn.Exec("ALTER TABLE tg_auto_reply_rules ADD COLUMN account_name TEXT NOT NULL DEFAULT '';")
 
+	// ── probe nodes (identity only — backed up to D1) ─────────────────────────
+	_, _ = dbConn.Exec(`CREATE TABLE IF NOT EXISTS probe_nodes (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		name       TEXT    NOT NULL,
+		note       TEXT    NOT NULL DEFAULT '',
+		secret     TEXT    NOT NULL UNIQUE,
+		created_at TEXT    NOT NULL DEFAULT ''
+	)`)
+
 	return nil
 }
