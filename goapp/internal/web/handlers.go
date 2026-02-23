@@ -2990,6 +2990,22 @@ func (h *Handler) firewallPage(c *gin.Context) {
 				message = strings.Join(successMsgs, "；")
 				msgOK = true
 			}
+		case "close_port":
+			portText := strings.TrimSpace(c.PostForm("port"))
+			proto := strings.TrimSpace(c.PostForm("protocol"))
+			sourceIP := strings.TrimSpace(c.PostForm("source_ip"))
+			port, err := strconv.Atoi(portText)
+			if err != nil {
+				message = "端口必须是数字。"
+				break
+			}
+			ok, msg := firewall.DeletePort(fwType, port, proto, sourceIP)
+			if ok {
+				message = msg
+				msgOK = true
+			} else {
+				message = "关闭端口失败: " + msg
+			}
 		}
 	}
 

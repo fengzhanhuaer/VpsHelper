@@ -98,6 +98,7 @@
                         <th style="width: 200px;">允许来源 IP</th>
                         <th style="width: 200px;">绑定 IP</th>
                         <th>进程名称</th>
+                        <th style="width: 70px;">操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -108,6 +109,17 @@
                         <td>{{ if .source }}<span style="font-family:monospace;">{{ .source }}</span>{{ else }}<span class="muted">任意</span>{{ end }}</td>
                         <td>{{ join .bind_ips ", " }}</td>
                         <td>{{ join .process_names ", " }}</td>
+                        <td>
+                            <form method="post" action="/firewall" style="display:inline;">
+                                <input type="hidden" name="action" value="close_port" />
+                                <input type="hidden" name="port" value="{{ .port }}" />
+                                <input type="hidden" name="protocol" value="{{ .protocol }}" />
+                                <input type="hidden" name="source_ip" value="{{ .source }}" />
+                                <button class="ghost" type="submit"
+                                    onclick="return confirm('确认关闭 {{ .port }}/{{ .protocol }}{{ if .source }}（来源：{{ .source }}）{{ end }} 的防火墙放行规则？')"
+                                    style="padding:4px 8px; font-size:12px; color:var(--color-error,#c00); border-color:var(--color-error,#c00);">关闭</button>
+                            </form>
+                        </td>
                     </tr>
                     {{ end }}
                 </tbody>
