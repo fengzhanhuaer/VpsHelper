@@ -149,8 +149,9 @@ func (h *Handler) register(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "load users failed")
 		return
 	}
-	if hasUsers && h.currentUser(c) != "" {
-		c.Redirect(http.StatusFound, "/home")
+	// 单用户模式：只要系统中已存在用户，就禁止注册
+	if hasUsers {
+		c.String(http.StatusForbidden, "注册已关闭（单用户模式）")
 		return
 	}
 
