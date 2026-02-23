@@ -1,9 +1,12 @@
 package tunnel
 
 import (
+	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/hashicorp/yamux"
 )
 
 // NodeStats represents the telemetry data sent from a probe.
@@ -18,6 +21,22 @@ type NodeStats struct {
 	NetOut   uint64  `json:"net_out"`
 	Uptime   string  `json:"uptime"`
 	Online   bool    `json:"online,omitempty"` // used for status updates
+}
+
+// ControlMsg is the generic server→probe control message.
+// Type identifies the action; Payload carries arbitrary JSON.
+// Adding new control types only requires defining a new Type string.
+type ControlMsg struct {
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// TelemetryMsg is the generic probe→server telemetry message.
+// Type identifies what kind of data is being reported (e.g. "stats", "process_list").
+// Payload carries the actual data as arbitrary JSON.
+type TelemetryMsg struct {
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
 }
 
 var (
@@ -61,4 +80,34 @@ func BroadcastStatus(nodeID int64, online bool) {
 		NodeID: nodeID,
 		Online: online,
 	}
+}
+
+// PushConfigToNode opens a new Yamux stream to an online node and sends a
+// control message. This can be called for any type of server-initiated config push.
+// payload must be a JSON-marshallable value.
+func PushConfigToNode(nodeID int64, msgType string, payload interface{}) error {
+	sessVal, ok := ActiveSessions.Load(nodeID)
+	if !ok {
+		return fmt.Errorf("node %d is not currently connected", nodeID)
+	}
+	sess := sessVal.(*yamux.Session)
+	stream, err := sess.OpenStream()
+	if err != nil {
+		return fmt.Errorf("open control stream: %w", err)
+	}
+	defer stream.Close()
+
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+	msg := ControlMsg{
+		Type:    msgType,
+		Payload: rawPayload,
+	}
+	enc := json.NewEncoder(stream)
+	if err := enc.Encode(msg); err != nil {
+		return fmt.Errorf("send control msg: %w", err)
+	}
+	return nil
 }

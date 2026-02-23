@@ -184,13 +184,23 @@ func handleIncomingProbeStream(nodeID int64, stream *yamux.Stream) {
 func handleStatsStream(nodeID int64, reader *bufio.Reader) {
 	decoder := json.NewDecoder(reader)
 	for {
-		var ns NodeStats
-		if err := decoder.Decode(&ns); err != nil {
+		var msg TelemetryMsg
+		if err := decoder.Decode(&msg); err != nil {
 			// Stream broken or EOF
 			return
 		}
-		ns.NodeID = nodeID
-		ns.Online = true
-		StatsBroadcast <- ns
+		switch msg.Type {
+		case "stats":
+			var ns NodeStats
+			if err := json.Unmarshal(msg.Payload, &ns); err != nil {
+				log.Printf("[Tunnel] malformed stats payload from node %d: %v", nodeID, err)
+				continue
+			}
+			ns.NodeID = nodeID
+			ns.Online = true
+			StatsBroadcast <- ns
+		default:
+			log.Printf("[Tunnel] unknown telemetry type '%s' from node %d", msg.Type, nodeID)
+		}
 	}
 }

@@ -8,11 +8,12 @@ import (
 
 // ProbeNode represents a registered probe agent node (identity, stored in main DB).
 type ProbeNode struct {
-	ID        int64
-	Name      string
-	Note      string
-	Secret    string
-	CreatedAt string
+	ID             int64
+	Name           string
+	Note           string
+	Secret         string
+	CreatedAt      string
+	ReportInterval int // seconds, default 3
 
 	// Runtime fields loaded from local DB (probe_node_status), not backed up.
 	Online   bool
@@ -23,7 +24,7 @@ type ProbeNode struct {
 // status from the local DB.
 func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 	rows, err := dbConn.Query(
-		`SELECT id, name, note, secret, created_at FROM probe_nodes ORDER BY id ASC`,
+		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 3) FROM probe_nodes ORDER BY id ASC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list probe nodes: %w", err)
@@ -33,8 +34,11 @@ func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 	var nodes []ProbeNode
 	for rows.Next() {
 		var n ProbeNode
-		if err := rows.Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval); err != nil {
 			return nil, err
+		}
+		if n.ReportInterval <= 0 {
+			n.ReportInterval = 60
 		}
 		nodes = append(nodes, n)
 	}
@@ -60,10 +64,13 @@ func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 func GetProbeNodeBySecret(dbConn *sql.DB, secret string) (ProbeNode, error) {
 	var n ProbeNode
 	err := dbConn.QueryRow(
-		`SELECT id, name, note, secret, created_at FROM probe_nodes WHERE secret = ?`, secret,
-	).Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt)
+		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 3) FROM probe_nodes WHERE secret = ?`, secret,
+	).Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval)
 	if err != nil {
 		return ProbeNode{}, fmt.Errorf("get probe node by secret: %w", err)
+	}
+	if n.ReportInterval <= 0 {
+		n.ReportInterval = 3
 	}
 	// Merge runtime status.
 	if localDB != nil {
@@ -80,7 +87,7 @@ func GetProbeNodeBySecret(dbConn *sql.DB, secret string) (ProbeNode, error) {
 func CreateProbeNode(dbConn *sql.DB, name, note, secret string) (int64, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	res, err := dbConn.Exec(
-		`INSERT INTO probe_nodes (name, note, secret, created_at) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO probe_nodes (name, note, secret, created_at, report_interval) VALUES (?, ?, ?, ?, 60)`,
 		name, note, secret, now,
 	)
 	if err != nil {
@@ -112,6 +119,20 @@ func UpdateProbeNodeInfo(dbConn *sql.DB, id int64, name, note string) error {
 func UpdateProbeNodeSecret(dbConn *sql.DB, id int64, secret string) error {
 	_, err := dbConn.Exec(
 		`UPDATE probe_nodes SET secret = ? WHERE id = ?`, secret, id,
+	)
+	return err
+}
+
+// UpdateProbeNodeInterval sets the report_interval (seconds) for a node.
+func UpdateProbeNodeInterval(dbConn *sql.DB, id int64, interval int) error {
+	if interval < 1 {
+		interval = 1
+	}
+	if interval > 300 {
+		interval = 300
+	}
+	_, err := dbConn.Exec(
+		`UPDATE probe_nodes SET report_interval = ? WHERE id = ?`, interval, id,
 	)
 	return err
 }

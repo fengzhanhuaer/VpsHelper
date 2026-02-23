@@ -173,6 +173,15 @@
                     <div><strong>一键安装命令 (推荐):</strong></div>
                     <div class="install-cmd" id="cmd-{{.ID}}">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
                     
+                    <div style="margin-bottom: 12px;">
+                        <form method="post" action="/probe/nodes" style="display:flex; align-items:center; gap:8px;">
+                            <input type="hidden" name="id" value="{{ .ID }}" />
+                            <label style="font-weight:bold; font-size:0.9em;">汇报周期(秒):</label>
+                            <input type="number" name="report_interval" value="{{ .ReportInterval }}" min="1" max="3600" style="width:80px; padding:4px;" required />
+                            <button class="ghost btn-sm" type="submit" name="action" value="set_interval">更新周期</button>
+                        </form>
+                    </div>
+
                     <div class="actions">
                         <button class="btn btn-sm" type="button" onclick="copyCmd('cmd-{{.ID}}')">复制安装命令</button>
                         

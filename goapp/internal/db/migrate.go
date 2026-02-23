@@ -120,5 +120,8 @@ func Migrate(dbConn *sql.DB) error {
 		created_at TEXT    NOT NULL DEFAULT ''
 	)`)
 
+	// v2: add configurable report interval per node (seconds, default 60)
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN report_interval INTEGER NOT NULL DEFAULT 60;")
+
 	return nil
 }

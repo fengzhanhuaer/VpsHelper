@@ -17,11 +17,12 @@ import (
 )
 
 type DiscoverResponse struct {
-	Success bool   `json:"success"`
-	NodeID  int64  `json:"node_id"`
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	Error   string `json:"error"`
+	Success        bool   `json:"success"`
+	NodeID         int64  `json:"node_id"`
+	Name           string `json:"name"`
+	Address        string `json:"address"`
+	ReportInterval int    `json:"report_interval"` // seconds
+	Error          string `json:"error"`
 }
 
 // Start manages the lifecycle of the probe connection to the control center
@@ -84,8 +85,13 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 		return fmt.Errorf("discover returned error: %s", dResp.Error)
 	}
 
+	reportInterval := dResp.ReportInterval
+	if reportInterval <= 0 {
+		reportInterval = 3
+	}
+
 	wsAddress := dResp.Address
-	log.Printf("[Agent] 寻址成功: 节点ID=%d, 专属入口=%s", dResp.NodeID, wsAddress)
+	log.Printf("[Agent] 寻址成功: 节点ID=%d, 专属入口=%s, 汇报周期=%ds", dResp.NodeID, wsAddress, reportInterval)
 
 	// 2. Establish WebSocket direct to private port
 	dialer := websocket.DefaultDialer
@@ -114,9 +120,11 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	log.Printf("[Agent] Yamux 隧道连接已开启并就绪！")
 
 	errCh := make(chan error, 1)
+	// intervalCh allows the server to push interval changes to the telemetry goroutine
+	intervalCh := make(chan int, 4)
 
 	// Stream 1: Telemetry (Push stats to server)
-	go startTelemetryStream(ctx, session, errCh)
+	go startTelemetryStream(ctx, session, reportInterval, intervalCh, errCh)
 
 	// Heartbeat / ping thread to ensure multiplexer is alive
 	go func() {
@@ -153,7 +161,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 				}
 				return
 			}
-			go handleIncomingControlStream(stream)
+			go handleIncomingControlStream(stream, intervalCh)
 		}
 	}()
 
@@ -168,15 +176,38 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	}
 }
 
-// handleIncomingControlStream processes streams specifically opened by the center to the probe
-func handleIncomingControlStream(stream *yamux.Stream) {
+// handleIncomingControlStream processes streams opened by the control center.
+// It decodes a generic JSON ControlMsg and dispatches to the correct handler.
+// New control types can be added by extending the switch below.
+func handleIncomingControlStream(stream *yamux.Stream, intervalCh chan int) {
 	defer stream.Close()
-	// Future implementation:
-	// Use stream to run shell commands, setup proxy paths, etc.
+
+	var msg tunnel.ControlMsg
+	if err := json.NewDecoder(stream).Decode(&msg); err != nil {
+		log.Printf("[Agent] control stream decode error: %v", err)
+		return
+	}
+
+	switch msg.Type {
+	case "config":
+		var cfg struct {
+			ReportInterval int `json:"report_interval"`
+		}
+		if err := json.Unmarshal(msg.Payload, &cfg); err == nil && cfg.ReportInterval > 0 {
+			log.Printf("[Agent] 服务端推送新汇报周期: %ds", cfg.ReportInterval)
+			select {
+			case intervalCh <- cfg.ReportInterval:
+			default:
+			}
+		}
+	default:
+		log.Printf("[Agent] 未知控制消息类型: %s", msg.Type)
+	}
 }
 
-// startTelemetryStream continuously reads system stats and pumps it through the Yamux stream
-func startTelemetryStream(ctx context.Context, session *yamux.Session, errCh chan error) {
+// startTelemetryStream continuously reads system stats and pumps them through the Yamux stream.
+// The reporting interval can be changed at runtime via intervalCh.
+func startTelemetryStream(ctx context.Context, session *yamux.Session, initialInterval int, intervalCh <-chan int, errCh chan error) {
 	// Let the system settle
 	time.Sleep(2 * time.Second)
 
@@ -194,17 +225,32 @@ func startTelemetryStream(ctx context.Context, session *yamux.Session, errCh cha
 	}
 
 	encoder := json.NewEncoder(stream)
-	ticker := time.NewTicker(3 * time.Second) // Upload stats every 3s
+	currentInterval := time.Duration(initialInterval) * time.Second
+	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case newInterval := <-intervalCh:
+			if newInterval > 0 {
+				currentInterval = time.Duration(newInterval) * time.Second
+				ticker.Reset(currentInterval)
+				log.Printf("[Agent] 汇报周期已动态调整为 %ds", newInterval)
+			}
 		case <-ticker.C:
-			stats := CollectStats()
-			if err := encoder.Encode(stats); err != nil {
-				// Stream broken
+			rawStats := CollectStats()
+			payload, err := json.Marshal(rawStats)
+			if err != nil {
+				log.Printf("[Agent] stats marshal error: %v", err)
+				continue
+			}
+			msg := tunnel.TelemetryMsg{
+				Type:    "stats",
+				Payload: payload,
+			}
+			if err := encoder.Encode(msg); err != nil {
 				log.Printf("[Agent] Telemetry stream broken: %v", err)
 				errCh <- fmt.Errorf("telemetry encode: %w", err)
 				return

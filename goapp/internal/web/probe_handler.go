@@ -15,6 +15,7 @@ import (
 	"vpshelper-go/internal/firewall"
 	"vpshelper-go/internal/security"
 	"vpshelper-go/internal/store"
+	"vpshelper-go/internal/tunnel"
 )
 
 // generateProbeSecret generates a cryptographically random 32-byte hex secret.
@@ -110,6 +111,33 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			}
 			message = "密钥已重新生成。"
 			msgOK = true
+
+		case "set_interval":
+			idStr := strings.TrimSpace(c.PostForm("id"))
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil || id <= 0 {
+				message = "无效的节点 ID。"
+				break
+			}
+			intervalStr := strings.TrimSpace(c.PostForm("report_interval"))
+			intervalVal, err := strconv.Atoi(intervalStr)
+			if err != nil || intervalVal < 1 || intervalVal > 3600 {
+				message = "汇报周期须为 1-3600 秒之间的整数。"
+				break
+			}
+			if err := store.UpdateProbeNodeInterval(h.dbConn, id, intervalVal); err != nil {
+				message = "保存汇报周期失败：" + err.Error()
+				break
+			}
+			message = fmt.Sprintf("汇报周期已设置为 %d 秒。", intervalVal)
+			msgOK = true
+			// Push the new config to the node immediately if it's online
+			pushErr := tunnel.PushConfigToNode(id, "config", map[string]int{"report_interval": intervalVal})
+			if pushErr != nil {
+				message += "（节点当前离线，下次连接时将自动应用。）"
+			} else {
+				message += "（已实时推送给在线节点。）"
+			}
 
 		case "save_settings":
 			privatePort := strings.TrimSpace(c.PostForm("probe_private_port"))
@@ -293,10 +321,11 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"node_id": node.ID,
-		"name":    node.Name,
-		"address": address,
+		"success":         true,
+		"node_id":         node.ID,
+		"name":            node.Name,
+		"address":         address,
+		"report_interval": node.ReportInterval,
 	})
 }
 
