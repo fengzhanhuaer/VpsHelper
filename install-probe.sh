@@ -171,7 +171,10 @@ show_menu() {
     echo "4. 停止探针服务"
     echo "0. 退出菜单"
     echo "======================================"
-    read -rp "请输入对应的数字 [0-4]: " choice
+    if ! read -rp "请输入对应的数字 [0-4]: " choice </dev/tty; then
+      echo "无法打开交互终端，自动退出菜单。"
+      break
+    fi
     case "$choice" in
       1)
         systemctl status "${SERVICE_NAME}.service" --no-pager || true
