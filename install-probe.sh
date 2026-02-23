@@ -160,13 +160,46 @@ chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}"
 systemctl daemon-reload
 systemctl enable --now "${SERVICE_NAME}.service"
 
-echo ""
-echo "探针服务状态:"
-systemctl status "${SERVICE_NAME}.service" --no-pager || true
+show_menu() {
+  while true; do
+    echo "======================================"
+    echo "         VpsProbe 探针管理菜单        "
+    echo "======================================"
+    echo "1. 查看探针运行状态 (systemctl status)"
+    echo "2. 查看探针实时日志 (journalctl -f)  "
+    echo "3. 重启探针服务"
+    echo "4. 停止探针服务"
+    echo "0. 退出菜单"
+    echo "======================================"
+    read -rp "请输入对应的数字 [0-4]: " choice
+    case "$choice" in
+      1)
+        systemctl status "${SERVICE_NAME}.service" --no-pager || true
+        ;;
+      2)
+        echo "按 Ctrl+C 退出日志查看..."
+        journalctl -u "${SERVICE_NAME}.service" -f
+        ;;
+      3)
+        systemctl restart "${SERVICE_NAME}.service"
+        echo "已重启探针服务。"
+        ;;
+      4)
+        systemctl stop "${SERVICE_NAME}.service"
+        echo "已停止探针服务。"
+        ;;
+      0)
+        echo "退出菜单。"
+        break
+        ;;
+      *)
+        echo "无效选择，请输入 0-4 之间的数字。"
+        ;;
+    esac
+    echo ""
+  done
+}
 
 echo ""
-echo "最近 50 行日志:"
-journalctl -u "${SERVICE_NAME}.service" -n 50 --no-pager || true
-
-echo ""
-echo "探针安装完成！程序已在此后台静默运行中并连接至 ${PROBE_HOST}。"
+echo "探针安装/更新完成！程序目前由 Systemd 托管运行，已连接至 ${PROBE_HOST}。"
+show_menu
