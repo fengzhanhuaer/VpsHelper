@@ -2641,6 +2641,43 @@ func (h *Handler) sshSettings(c *gin.Context) {
 			if ok {
 				message = "SSH 设置已应用到系统。"
 				msgOK = true
+
+				fwType := firewall.DetectType()
+				if fwType != "未知" && fwType != "" && listenAddrsRaw != "" {
+					fwMsgs := []string{}
+					parts := regexp.MustCompile(`[,\s]+`).Split(listenAddrsRaw, -1)
+					for _, part := range parts {
+						if part == "" {
+							continue
+						}
+						base := part
+						suffix := ""
+						if idx := strings.LastIndex(part, "/"); idx != -1 {
+							base = part[:idx]
+							suffix = part[idx:]
+						}
+
+						if net.ParseIP(base) != nil {
+							fwOk, fwMsg := firewall.OpenPort(fwType, p, "tcp", part)
+							if fwOk {
+								fwMsgs = append(fwMsgs, fwMsg)
+							}
+						} else {
+							ips, err := firewall.ResolveIPWithCIDR(base, suffix)
+							if err == nil && len(ips) > 0 {
+								for _, ip := range ips {
+									firewall.OpenPort(fwType, p, "tcp", ip)
+								}
+							}
+							if err := firewall.AddDomainRule(h.dbConn, base, suffix, p, "tcp", ips); err == nil {
+								fwMsgs = append(fwMsgs, fmt.Sprintf("域名 %s 的防火墙联动放行均已提交", part))
+							}
+						}
+					}
+					if len(fwMsgs) > 0 {
+						message += " (附: 防火墙已联动开放对应源IP，您可以在防火墙页面查看并管理这些规则。)"
+					}
+				}
 			} else {
 				message = "系统应用失败：" + msg
 			}
