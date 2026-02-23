@@ -251,41 +251,79 @@ func CollectOpenPortsAndStatus(firewallType string) (ports []map[string]string, 
     }
 
     if firewallType == "UFW" {
+        // Use 'ufw status' first to get active state
         ok, out := run("ufw", "status")
         if !ok {
             return []map[string]string{}, "未知", "读取 UFW 状态失败：" + out
         }
 
-        lines := strings.Split(out, "\n")
         st := "未知"
-        if len(lines) > 0 && strings.HasPrefix(strings.ToLower(strings.TrimSpace(lines[0])), "status") {
-            if strings.Contains(strings.ToLower(lines[0]), "active") {
-                st = "已启用"
-            } else {
-                st = "未启用"
+        firstLine := ""
+        for _, l := range strings.Split(out, "\n") {
+            l = strings.TrimSpace(l)
+            if l != "" {
+                firstLine = strings.ToLower(l)
+                break
             }
         }
+        if strings.Contains(firstLine, "active") {
+            st = "已启用"
+        } else if strings.Contains(firstLine, "inactive") || strings.Contains(firstLine, "disabled") {
+            st = "未启用"
+        }
 
-        portRe := regexp.MustCompile(`(\d+)/(tcp|udp)`)
+        noteStr := ""
+        if st != "已启用" {
+            noteStr = "UFW 当前未启用。"
+        }
+
+        // Use 'ufw status numbered' for reliable rule parsing
+        // Falls back to basic parsing if numbered fails
+        okN, outN := run("ufw", "status", "numbered")
+        if !okN {
+            outN = out
+        }
+
+        // Match lines like:
+        //   [ 1] 80/tcp                     ALLOW IN    Anywhere
+        //   [ 2] 443/tcp                    ALLOW IN    1.2.3.4
+        //   [ 3] 22                         ALLOW IN    Anywhere
+        // Numbered format: `[ N] <to>   ALLOW IN   <from>`
+        // Non-numbered:    `<to>         ALLOW IN   <from>`
+        portRe := regexp.MustCompile(`(\d+)(?:/(tcp|udp))?`)
+
         unique := map[string]map[string]string{}
-        for _, line := range lines {
-            if !strings.Contains(line, "ALLOW") {
+        for _, line := range strings.Split(outN, "\n") {
+            // Must be an ALLOW IN rule (inbound), skip ALLOW OUT / ALLOW FWD
+            if !strings.Contains(line, "ALLOW IN") && !strings.Contains(line, "ALLOW") {
                 continue
             }
-            cols := regexp.MustCompile(`\s{2,}`).Split(strings.TrimSpace(line), -1)
+            // Skip IPv6 duplicates (marked with "(v6)")
+            if strings.Contains(line, "(v6)") {
+                continue
+            }
+            // Strip leading numbering "[ N] "
+            clean := regexp.MustCompile(`^\[\s*\d+\]\s*`).ReplaceAllString(strings.TrimSpace(line), "")
+            // Split on 2+ spaces to get columns
+            cols := regexp.MustCompile(`\s{2,}`).Split(clean, -1)
             if len(cols) == 0 {
                 continue
             }
-            m := portRe.FindStringSubmatch(cols[0])
-            if len(m) == 3 {
-                key := m[1] + "/" + strings.ToLower(m[2])
-                unique[key] = map[string]string{"port": m[1], "protocol": strings.ToLower(m[2])}
+            toField := strings.TrimSpace(cols[0])
+            m := portRe.FindStringSubmatch(toField)
+            if len(m) < 2 {
+                continue
             }
-        }
-
-        note := ""
-        if st != "已启用" {
-            note = "UFW 当前未启用。"
+            portNum := m[1]
+            proto := "tcp"
+            if len(m) == 3 && m[2] != "" {
+                proto = strings.ToLower(m[2])
+            } else {
+                // If no protocol specified in rule, default tcp; check if we already have it
+                // UFW sometimes omits protocol for "any"
+            }
+            key := portNum + "/" + proto
+            unique[key] = map[string]string{"port": portNum, "protocol": proto}
         }
 
         items := make([]map[string]string, 0, len(unique))
@@ -300,7 +338,7 @@ func CollectOpenPortsAndStatus(firewallType string) (ports []map[string]string, 
             }
             return items[i]["protocol"] < items[j]["protocol"]
         })
-        return items, st, note
+        return items, st, noteStr
     }
 
     if firewallType == "firewalld" {
@@ -417,9 +455,20 @@ func Enable(firewallType string) (bool, string) {
 	}
 
 	if firewallType == "UFW" {
+		// Step 1: Set default policies BEFORE enabling to avoid traffic interruption
+		run("ufw", "default", "deny", "incoming")
+		run("ufw", "default", "allow", "outgoing")
+
+		// Step 2: Ensure SSH port is allowed BEFORE enabling (prevents lockout).
+		// Detect current SSH port from sshd_config; fall back to 22.
+		sshPort := detectSSHPort()
+		run("ufw", "allow", fmt.Sprintf("%s/tcp", sshPort))
+
+		// Step 3: Enable firewall (non-interactive)
 		ok, out := run("ufw", "--force", "enable")
 		if ok {
-			return true, "UFW 防火墙已成功安装并启用。"
+			msg := fmt.Sprintf("UFW 防火墙已启用（默认拒绝入站）。SSH 端口 %s/tcp 已自动放行，请确认可正常登录后再调整规则。", sshPort)
+			return true, msg
 		}
 		return false, "尝试启用 UFW 失败：" + out
 	}
@@ -665,4 +714,22 @@ func keysSorted(m map[string]struct{}) []string {
     }
     sort.Strings(out)
     return out
+}
+
+// detectSSHPort reads the SSH daemon port from /etc/ssh/sshd_config.
+// Returns "22" if the file cannot be read or no Port directive is found.
+func detectSSHPort() string {
+    data, err := os.ReadFile("/etc/ssh/sshd_config")
+    if err != nil {
+        return "22"
+    }
+    portRe := regexp.MustCompile(`(?im)^\s*Port\s+(\d+)`)
+    m := portRe.FindSubmatch(data)
+    if len(m) == 2 {
+        p := strings.TrimSpace(string(m[1]))
+        if p != "" {
+            return p
+        }
+    }
+    return "22"
 }
