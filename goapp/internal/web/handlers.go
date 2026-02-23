@@ -2902,6 +2902,15 @@ func (h *Handler) firewallPage(c *gin.Context) {
 			} else {
 				message = "操作失败: " + msg
 			}
+		case "disable_firewall":
+			ok, msg := firewall.Disable(fwType)
+			if ok {
+				message = msg
+				msgOK = true
+				fwType = firewall.DetectType()
+			} else {
+				message = "操作失败: " + msg
+			}
 		case "open_port":
 			portText := strings.TrimSpace(c.PostForm("port"))
 			proto := strings.TrimSpace(c.PostForm("protocol"))
@@ -3024,6 +3033,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 	for _, item := range openPorts {
 		port := item["port"]
 		proto := item["protocol"]
+		source := item["source"]
 		key := proto + ":" + port
 		bindIPs := keysFromSet(bindings[key])
 		procNames := keysFromSet(procMap[key])
@@ -3036,6 +3046,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 		portRows = append(portRows, map[string]any{
 			"port":          port,
 			"protocol":      proto,
+			"source":        source,
 			"bind_ips":      bindIPs,
 			"process_names": procNames,
 		})

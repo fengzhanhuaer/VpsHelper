@@ -32,8 +32,11 @@
                 {{ end }}
             </div>
 
-            <form method="post" action="/firewall" style="display:grid; gap:8px; margin-bottom:12px;">
+            <form method="post" action="/firewall" style="display:flex; gap:8px; margin-bottom:12px;">
                 <button class="ghost" type="submit" name="action" value="enable_firewall">启用防火墙</button>
+                <button class="ghost" type="submit" name="action" value="disable_firewall"
+                    style="color:var(--color-error,#c00); border-color:var(--color-error,#c00);"
+                    onclick="return confirm('确认关闭防火墙？关闭后所有入站流量将不再受防火墙限制，请确保服务器处于安全网络环境！')">关闭防火墙</button>
             </form>
 
             <form method="post" action="/firewall" style="display:grid; gap:8px; margin-bottom:14px;">
@@ -90,9 +93,10 @@
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 140px;">开放端口</th>
-                        <th style="width: 120px;">端口类型</th>
-                        <th style="width: 260px;">绑定 IP</th>
+                        <th style="width: 120px;">开放端口</th>
+                        <th style="width: 80px;">协议</th>
+                        <th style="width: 200px;">允许来源 IP</th>
+                        <th style="width: 200px;">绑定 IP</th>
                         <th>进程名称</th>
                     </tr>
                 </thead>
@@ -101,6 +105,7 @@
                     <tr>
                         <td>{{ .port }}</td>
                         <td>{{ .protocol }}</td>
+                        <td>{{ if .source }}<span style="font-family:monospace;">{{ .source }}</span>{{ else }}<span class="muted">任意</span>{{ end }}</td>
                         <td>{{ join .bind_ips ", " }}</td>
                         <td>{{ join .process_names ", " }}</td>
                     </tr>

@@ -292,7 +292,14 @@ func CollectOpenPortsAndStatus(firewallType string) (ports []map[string]string, 
         // Non-numbered:    `<to>         ALLOW IN   <from>`
         portRe := regexp.MustCompile(`(\d+)(?:/(tcp|udp))?`)
 
-        unique := map[string]map[string]string{}
+        // key = "port/proto:source" to allow multiple sources per port
+        type ufwEntry struct {
+            port     string
+            protocol string
+            source   string
+        }
+        var entries []ufwEntry
+        seenEntry := map[string]struct{}{}
         for _, line := range strings.Split(outN, "\n") {
             // Must be an ALLOW IN rule (inbound), skip ALLOW OUT / ALLOW FWD
             if !strings.Contains(line, "ALLOW IN") && !strings.Contains(line, "ALLOW") {
@@ -318,26 +325,39 @@ func CollectOpenPortsAndStatus(firewallType string) (ports []map[string]string, 
             proto := "tcp"
             if len(m) == 3 && m[2] != "" {
                 proto = strings.ToLower(m[2])
-            } else {
-                // If no protocol specified in rule, default tcp; check if we already have it
-                // UFW sometimes omits protocol for "any"
             }
-            key := portNum + "/" + proto
-            unique[key] = map[string]string{"port": portNum, "protocol": proto}
+            // Extract source (from field, last column)
+            source := ""
+            if len(cols) >= 3 {
+                src := strings.TrimSpace(cols[len(cols)-1])
+                lsrc := strings.ToLower(src)
+                if lsrc != "anywhere" && lsrc != "any" && src != "" {
+                    source = src
+                }
+            }
+            entryKey := portNum + "/" + proto + ":" + source
+            if _, exists := seenEntry[entryKey]; exists {
+                continue
+            }
+            seenEntry[entryKey] = struct{}{}
+            entries = append(entries, ufwEntry{port: portNum, protocol: proto, source: source})
         }
 
-        items := make([]map[string]string, 0, len(unique))
-        for _, v := range unique {
-            items = append(items, v)
-        }
-        sort.Slice(items, func(i, j int) bool {
-            pi, _ := strconv.Atoi(items[i]["port"])
-            pj, _ := strconv.Atoi(items[j]["port"])
+        sort.Slice(entries, func(i, j int) bool {
+            pi, _ := strconv.Atoi(entries[i].port)
+            pj, _ := strconv.Atoi(entries[j].port)
             if pi != pj {
                 return pi < pj
             }
-            return items[i]["protocol"] < items[j]["protocol"]
+            if entries[i].protocol != entries[j].protocol {
+                return entries[i].protocol < entries[j].protocol
+            }
+            return entries[i].source < entries[j].source
         })
+        items := make([]map[string]string, 0, len(entries))
+        for _, e := range entries {
+            items = append(items, map[string]string{"port": e.port, "protocol": e.protocol, "source": e.source})
+        }
         return items, st, noteStr
     }
 
@@ -350,26 +370,57 @@ func CollectOpenPortsAndStatus(firewallType string) (ports []map[string]string, 
             }
 
             portRe := regexp.MustCompile(`(\d+)/(tcp|udp)`)
-            unique := map[string]map[string]string{}
+            var items []map[string]string
+            seen := map[string]struct{}{}
+
+            // Global open ports (no source restriction)
             for _, item := range strings.Fields(portsText) {
                 m := portRe.FindStringSubmatch(item)
                 if len(m) == 3 {
-                    key := m[1] + "/" + strings.ToLower(m[2])
-                    unique[key] = map[string]string{"port": m[1], "protocol": strings.ToLower(m[2])}
+                    proto := strings.ToLower(m[2])
+                    entryKey := m[1] + "/" + proto + ":"
+                    if _, exists := seen[entryKey]; !exists {
+                        seen[entryKey] = struct{}{}
+                        items = append(items, map[string]string{"port": m[1], "protocol": proto, "source": ""})
+                    }
                 }
             }
 
-            items := make([]map[string]string, 0, len(unique))
-            for _, v := range unique {
-                items = append(items, v)
+            // Rich rules (source-restricted ports)
+            _, richText := run("firewall-cmd", "--list-rich-rules")
+            richPortRe := regexp.MustCompile(`port port="(\d+)" protocol="(tcp|udp)"`)
+            richSrcRe := regexp.MustCompile(`source address="([^"]+)"`)
+            for _, rline := range strings.Split(richText, "\n") {
+                rline = strings.TrimSpace(rline)
+                if rline == "" || !strings.Contains(rline, "accept") {
+                    continue
+                }
+                pm := richPortRe.FindStringSubmatch(rline)
+                if len(pm) != 3 {
+                    continue
+                }
+                src := ""
+                if sm := richSrcRe.FindStringSubmatch(rline); len(sm) == 2 {
+                    src = sm[1]
+                }
+                proto := strings.ToLower(pm[2])
+                entryKey := pm[1] + "/" + proto + ":" + src
+                if _, exists := seen[entryKey]; !exists {
+                    seen[entryKey] = struct{}{}
+                    items = append(items, map[string]string{"port": pm[1], "protocol": proto, "source": src})
+                }
             }
+
             sort.Slice(items, func(i, j int) bool {
                 pi, _ := strconv.Atoi(items[i]["port"])
                 pj, _ := strconv.Atoi(items[j]["port"])
                 if pi != pj {
                     return pi < pj
                 }
-                return items[i]["protocol"] < items[j]["protocol"]
+                if items[i]["protocol"] != items[j]["protocol"] {
+                    return items[i]["protocol"] < items[j]["protocol"]
+                }
+                return items[i]["source"] < items[j]["source"]
             })
 
             return items, "已启用", ""
@@ -384,10 +435,12 @@ func CollectOpenPortsAndStatus(firewallType string) (ports []map[string]string, 
             return []map[string]string{}, "未知", "读取 iptables 失败：" + out
         }
 
-        unique := map[string]map[string]string{}
         portRe := regexp.MustCompile(`--dport\s+(\d+)`)
         protoRe := regexp.MustCompile(`-p\s+(tcp|udp)`)
+        srcRe := regexp.MustCompile(`-s\s+(\S+)`)
 
+        seen := map[string]struct{}{}
+        var items []map[string]string
         for _, line := range strings.Split(out, "\n") {
             if !strings.Contains(line, " --dport ") || !strings.Contains(line, " -j ACCEPT") {
                 continue
@@ -400,21 +453,31 @@ func CollectOpenPortsAndStatus(firewallType string) (ports []map[string]string, 
             if pr := protoRe.FindStringSubmatch(line); len(pr) == 2 {
                 proto = strings.ToLower(pr[1])
             }
-            key := pm[1] + "/" + proto
-            unique[key] = map[string]string{"port": pm[1], "protocol": proto}
+            src := ""
+            if sr := srcRe.FindStringSubmatch(line); len(sr) == 2 {
+                // ignore wildcard
+                if sr[1] != "0.0.0.0/0" && sr[1] != "::/0" {
+                    src = sr[1]
+                }
+            }
+            entryKey := pm[1] + "/" + proto + ":" + src
+            if _, exists := seen[entryKey]; exists {
+                continue
+            }
+            seen[entryKey] = struct{}{}
+            items = append(items, map[string]string{"port": pm[1], "protocol": proto, "source": src})
         }
 
-        items := make([]map[string]string, 0, len(unique))
-        for _, v := range unique {
-            items = append(items, v)
-        }
         sort.Slice(items, func(i, j int) bool {
             pi, _ := strconv.Atoi(items[i]["port"])
             pj, _ := strconv.Atoi(items[j]["port"])
             if pi != pj {
                 return pi < pj
             }
-            return items[i]["protocol"] < items[j]["protocol"]
+            if items[i]["protocol"] != items[j]["protocol"] {
+                return items[i]["protocol"] < items[j]["protocol"]
+            }
+            return items[i]["source"] < items[j]["source"]
         })
 
         return items, "已加载", ""
@@ -494,6 +557,42 @@ func Enable(firewallType string) (bool, string) {
 
 	return false, "当前已安装防识别墙由于不可预见的错误无法启用 (" + firewallType + ")。"
 }
+
+func Disable(firewallType string) (bool, string) {
+	if runtime.GOOS == "windows" {
+		return false, "当前为 Windows 环境，暂不支持自动关闭防火墙。"
+	}
+
+	if firewallType == "UFW" {
+		ok, out := run("ufw", "--force", "disable")
+		if ok {
+			return true, "UFW 防火墙已关闭（入站流量将不再受限）。"
+		}
+		return false, "关闭 UFW 失败：" + out
+	}
+
+	if firewallType == "firewalld" {
+		ok, out := run("systemctl", "stop", "firewalld")
+		if !ok {
+			return false, "停止 firewalld 失败：" + out
+		}
+		run("systemctl", "disable", "firewalld")
+		return true, "firewalld 防火墙已停止并禁用自启。"
+	}
+
+	if firewallType == "iptables" {
+		// 先将默认策略改回 ACCEPT，再 flush 规则，确保关闭后流量不被阻断
+		run("iptables", "-P", "INPUT", "ACCEPT")
+		run("iptables", "-P", "FORWARD", "ACCEPT")
+		run("iptables", "-P", "OUTPUT", "ACCEPT")
+		run("iptables", "-F")
+		persistIptables()
+		return true, "iptables 规则已清空，默认策略已改为全部放行。如需彻底禁用请手动卸载 iptables 服务。"
+	}
+
+	return false, "未检测到可用防火墙工具（" + firewallType + "）。"
+}
+
 
 func OpenPort(firewallType string, port int, protocol string, sourceIP string) (bool, string) {
 	if port < 1 || port > 65535 {
