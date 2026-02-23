@@ -135,6 +135,16 @@ echo "下载探针 Release: ${url}"
 download_release "${url}" "$tmp"
 
 chmod 755 "$tmp"
+
+backup_path="${bin_path}.backup"
+has_backup=0
+
+if [[ -f "$bin_path" ]]; then
+  echo "发现旧版探针可执行文件，正在备份: ${bin_path} -> ${backup_path}"
+  cp -f "$bin_path" "$backup_path"
+  has_backup=1
+fi
+
 mv -f "$tmp" "$bin_path"
 
 service_file="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -158,7 +168,31 @@ EOF
 chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}"
 
 systemctl daemon-reload
-systemctl enable --now "${SERVICE_NAME}.service"
+systemctl enable "${SERVICE_NAME}.service" >/dev/null 2>&1
+echo "正在启动当前探针服务并进行状态健康检查..."
+systemctl restart "${SERVICE_NAME}.service"
+
+sleep 3
+if ! systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+  echo "======================================"
+  echo "错误: 探针安装/升级后进程启动失败！"
+  if [[ $has_backup -eq 1 ]]; then
+    echo "正在触发回滚机制恢复前一个版本..."
+    mv -f "$backup_path" "$bin_path"
+    systemctl restart "${SERVICE_NAME}.service"
+    if systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+      echo "回滚成功，已恢复到旧版本进程并重启！"
+    else
+      echo "回滚后仍启动失败，请查阅日志详情: journalctl -fu ${SERVICE_NAME}.service"
+    fi
+  else
+    echo "无可用旧版本执行档用于回滚。请查阅系统日志: journalctl -fu ${SERVICE_NAME}.service"
+  fi
+  echo "======================================"
+  exit 1
+else
+  echo "✅ 探针进程启动/运行健康，安装/更新完成。"
+fi
 
 show_menu() {
   while true; do

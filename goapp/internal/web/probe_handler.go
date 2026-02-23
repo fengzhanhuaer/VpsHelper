@@ -139,6 +139,64 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				message += "（已实时推送给在线节点。）"
 			}
 
+		case "upgrade":
+			idStr := strings.TrimSpace(c.PostForm("id"))
+
+			scheme := "http"
+			if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" || c.GetHeader("Cf-Visitor") != "" {
+				scheme = "https"
+			}
+			host := c.Request.Host
+			if !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
+				scheme = "https"
+			}
+			baseURL := fmt.Sprintf("%s://%s", scheme, host)
+
+			if idStr == "all" {
+				nodes, err := store.ListProbeNodes(h.dbConn)
+				if err != nil {
+					message = "获取节点列表失败。"
+					break
+				}
+				count := 0
+				for _, n := range nodes {
+					if n.Online {
+						payload := map[string]string{"secret": n.Secret, "host": baseURL}
+						if err := tunnel.PushConfigToNode(n.ID, "upgrade", payload); err == nil {
+							count++
+						}
+					}
+				}
+				message = fmt.Sprintf("已向 %d 个在线节点下发升级指令。", count)
+				msgOK = true
+			} else {
+				id, err := strconv.ParseInt(idStr, 10, 64)
+				if err != nil || id <= 0 {
+					message = "无效的节点 ID。"
+					break
+				}
+				node, err := store.GetProbeNodeBySecret(h.dbConn, c.PostForm("secret_for_upgrade"))
+				if err != nil || node.ID != id {
+					// Fallback to fetch from DB if correct secret is not provided
+					nodes, _ := store.ListProbeNodes(h.dbConn)
+					for _, n := range nodes {
+						if n.ID == id {
+							node = n
+							break
+						}
+					}
+				}
+				
+				payload := map[string]string{"secret": node.Secret, "host": baseURL}
+				pushErr := tunnel.PushConfigToNode(id, "upgrade", payload)
+				if pushErr != nil {
+					message = "节点当前没在线，请确保在线后再操作。"
+				} else {
+					message = "已向该探针节点下发自动升级指令。"
+					msgOK = true
+				}
+			}
+
 		case "save_settings":
 			privatePort := strings.TrimSpace(c.PostForm("probe_private_port"))
 			addressIn := strings.TrimSpace(c.PostForm("probe_address"))

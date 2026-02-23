@@ -142,7 +142,13 @@
             </div>
 
             <!-- 节点列表 -->
-            <h3 style="margin-top: 32px;">已有节点 ({{ len .Nodes }})</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 32px;">
+                <h3 style="margin-top: 0; margin-bottom: 0;">已有节点 ({{ len .Nodes }})</h3>
+                <form method="post" action="/probe/nodes" style="margin: 0;">
+                    <input type="hidden" name="id" value="all" />
+                    <button class="ghost btn-sm" type="submit" name="action" value="upgrade" onclick="return confirm('确认向所有在线探针下发升级指令？这会导致在线探针自动断开并重启更新。')" style="color: var(--color-primary);">🚀 一键升级所有在线探针</button>
+                </form>
+            </div>
             {{ if eq (len .Nodes) 0 }}
                 <p class="muted">尚未添加任何探针节点。</p>
             {{ else }}
@@ -185,6 +191,12 @@
                     <div class="actions">
                         <button class="btn btn-sm" type="button" onclick="copyCmd('cmd-{{.ID}}')">复制安装命令</button>
                         
+                        <form method="post" action="/probe/nodes" style="display:inline;">
+                            <input type="hidden" name="id" value="{{ .ID }}" />
+                            <input type="hidden" name="secret_for_upgrade" value="{{ .Secret }}" />
+                            <button class="ghost btn-sm" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？如不在线将导致升级失败。')" style="color: #2563eb;">一键升级</button>
+                        </form>
+
                         <form method="post" action="/probe/nodes" style="display:inline;">
                             <input type="hidden" name="id" value="{{ .ID }}" />
                             <button class="ghost btn-sm" type="submit" name="action" value="regen_secret" onclick="return confirm('警告：重新生成密钥将导致旧密钥失效，探针将掉线且需重新配置并重启，确认操作？')">重置密钥</button>
