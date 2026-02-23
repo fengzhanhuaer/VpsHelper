@@ -59,6 +59,20 @@ func MigrateProbe(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_pnsh_created
             ON probe_node_stats_history(created_at)`,
 		`ALTER TABLE probe_node_status ADD COLUMN version TEXT NOT NULL DEFAULT ''`,
+		
+		// ── probe ping history ────────────────────────────────────────────────
+		`CREATE TABLE IF NOT EXISTS probe_ping_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            node_id INTEGER NOT NULL,
+            task_id INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            latency REAL NOT NULL,
+            loss REAL NOT NULL
+        )`,
+		`CREATE INDEX IF NOT EXISTS idx_pph_node_task
+            ON probe_ping_history(node_id, task_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_pph_created
+            ON probe_ping_history(created_at)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

@@ -129,5 +129,14 @@ func Migrate(dbConn *sql.DB) error {
 	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN price TEXT NOT NULL DEFAULT '';")
 	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN expired_at TEXT NOT NULL DEFAULT '';")
 
+	// v4: probe tasks
+	_, _ = dbConn.Exec(`CREATE TABLE IF NOT EXISTS probe_tasks (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		name       TEXT    NOT NULL,
+		target     TEXT    NOT NULL,
+		node_ids   TEXT    NOT NULL,
+		created_at TEXT    NOT NULL DEFAULT ''
+	)`)
+
 	return nil
 }

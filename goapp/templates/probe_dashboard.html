@@ -6,6 +6,7 @@
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
     <style>
+
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -149,16 +150,17 @@
         <strong>VpsHelper</strong>
         <nav>
             <a class="ghost" href="/probe/nodes">节点管理</a>
+            <a class="ghost" href="/probe/pings">拨测大屏</a>
             <a class="ghost" href="/home">返回主菜单</a>
             <a class="ghost" href="/logout">退出</a>
         </nav>
     </header>
 
-    <main>
-        <section class="panel panel--wide" style="max-width: 1200px;">
+    <main style="max-width: 1200px;">
+        <section class="panel panel--wide" style="max-width: 100%;">
             <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                 <div>
-                    <h1>探针状态大屏</h1>
+                    <h1>探针状态</h1>
                     <p class="muted">实时监控所有在线节点的系统负载与网络情况</p>
                 </div>
                 <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">

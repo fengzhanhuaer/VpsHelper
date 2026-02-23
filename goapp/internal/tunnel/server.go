@@ -217,6 +217,20 @@ func handleStatsStream(nodeID int64, reader *bufio.Reader) {
 			ns.Online = true
 			StatsBroadcast <- ns
 			store.InsertProbeStatsHistory(nodeID, ns.CPU, ns.MemPct, ns.DiskPct, ns.NetIn, ns.NetOut)
+		case "ping_results":
+			var results map[int64]map[string]float64
+			if err := json.Unmarshal(msg.Payload, &results); err != nil {
+				log.Printf("[Tunnel] malformed ping payload from node %d: %v", nodeID, err)
+				continue
+			}
+			for taskID, data := range results {
+				store.InsertProbePingHistory(nodeID, taskID, data["latency"], data["loss"])
+			}
+			PingBroadcast <- PingStatsBroadcastMsg{
+				Type:    "ping_results",
+				NodeID:  nodeID,
+				Results: results,
+			}
 		default:
 			log.Printf("[Tunnel] unknown telemetry type '%s' from node %d", msg.Type, nodeID)
 		}

@@ -20,13 +20,19 @@ import (
 	"vpshelper-go/internal/version"
 )
 
+type PingTaskInfo struct {
+	ID     int64  `json:"id"`
+	Target string `json:"target"`
+}
+
 type DiscoverResponse struct {
-	Success        bool   `json:"success"`
-	NodeID         int64  `json:"node_id"`
-	Name           string `json:"name"`
-	Address        string `json:"address"`
-	ReportInterval int    `json:"report_interval"` // seconds
-	Error          string `json:"error"`
+	Success        bool           `json:"success"`
+	NodeID         int64          `json:"node_id"`
+	Name           string         `json:"name"`
+	Address        string         `json:"address"`
+	ReportInterval int            `json:"report_interval"` // seconds
+	PingTasks      []PingTaskInfo `json:"ping_tasks"`
+	Error          string         `json:"error"`
 }
 
 // Start manages the lifecycle of the probe connection to the control center
@@ -127,6 +133,9 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	errCh := make(chan error, 1)
 	// intervalCh allows the server to push interval changes to the telemetry goroutine
 	intervalCh := make(chan int, 4)
+	// pingTasksCh receives new ping tasks configurations from server
+	pingTasksCh := make(chan []PingTaskInfo, 2)
+	pingTasksCh <- dResp.PingTasks // Initial set from discover
 
 	// Stream 1: Telemetry (Push stats to server)
 	go startTelemetryStream(ctx, session, reportInterval, intervalCh, errCh)
@@ -166,9 +175,12 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 				}
 				return
 			}
-			go handleIncomingControlStream(stream, intervalCh)
+			go handleIncomingControlStream(stream, intervalCh, pingTasksCh)
 		}
 	}()
+
+	// Start ping worker loop
+	go startPingWorker(ctx, session, dResp.PingTasks, pingTasksCh, errCh)
 
 	// Block until context cancels or error triggers reconnect
 	select {
@@ -184,7 +196,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 // handleIncomingControlStream processes streams opened by the control center.
 // It decodes a generic JSON ControlMsg and dispatches to the correct handler.
 // New control types can be added by extending the switch below.
-func handleIncomingControlStream(stream *yamux.Stream, intervalCh chan int) {
+func handleIncomingControlStream(stream *yamux.Stream, intervalCh chan int, pingTasksCh chan []PingTaskInfo) {
 	defer stream.Close()
 
 	var msg tunnel.ControlMsg
@@ -202,6 +214,16 @@ func handleIncomingControlStream(stream *yamux.Stream, intervalCh chan int) {
 			log.Printf("[Agent] 服务端推送新汇报周期: %ds", cfg.ReportInterval)
 			select {
 			case intervalCh <- cfg.ReportInterval:
+			default:
+			}
+		}
+
+	case "ping_tasks":
+		var tasks []PingTaskInfo
+		if err := json.Unmarshal(msg.Payload, &tasks); err == nil {
+			log.Printf("[Agent] 服务端推送新拨测任务配置: 收到 %d 个任务", len(tasks))
+			select {
+			case pingTasksCh <- tasks:
 			default:
 			}
 		}
@@ -279,6 +301,8 @@ func startTelemetryStream(ctx context.Context, session *yamux.Session, initialIn
 				log.Printf("[Agent] stats marshal error: %v", err)
 				continue
 			}
+
+
 			msg := tunnel.TelemetryMsg{
 				Type:    "stats",
 				Payload: payload,
@@ -287,6 +311,53 @@ func startTelemetryStream(ctx context.Context, session *yamux.Session, initialIn
 				log.Printf("[Agent] Telemetry stream broken: %v", err)
 				errCh <- fmt.Errorf("telemetry encode: %w", err)
 				return
+			}
+		}
+	}
+}
+
+func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks []PingTaskInfo, pingTasksCh <-chan []PingTaskInfo, errCh chan<- error) {
+	tasks := initialTasks
+	
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case newTasks := <-pingTasksCh:
+			tasks = newTasks
+			log.Printf("[Agent] Ping Worker 检测到任务列表更新，当前共 %d 个任务", len(tasks))
+		case <-time.After(60 * time.Second): // Tick ping based on some interval
+			if len(tasks) > 0 {
+				log.Printf("[Agent] 开始批量拨测 %d 个目标...", len(tasks))
+				
+				results := make(map[int64]map[string]float64)
+				for _, t := range tasks {
+					latencyMs, lossPct, ok := doPing(ctx, t.Target)
+					if ok || lossPct == 100 {
+						results[t.ID] = map[string]float64{
+							"latency": latencyMs,
+							"loss":    lossPct,
+						}
+					}
+				}
+
+				if len(results) > 0 {
+					payload, _ := json.Marshal(results)
+					msg := tunnel.TelemetryMsg{
+						Type:    "ping_results",
+						Payload: payload,
+					}
+					
+					// Open a short-lived stream to push the results
+					go func(msg tunnel.TelemetryMsg) {
+						if session.IsClosed() { return }
+						stream, err := session.OpenStream()
+						if err != nil { return }
+						defer stream.Close()
+						fmt.Fprintln(stream, "STATS")
+						_ = json.NewEncoder(stream).Encode(msg)
+					}(msg)
+				}
 			}
 		}
 	}

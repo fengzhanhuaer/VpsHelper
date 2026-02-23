@@ -120,9 +120,13 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/ns/lottery", h.nsLottery)
 	router.GET("/probe/nodes", h.probeNodes)
 	router.POST("/probe/nodes", h.probeNodes)
+	router.GET("/probe/tasks", h.probeTasks)
+	router.POST("/probe/tasks", h.probeTasks)
 	router.GET("/probe/dashboard", h.probeDashboard)
+	router.GET("/probe/pings", h.probePingDashboard)
 	router.GET("/probe/ws", h.probeDashboardWS)
 	router.GET("/api/probe/discover", h.probeDiscover)
+	router.GET("/api/probe/ping_history", h.probePingHistory)
 	router.POST("/api/:secret", h.tgBotWebhook)
 }
 

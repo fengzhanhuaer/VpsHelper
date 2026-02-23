@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/probe/dashboard">探针状态</a>
+            <a class="ghost" href="/probe/nodes">探针节点</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main style="max-width: 1200px;">
+        <section class="panel panel--wide" style="max-width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <h1>拨测监控大屏</h1>
+                    <p class="muted">实时监控各探针执行 Ping 任务的网络丢包与延迟曲线</p>
+                </div>
+                <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">
+                    <span id="update-timer">就绪</span>
+                </div>
+            </div>
+
+            {{ if eq (len .Nodes) 0 }}
+                <div class="card" style="text-align: center; padding: 40px;">
+                    <p class="muted" style="margin-bottom: 20px;">系统目前没有任何探针节点。</p>
+                </div>
+            {{ else }}
+                <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: center; background: var(--color-bg-alt); padding: 16px; border-radius: var(--radius); border: 1px solid var(--color-border);">
+                    <label style="font-weight: 500;">选择探针节点：</label>
+                    <select id="ping-node-select" onchange="loadPingHistory(this.value)" style="padding: 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); min-width: 200px;">
+                        <option value="">-- 请选择节点 --</option>
+                        {{ range .Nodes }}
+                        <option value="{{ .ID }}">{{ .Name }}</option>
+                        {{ end }}
+                    </select>
+                    <button class="btn btn-sm" onclick="refreshPingHistory()" style="padding: 8px 16px; font-size: 0.9em;">刷新历史曲线</button>
+                </div>
+
+                <div id="ping-charts-container" style="display: flex; flex-direction: column; gap: 24px;">
+                    <div class="muted" style="text-align: center; padding: 40px;">请在上方选择一个探针节点以查看其拨测指标。</div>
+                </div>
+            {{ end }}
+        </section>
+    </main>
+
+    <script>
+        const tasks = {};
+        {{ range .Tasks }}
+            tasks["{{ .ID }}"] = "{{ .Name }} ({{ .Target }})";
+        {{ end }}
+
+        const chartInstances = {};
+        let currentWs = null;
+
+        async function loadPingHistory(nodeId) {
+            if (!nodeId) return;
+            const container = document.getElementById('ping-charts-container');
+            container.innerHTML = '<div class="muted" style="text-align:center;">正在加载历史数据...</div>';
+
+            try {
+                const res = await fetch('/api/probe/ping_history?hours=24&node_id=' + nodeId);
+                const data = await res.json();
+                
+                if (!data.history || Object.keys(data.history).length === 0) {
+                    container.innerHTML = '<div class="muted" style="text-align:center;">当前探针在最近24小时内没有任何历史拨测数据。原因是节点尚未分配任务，或处于离线状态。</div>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                
+                for (const taskId in data.history) {
+                    const points = data.history[taskId];
+                    const taskLabel = tasks[taskId] || ("未知任务 ID:" + taskId);
+                    
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.style.position = 'relative';
+                    card.style.height = '350px';
+
+                    const title = document.createElement('h3');
+                    title.style.marginTop = '0';
+                    title.textContent = `目标: ${taskLabel}`;
+                    card.appendChild(title);
+
+                    const canvas = document.createElement('canvas');
+                    canvas.id = 'chart-' + taskId;
+                    card.appendChild(canvas);
+                    container.appendChild(card);
+
+                    const times = points.map(p => {
+                        const d = new Date(p.created_at * 1000);
+                        return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+                    });
+                    const latencies = points.map(p => p.latency);
+                    const losses = points.map(p => p.loss);
+
+                    const ctx = canvas.getContext('2d');
+                    if (chartInstances[taskId]) {
+                        chartInstances[taskId].destroy();
+                    }
+
+                    chartInstances[taskId] = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: times,
+                            datasets: [
+                                {
+                                    label: '延迟 (ms)',
+                                    data: latencies,
+                                    borderColor: '#17a2b8',
+                                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                                    yAxisID: 'y',
+                                    fill: true,
+                                    borderWidth: 2,
+                                    pointRadius: 0,
+                                    pointHitRadius: 10,
+                                },
+                                {
+                                    label: '丢包率 (%)',
+                                    data: losses,
+                                    borderColor: '#dc3545',
+                                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                                    yAxisID: 'y1',
+                                    fill: true,
+                                    borderWidth: 2,
+                                    pointRadius: 0,
+                                    pointHitRadius: 10,
+                                    stepped: true
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                            scales: {
+                                x: {
+                                    ticks: { maxTicksLimit: 20 }
+                                },
+                                y: {
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'left',
+                                    title: { display: true, text: '延迟 (ms)' },
+                                    min: 0,
+                                    suggestedMax: 200
+                                },
+                                y1: {
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'right',
+                                    title: { display: true, text: '丢包率 (%)' },
+                                    grid: { drawOnChartArea: false },
+                                    min: 0,
+                                    max: 100
+                                },
+                            }
+                        }
+                    });
+                }
+                
+                // Keep listening to newly pushed results over websocket
+                connectWS();
+
+            } catch (e) {
+                container.innerHTML = '<div class="error">加载历史数据失败: ' + e.message + '</div>';
+            }
+        }
+
+        function refreshPingHistory() {
+            const sel = document.getElementById('ping-node-select');
+            loadPingHistory(sel.value);
+        }
+
+        function connectWS() {
+            if (currentWs) {
+                currentWs.close(); // Prevent multiple connections
+            }
+            const wsScheme = window.location.protocol === "https:" ? "wss://" : "ws://";
+            const wsUrl = wsScheme + window.location.host + "/probe/ws";
+            const ws = new WebSocket(wsUrl);
+            currentWs = ws;
+            const statusBox = document.getElementById('update-timer');
+
+            ws.onopen = () => {
+                statusBox.textContent = "🟢 实时数据通道连接成功";
+                statusBox.style.color = "#28a745";
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const nodeId = data.node_id;
+
+                if (data.type === "ping_results") {
+                    const sel = document.getElementById('ping-node-select');
+                    if (sel && parseInt(sel.value) === nodeId) {
+                        const now = new Date();
+                        const timeLabel = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+                        if (data.results) {
+                            for (const taskId in data.results) {
+                                if (chartInstances[taskId]) {
+                                    const chart = chartInstances[taskId];
+                                    const res = data.results[taskId];
+                                    chart.data.labels.push(timeLabel);
+                                    chart.data.datasets[0].data.push(res.latency);
+                                    chart.data.datasets[1].data.push(res.loss);
+                                    
+                                    // keep only latest 200 points to prevent memory leak
+                                    if (chart.data.labels.length > 200) {
+                                        chart.data.labels.shift();
+                                        chart.data.datasets[0].data.shift();
+                                        chart.data.datasets[1].data.shift();
+                                    }
+                                    chart.update('none'); 
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            ws.onclose = () => {
+                statusBox.textContent = "🔴 连接已断开，由于这是次级页面，不会立即重连。";
+                statusBox.style.color = "#dc3545";
+            };
+
+            ws.onerror = (err) => {
+                console.error("WS error:", err);
+            };
+        }
+    </script>
+</body>
+</html>

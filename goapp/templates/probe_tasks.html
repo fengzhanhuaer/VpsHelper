@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .btn-sm { padding: 4px 8px; font-size: 0.8em; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .nodes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 10px;
+            margin-top: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--color-border);
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .node-check-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            padding: 4px 8px;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .node-check-label:hover {
+            border-color: var(--color-primary);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/probe/nodes">探针节点</a>
+            <a class="ghost" href="/probe/tasks" style="color:var(--color-primary); font-weight:bold;">拨测任务</a>
+            <a class="ghost" href="/probe/pings">拨测大屏</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main style="max-width: 1200px;">
+        <section class="panel panel--wide" style="max-width: 100%;">
+            <h1 style="margin: 0; margin-bottom: 8px;">拨测任务</h1>
+            <p class="muted" style="margin-top: 0;">在此配置希望探针Ping的IP。下发后，对应探针会按汇报周期Ping指定对象并上报信息。</p>
+
+            {{ if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom: 16px;">{{ .Message }}</div>
+            {{ end }}
+
+            <!-- Add Task Form -->
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-top:0;">添加新任务 (<a href="https://github.com/fengzhanhuaer/VpsHelper/wiki/PingTask" target="_blank" style="font-size:0.8em; font-weight:normal; text-decoration:none;">什么是拨测任务？</a>)</h3>
+                <form method="post" action="/probe/tasks">
+                    <input type="hidden" name="action" value="add" />
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+                        <div class="field" style="flex: 1; min-width: 200px;">
+                            <label>目标 IP/域名 (必填)</label>
+                            <input type="text" name="target" placeholder="例如：1.1.1.1" required />
+                        </div>
+                        <div class="field" style="flex: 1; min-width: 200px;">
+                            <label>备注名称 (必填)</label>
+                            <input type="text" name="name" placeholder="例如：Cloudflare Public DNS" required />
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <label>指派拨测的探针 (勾选后生效)</label>
+                        <div style="margin-bottom: 8px;">
+                            <button type="button" class="ghost btn-sm" onclick="toggleAll('add-nodes', true)">全选</button>
+                            <button type="button" class="ghost btn-sm" onclick="toggleAll('add-nodes', false)">全不选</button>
+                        </div>
+                        <div class="nodes-grid add-nodes">
+                            {{ range .Nodes }}
+                            <label class="node-check-label">
+                                <input type="checkbox" name="nodes" value="{{ .ID }}" />
+                                {{ .Name }}
+                            </label>
+                            {{ end }}
+                            {{ if eq (len .Nodes) 0 }}
+                            <div class="muted">还没有添加任何探针，去<a href="/probe/nodes">节点页面</a>添加吧。</div>
+                            {{ end }}
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <button class="btn" type="submit">添加任务</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- List Tasks -->
+            <div class="card">
+                <h3 style="margin-top:0;">任务列表</h3>
+                {{ if eq (len .Tasks) 0 }}
+                    <p class="muted">还没有添加过任何任务。</p>
+                {{ else }}
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--color-border); text-align: left;">
+                                    <th style="padding: 8px;">ID</th>
+                                    <th style="padding: 8px;">状态</th>
+                                    <th style="padding: 8px;">备注名称</th>
+                                    <th style="padding: 8px;">目标 IP/域名</th>
+                                    <th style="padding: 8px;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{ range .Tasks }}
+                                <tr style="border-bottom: 1px solid var(--color-border);">
+                                    <td style="padding: 8px;">{{ .ID }}</td>
+                                    <td style="padding: 8px;"><span class="status-badge" style="background-color:#17a2b8;">运行中</span></td>
+                                    <td style="padding: 8px;"><strong>{{ .Name }}</strong></td>
+                                    <td style="padding: 8px;">{{ .Target }}</td>
+                                    <td style="padding: 8px;">
+                                        <div class="actions">
+                                            <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Target}}', '{{.NodeIDs}}')">⚙️ 设置</button>
+                                            <form method="post" action="/probe/tasks" style="display:inline;">
+                                                <input type="hidden" name="id" value="{{ .ID }}" />
+                                                <button class="ghost btn-sm" type="submit" name="action" value="delete" onclick="return confirm('确认删除该拨测任务吗？')" style="color:var(--color-error);">删除</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {{ end }}
+                            </tbody>
+                        </table>
+                    </div>
+                {{ end }}
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal for Settings -->
+    <div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+        <div class="card" style="background:var(--color-bg); width:500px; max-width:90%; padding:24px;">
+            <h3 style="margin-top:0;">修改任务设置</h3>
+            <form method="post" action="/probe/tasks" style="display: flex; flex-direction: column; gap: 12px;">
+                <input type="hidden" name="action" value="edit" />
+                <input type="hidden" name="id" id="edit-id" value="" />
+                
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <div class="field" style="flex: 1; min-width: 200px;">
+                        <label>目标 IP/域名</label>
+                        <input type="text" name="target" id="edit-target" required />
+                    </div>
+                    <div class="field" style="flex: 1; min-width: 200px;">
+                        <label>备注名称</label>
+                        <input type="text" name="name" id="edit-name" required />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label>指派拨测的探针 (勾选后生效)</label>
+                    <div style="margin-bottom: 8px;">
+                        <button type="button" class="ghost btn-sm" onclick="toggleAll('edit-nodes', true)">全选</button>
+                        <button type="button" class="ghost btn-sm" onclick="toggleAll('edit-nodes', false)">全不选</button>
+                    </div>
+                    <div class="nodes-grid edit-nodes">
+                        {{ range .Nodes }}
+                        <label class="node-check-label">
+                            <input type="checkbox" name="nodes" value="{{ .ID }}" id="edit-node-{{ .ID }}" />
+                            {{ .Name }}
+                        </label>
+                        {{ end }}
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                    <button type="button" class="ghost" onclick="closeEditModal()">取消</button>
+                    <button class="btn" type="submit">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function toggleAll(containerClass, state) {
+            const checkboxes = document.querySelectorAll('.' + containerClass + ' input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = state;
+            });
+        }
+
+        function openEditModal(id, name, target, nodeIDs) {
+            document.getElementById('edit-id').value = id;
+            document.getElementById('edit-name').value = name;
+            document.getElementById('edit-target').value = target;
+
+            // Reset all checkboxes first
+            toggleAll('edit-nodes', false);
+
+            // NodeIDs looks like: ",1,4,12,"
+            const idsList = nodeIDs.split(',');
+            idsList.forEach(nodeId => {
+                const trimmed = nodeId.trim();
+                // Find element by id
+                if (trimmed) {
+                    const cb = document.getElementById('edit-node-' + trimmed);
+                    if (cb) {
+                        cb.checked = true;
+                    }
+                }
+            });
+            
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

@@ -379,12 +379,22 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		address = address + "/tunnel/" + secret
 	}
 
+	tasksRaw, _ := store.GetProbeTasksForNode(h.dbConn, node.ID)
+	tasksRes := make([]map[string]interface{}, 0, len(tasksRaw))
+	for _, t := range tasksRaw {
+		tasksRes = append(tasksRes, map[string]interface{}{
+			"id":     t.ID,
+			"target": t.Target,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":         true,
 		"node_id":         node.ID,
 		"name":            node.Name,
 		"address":         address,
 		"report_interval": node.ReportInterval,
+		"ping_tasks":      tasksRes,
 	})
 }
 
@@ -401,8 +411,61 @@ func (h *Handler) probeDashboard(c *gin.Context) {
 		return
 	}
 
+	tasks, _ := store.ListProbeTasks(h.dbConn)
+
 	c.HTML(http.StatusOK, "probe_dashboard.html", gin.H{
-		"Title": "探针状态大屏",
+		"Title": "探针状态",
 		"Nodes": nodes,
+		"Tasks": tasks,
+	})
+}
+
+// probePingDashboard renders the live ping dashboard for probe tasks.
+func (h *Handler) probePingDashboard(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	nodes, err := store.ListProbeNodes(h.dbConn)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "加载节点列表失败")
+		return
+	}
+
+	tasks, _ := store.ListProbeTasks(h.dbConn)
+
+	c.HTML(http.StatusOK, "probe_ping_dashboard.html", gin.H{
+		"Title": "拨测监控大屏",
+		"Nodes": nodes,
+		"Tasks": tasks,
+	})
+}
+
+// probePingHistory returns historical ping latency and loss for a specific node to draw charts.
+func (h *Handler) probePingHistory(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	nodeIDStr := c.Query("node_id")
+	hoursStr := c.Query("hours")
+
+	nodeID, _ := strconv.ParseInt(nodeIDStr, 10, 64)
+	hours, _ := strconv.Atoi(hoursStr)
+
+	if hours <= 0 {
+		hours = 24 // default 24h
+	}
+
+	history, err := store.GetProbePingHistoryForNode(nodeID, hours)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"history": history,
 	})
 }
