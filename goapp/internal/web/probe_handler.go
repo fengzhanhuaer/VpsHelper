@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"vpshelper-go/internal/cloudflare"
+	"vpshelper-go/internal/firewall"
 	"vpshelper-go/internal/security"
 	"vpshelper-go/internal/store"
 )
@@ -132,15 +133,29 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			
 			message = "设置已保存，端口更改需重启服务生效。"
 			msgOK = true
+
+			// 自动协助放行专属通讯端口
+			pPortInt, _ := strconv.Atoi(privatePort)
+			if pPortInt > 0 && pPortInt <= 65535 {
+				fwType := firewall.DetectType()
+				if firewall.IsActive(fwType) {
+					fwOk, fwMsg := firewall.OpenPort(fwType, pPortInt, "tcp", "")
+					if fwOk {
+						message += fmt.Sprintf(" (防火墙已自动放行 %d/tcp)", pPortInt)
+					} else {
+						message += fmt.Sprintf(" (⚠️ 联动防火墙放行失败: %s)", fwMsg)
+					}
+				}
+			}
 			
 			// If a DDNS domain is configured, immediately push the current IP to Cloudflare.
 			if ddnsDomain != "" {
 				// Run a synchronous trigger so the user sees the result immediately.
 				if errMsg := cloudflare.TriggerProbeDDNS(h.dbConn); errMsg != "" {
-					message = "设置已保存，但 DDNS 更新失败：" + errMsg
+					message = message + " | DDNS 更新失败：" + errMsg
 					msgOK = false
 				} else {
-					message = "设置已保存，DDNS 已成功更新到 Cloudflare。端口更改需重启服务生效。"
+					message = message + " | DDNS 已成功触发更新。"
 				}
 			}
 		}
