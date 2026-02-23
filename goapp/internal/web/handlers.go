@@ -2605,13 +2605,28 @@ func (h *Handler) sshSettings(c *gin.Context) {
 			if listenAddrsRaw != "" {
 				parts := regexp.MustCompile(`[,\s]+`).Split(listenAddrsRaw, -1)
 				for _, part := range parts {
-					if part != "" {
-						// Wait! If part is domain, do we want to resolve it inside ssh.ApplySettings,
-						// or just pass it in? Note: ListenAddress must be an IP or resolvable hostname by sshd itself!
-						// We'll trust whatever is input (we could parse dynamically if it's DDNS, but usually
-						// sshd requires IPs to bind. If it's pure limiting, using Firewall `OpenPort` is much better.
-						// Here we just write what's given).
+					if part == "" {
+						continue
+					}
+					
+					base := part
+					suffix := ""
+					if idx := strings.LastIndex(part, "/"); idx != -1 {
+						base = part[:idx]
+						suffix = part[idx:]
+					}
+
+					if net.ParseIP(base) != nil {
+						// For static IP or explicitly provided CIDR
 						addrs = append(addrs, part)
+					} else {
+						ips, err := firewall.ResolveIPWithCIDR(base, suffix)
+						if err == nil && len(ips) > 0 {
+							addrs = append(addrs, ips...)
+						} else {
+							// fallback
+							addrs = append(addrs, part)
+						}
 					}
 				}
 			}
@@ -2913,8 +2928,16 @@ func (h *Handler) firewallPage(c *gin.Context) {
 					continue
 				}
 
-				if net.ParseIP(src) != nil {
-					// Static IP
+				// separate possible CIDR from src
+				baseDomain := src
+				suffix := ""
+				if idx := strings.LastIndex(src, "/"); idx != -1 {
+					baseDomain = src[:idx]
+					suffix = src[idx:]
+				}
+
+				if net.ParseIP(baseDomain) != nil {
+					// Static IP or IP with CIDR
 					ok, msg := firewall.OpenPort(fwType, port, proto, src)
 					if ok {
 						successMsgs = append(successMsgs, msg)
@@ -2923,28 +2946,20 @@ func (h *Handler) firewallPage(c *gin.Context) {
 					}
 				} else {
 					// Treat as Domain
-					ips, err := net.LookupIP(src)
-					initialIP := ""
-					if err == nil && len(ips) > 0 {
-						for _, ip := range ips {
-							if ip.To4() != nil {
-								initialIP = ip.String()
-								break
-							}
+					initialIPs, err := firewall.ResolveIPWithCIDR(baseDomain, suffix)
+					if err == nil && len(initialIPs) > 0 {
+						// Open current IPs directly
+						for _, initialIP := range initialIPs {
+							firewall.OpenPort(fwType, port, proto, initialIP)
 						}
-						if initialIP == "" {
-							initialIP = ips[0].String()
-						}
-						// Open current IP directly
-						firewall.OpenPort(fwType, port, proto, initialIP)
 					}
 					// Add to Watcher Loop
-					if err := firewall.AddDomainRule(h.dbConn, src, port, proto, initialIP); err != nil {
+					if err := firewall.AddDomainRule(h.dbConn, baseDomain, suffix, port, proto, initialIPs); err != nil {
 						errorMsgs = append(errorMsgs, src+" 保存动态域名观察队列失败: "+err.Error())
 					} else {
 						msg := fmt.Sprintf("域名 %s 已加入防护观察。", src)
-						if initialIP != "" {
-							msg += " (当前 IP: " + initialIP + ")"
+						if len(initialIPs) > 0 {
+							msg += " (当前 IP: " + strings.Join(initialIPs, ", ") + ")"
 						} else {
 							msg += " (当前无法解析，稍后后台将自动重试)"
 						}

@@ -178,26 +178,29 @@ func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPas
 
 	content := string(b)
 	
-	// Strip all existing ListenAddress lines
+	// Strip all existing ListenAddress and AllowUsers lines
 	lines := strings.Split(content, "\n")
 	var newLines []string
 	
-	// Prepend new ListenAddresses at the top to avoid falling inside a "Match" block at the EOF
-	if len(listenAddrs) > 0 {
-		for _, addr := range listenAddrs {
-			newLines = append(newLines, fmt.Sprintf("ListenAddress %s", addr))
-		}
-	} else {
-		newLines = append(newLines, "ListenAddress 0.0.0.0", "ListenAddress ::")
-	}
-
 	for _, ln := range lines {
 		trim := strings.TrimSpace(ln)
 		if strings.HasPrefix(strings.ToLower(trim), "listenaddress") {
 			continue
 		}
+		if strings.HasPrefix(strings.ToLower(trim), "allowusers") {
+			continue
+		}
 		newLines = append(newLines, ln)
 	}
+
+	if len(listenAddrs) > 0 {
+		var userPatterns []string
+		for _, addr := range listenAddrs {
+			userPatterns = append(userPatterns, "*@"+addr)
+		}
+		newLines = append(newLines, fmt.Sprintf("AllowUsers %s", strings.Join(userPatterns, " ")))
+	}
+	
 	content = strings.Join(newLines, "\n")
 
 	content = setConfigOption(content, "Port", strconv.Itoa(port))

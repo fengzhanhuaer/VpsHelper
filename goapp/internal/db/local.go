@@ -106,6 +106,12 @@ func MigrateLocal(db *sql.DB) error {
             online    INTEGER NOT NULL DEFAULT 0,
             last_ping INTEGER NOT NULL DEFAULT 0
         )`,
+
+		// ── runtime settings cache (NOT backed up to D1) ─────────────────────
+		`CREATE TABLE IF NOT EXISTS local_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

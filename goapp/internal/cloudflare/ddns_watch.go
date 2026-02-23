@@ -85,8 +85,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 		"cf_api_token", "cf_account_id", "cf_zone_id", "cf_zone_domain",
 		"cf_allow_ips", "cf_policy_id",
 		"cf_block_ips", "cf_block_uris",
-		"cf_ddns_allow_key", "cf_ddns_block_key",
-		"probe_ddns_domain", "probe_ddns_last_ip",
+		"probe_ddns_domain",
 	}
 	settings, err := store.GetSettings(dbConn, keys)
 	if err != nil {
@@ -107,8 +106,8 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 	blockIPs := strings.TrimSpace(settings["cf_block_ips"])
 	blockURIs := strings.TrimSpace(settings["cf_block_uris"])
 
-	lastAllowKey := settings["cf_ddns_allow_key"]
-	lastBlockKey := settings["cf_ddns_block_key"]
+	lastAllowKey := store.GetLocalSetting("cf_ddns_allow_key")
+	lastBlockKey := store.GetLocalSetting("cf_ddns_block_key")
 
 	client := NewAPIClient(cfToken, accountID, zoneID)
 
@@ -123,7 +122,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 				if policyID == "" && newPolicyID != "" {
 					_ = store.SetSetting(dbConn, "cf_policy_id", newPolicyID)
 				}
-				_ = store.SetSetting(dbConn, "cf_ddns_allow_key", currentAllowKey)
+				_ = store.SetLocalSetting("cf_ddns_allow_key", currentAllowKey)
 				log.Printf("[ddns-watch] whitelist IP change detected, pushed update")
 			}
 		}
@@ -153,7 +152,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 				if err != nil {
 					log.Printf("[ddns-watch] SyncBlockList failed: %v", err)
 				} else {
-					_ = store.SetSetting(dbConn, "cf_ddns_block_key", currentBlockKey)
+					_ = store.SetLocalSetting("cf_ddns_block_key", currentBlockKey)
 					log.Printf("[ddns-watch] blocklist IP change detected, pushed update")
 				}
 			}
@@ -174,14 +173,14 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 		if zoneID != "" {
 			ips := GetPublicIPs()
 			currentIPKey := ips.IPv4 + "|" + ips.IPv6
-			lastIPKey := settings["probe_ddns_last_ip"]
+			lastIPKey := store.GetLocalSetting("probe_ddns_last_ip")
 
 			if currentIPKey != "|" && currentIPKey != lastIPKey {
 				err := client.SyncDDNSRecord(probeDDNSDomain, ips)
 				if err != nil {
 					log.Printf("[ddns-watch] probe DDNS sync failed: %v", err)
 				} else {
-					_ = store.SetSetting(dbConn, "probe_ddns_last_ip", currentIPKey)
+					_ = store.SetLocalSetting("probe_ddns_last_ip", currentIPKey)
 					log.Printf("[ddns-watch] probe DDNS updated for %s: v4=%s, v6=%s", probeDDNSDomain, ips.IPv4, ips.IPv6)
 				}
 			}

@@ -42,9 +42,9 @@
                 </div>
 
                 <div class="field">
-                    <label for="ssh_listen_address">监听接口与允许登录的IP界限 (白名单)</label>
-                    <textarea id="ssh_listen_address" name="ssh_listen_address" rows="2" placeholder="默认留空表示全网皆可访问（0.0.0.0 和 ::）&#10;您可在此输入特定允许的广域网IP/域名（多条空格逗号隔开），后台将自动解析限制。">{{ .ListenAddress }}</textarea>
-                    <div class="muted">如果你不想让此机器 SSH 裸露于公网被随意爆破，只输入你家的独立IP或DDNS地址是最高级防护（利用 sshd ListenAddress 结合动态域名追踪）。一旦写入系统立即切断其它网络握手。</div>
+                    <label for="ssh_listen_address">允许连接的客户端 IP / 域名 (白名单)</label>
+                    <textarea id="ssh_listen_address" name="ssh_listen_address" rows="2" placeholder="默认留空表示全网皆可访问&#10;您可在此输入特定允许的公网IP/域名（多条空格/逗号隔开），后台将自动运用CIDR限制。">{{ .ListenAddress }}</textarea>
+                    <div class="muted">利用 sshd 的 AllowUsers 策略，一经写入将仅放行这些来源的连接包。支持直接写入 IPv6 的 /56 等动态掩码后缀配置。</div>
                 </div>
 
                 <div class="field">
