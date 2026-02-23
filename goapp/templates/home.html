@@ -10,9 +10,9 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="btn" href="/system/update">程序更新</a>
-            <a class="btn" href="/change_password">修改密码</a>
-            <a class="btn" href="/logout">退出登录</a>
+            <a class="ghost" href="/system/update">程序更新</a>
+            <a class="ghost" href="/change_password">修改密码</a>
+            <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
     <main>
@@ -20,15 +20,15 @@
             <h1>欢迎，{{ .Username }}</h1>
             <p class="muted">VpsHelper - 选择您需要的功能模块</p>
             <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;">
-                <a class="btn" href="/tg_helper" style="display:block; text-align:center;">🤖 Tg助手</a>
-                <a class="btn" href="/settings/database" style="display:block; text-align:center;">💾 数据库管理</a>
-                <a class="btn" href="/settings/ssh" style="display:block; text-align:center;">🔐 SSH设置</a>
-                <a class="btn" href="/server/status" style="display:block; text-align:center;">🖥 服务器状态</a>
-                <a class="btn" href="/shell" style="display:block; text-align:center;">⌨️ Shell交互</a>
-                <a class="btn" href="/firewall" style="display:block; text-align:center;">🛡 防火墙</a>
-                <a class="btn" href="/cloudflare" style="display:block; text-align:center;">☁️ Cloudflare 设置</a>
-                <a class="btn" href="/probe/nodes" style="display:block; text-align:center;">🛰 探针管理</a>
-                <a class="btn" href="/probe/dashboard" style="display:block; text-align:center; background: #2b8a3e;">📊 探针状态大屏</a>
+                <a class="ghost" href="/tg_helper" style="display:block; text-align:center;">🤖 Tg助手</a>
+                <a class="ghost" href="/settings/database" style="display:block; text-align:center;">💾 数据库管理</a>
+                <a class="ghost" href="/settings/ssh" style="display:block; text-align:center;">🔐 SSH设置</a>
+                <a class="ghost" href="/server/status" style="display:block; text-align:center;">🖥 服务器状态</a>
+                <a class="ghost" href="/shell" style="display:block; text-align:center;">⌨️ Shell交互</a>
+                <a class="ghost" href="/firewall" style="display:block; text-align:center;">🛡 防火墙</a>
+                <a class="ghost" href="/cloudflare" style="display:block; text-align:center;">☁️ Cloudflare</a>
+                <a class="ghost" href="/probe/nodes" style="display:block; text-align:center;">🛰 探针管理</a>
+                <a class="btn" href="/probe/dashboard" style="display:block; text-align:center; background: #2b8a3e; border: 1px solid #2b8a3e;">📊 探针大屏</a>
             </div>
         </section>
     </main>
