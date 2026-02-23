@@ -59,26 +59,25 @@ func TriggerProbeDDNS(dbConn *sql.DB) string {
 	zoneID := strings.TrimSpace(settings["cf_zone_id"])
 	zoneDomain := strings.TrimSpace(settings["cf_zone_domain"])
 
-	client := NewAPIClient(cfToken, accountID, zoneID)
+	tempClient := NewAPIClient(cfToken, accountID, "")
+	ddnsZoneID := ""
 
-	if zoneID == "" && zoneDomain != "" {
-		if id, err := client.LookupZoneID(zoneDomain); err == nil && id != "" {
-			zoneID = id
-			_ = store.SetSetting(dbConn, "cf_zone_id", zoneID)
-			client = NewAPIClient(cfToken, accountID, zoneID)
+	// 优先尝试从 DDNS 域名本身获取对应的 Zone ID (避免使用了全局的其他域名 Zone)
+	if id, err := tempClient.LookupZoneID(probeDDNSDomain); err == nil && id != "" {
+		ddnsZoneID = id
+	} else if zoneID != "" {
+		ddnsZoneID = zoneID
+	} else if zoneDomain != "" {
+		if id, err := tempClient.LookupZoneID(zoneDomain); err == nil && id != "" {
+			ddnsZoneID = id
 		}
 	}
-	if zoneID == "" {
-		// Try to auto-detect zone from the ddns domain itself
-		if id, err := client.LookupZoneID(probeDDNSDomain); err == nil && id != "" {
-			zoneID = id
-			_ = store.SetSetting(dbConn, "cf_zone_id", zoneID)
-			client = NewAPIClient(cfToken, accountID, zoneID)
-		}
+
+	if ddnsZoneID == "" {
+		return "无法确定 DDNS 域名对应的 Cloudflare Zone ID，请检查 API Token 权限或域名归属。"
 	}
-	if zoneID == "" {
-		return "无法确定 Cloudflare Zone ID，请在 Cloudflare 设置中填写区域域名或 Zone ID。"
-	}
+
+	client := NewAPIClient(cfToken, accountID, ddnsZoneID)
 
 	ips := GetPublicIPs()
 	if ips.IPv4 == "" && ips.IPv6 == "" {
@@ -227,23 +226,31 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 	// ── 3. Probe DDNS (Auto Update A/AAAA) ─────────────────
 	probeDDNSDomain := strings.TrimSpace(settings["probe_ddns_domain"])
 	if probeDDNSDomain != "" && cfToken != "" {
-		if zoneID == "" && zoneDomain != "" {
-			if id, err := client.LookupZoneID(zoneDomain); err == nil && id != "" {
-				zoneID = id
-				_ = store.SetSetting(dbConn, "cf_zone_id", zoneID)
-				client = NewAPIClient(cfToken, accountID, zoneID)
+		ddnsZoneID := ""
+		tempClient := NewAPIClient(cfToken, accountID, "")
+
+		// 优先取 DDNS 域名自己的 Zone ID 以避免跨 Zone 提交被追加后缀
+		if id, err := tempClient.LookupZoneID(probeDDNSDomain); err == nil && id != "" {
+			ddnsZoneID = id
+		} else if zoneID != "" {
+			ddnsZoneID = zoneID
+		} else if zoneDomain != "" {
+			if id, err := tempClient.LookupZoneID(zoneDomain); err == nil && id != "" {
+				ddnsZoneID = id
 			}
 		}
 
-		if zoneID != "" {
+		if ddnsZoneID != "" {
+			ddnsClient := NewAPIClient(cfToken, accountID, ddnsZoneID)
 			ips := GetPublicIPs()
 			currentIPKey := ips.IPv4 + "|" + ips.IPv6
 			lastIPKey := store.GetLocalSetting("probe_ddns_last_ip")
 
 			if currentIPKey != "|" && currentIPKey != lastIPKey {
-				err := client.SyncDDNSRecord(probeDDNSDomain, ips)
+				err := ddnsClient.SyncDDNSRecord(probeDDNSDomain, ips)
 				if err != nil {
 					log.Printf("[ddns-watch] probe DDNS sync failed: %v", err)
+
 				} else {
 					_ = store.SetLocalSetting("probe_ddns_last_ip", currentIPKey)
 					log.Printf("[ddns-watch] probe DDNS updated for %s: v4=%s, v6=%s", probeDDNSDomain, ips.IPv4, ips.IPv6)
