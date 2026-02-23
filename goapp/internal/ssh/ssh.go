@@ -181,6 +181,16 @@ func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPas
 	// Strip all existing ListenAddress lines
 	lines := strings.Split(content, "\n")
 	var newLines []string
+	
+	// Prepend new ListenAddresses at the top to avoid falling inside a "Match" block at the EOF
+	if len(listenAddrs) > 0 {
+		for _, addr := range listenAddrs {
+			newLines = append(newLines, fmt.Sprintf("ListenAddress %s", addr))
+		}
+	} else {
+		newLines = append(newLines, "ListenAddress 0.0.0.0", "ListenAddress ::")
+	}
+
 	for _, ln := range lines {
 		trim := strings.TrimSpace(ln)
 		if strings.HasPrefix(strings.ToLower(trim), "listenaddress") {
@@ -191,16 +201,6 @@ func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPas
 	content = strings.Join(newLines, "\n")
 
 	content = setConfigOption(content, "Port", strconv.Itoa(port))
-	if len(listenAddrs) > 0 {
-		for _, addr := range listenAddrs {
-			content += fmt.Sprintf("\nListenAddress %s", addr)
-		}
-		content += "\n"
-	} else {
-		// Open to all if empty
-		content += "\nListenAddress 0.0.0.0\nListenAddress ::\n"
-	}
-
 	content = setConfigOption(content, "PasswordAuthentication", yesNo(allowPassword))
 	content = setConfigOption(content, "PubkeyAuthentication", yesNo(allowKey))
 
@@ -214,14 +214,27 @@ func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPas
 		}
 	}
 
-	// Validate and restart best-effort.
-	runNoFail(ctx, "sshd", "-t", "-f", configPath)
-	runNoFail(ctx, "/usr/sbin/sshd", "-t", "-f", configPath)
-
-	if ok, _ := restartSSH(ctx); ok {
-		return true, "SSH 设置已应用到系统。"
+	// Validate prior to restarting
+	var validateOut string
+	if runtime.GOOS != "windows" {
+		ok, out1 := run(ctx, "sshd", "-t", "-f", configPath)
+		if !ok {
+			_, out2 := run(ctx, "/usr/sbin/sshd", "-t", "-f", configPath)
+			validateOut = out1 + " " + out2
+		} else {
+			validateOut = "ok"
+		}
 	}
-	return false, "SSH 配置已修改，但重启 ssh 服务失败（请手动重启）。"
+
+	if validateOut != "ok" && validateOut != "" {
+		return false, "sshd_config 语法检查失败，请检查填写内容（如监听 IP 格式），错误：" + validateOut
+	}
+
+	if ok, rstMsg := restartSSH(ctx); ok {
+		return true, "SSH 设置已应用到系统并重启成功。"
+	} else {
+		return false, "SSH 配置已修改，但重启 ssh 服务失败：" + rstMsg
+	}
 }
 
 func yesNo(v bool) string {
@@ -299,20 +312,15 @@ func restartSSH(ctx context.Context) (bool, string) {
 		{"/etc/init.d/sshd", "restart"},
 		{"/etc/init.d/ssh", "restart"},
 	}
-	last := ""
+	var errs []string
 	for _, c := range cmds {
 		ok, msg := run(ctx, c[0], c[1:]...)
 		if ok {
 			return true, "ok"
 		}
-		if msg != "" {
-			last = msg
-		}
+		errs = append(errs, fmt.Sprintf("%s: %s", c[0], msg))
 	}
-	if last == "" {
-		last = "未找到可用服务管理命令"
-	}
-	return false, last
+	return false, strings.Join(errs, " | ")
 }
 
 func run(ctx context.Context, name string, args ...string) (bool, string) {
@@ -322,10 +330,13 @@ func run(ctx context.Context, name string, args ...string) (bool, string) {
 	cmd.Stderr = &out
 	err := cmd.Run()
 	text := strings.TrimSpace(out.String())
-	if err == nil {
-		return true, text
+	if err != nil {
+		if text == "" {
+			text = err.Error()
+		}
+		return false, text
 	}
-	return false, text
+	return true, text
 }
 
 func runNoFail(ctx context.Context, name string, args ...string) {
