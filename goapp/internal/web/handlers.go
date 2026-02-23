@@ -2617,7 +2617,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 				msgOK = true
 
 				fwType := firewall.DetectType()
-				if fwType != "未知" && fwType != "" && listenAddrsRaw != "" {
+				if fwType != "未知" && fwType != "" && listenAddrsRaw != "" && firewall.IsActive(fwType) {
 					fwMsgs := []string{}
 					parts := regexp.MustCompile(`[,\s]+`).Split(listenAddrsRaw, -1)
 					for _, part := range parts {

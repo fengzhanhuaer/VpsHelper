@@ -66,6 +66,32 @@ func DetectType() string {
     return "未知"
 }
 
+// IsActive reports whether the given firewall type is currently running/enabled.
+func IsActive(firewallType string) bool {
+    switch firewallType {
+    case "UFW":
+        ok, out := run("ufw", "status")
+        if !ok {
+            return false
+        }
+        for _, l := range strings.Split(out, "\n") {
+            l = strings.TrimSpace(l)
+            if l != "" {
+                return strings.Contains(strings.ToLower(l), "active")
+            }
+        }
+        return false
+    case "firewalld":
+        ok, state := run("firewall-cmd", "--state")
+        return ok && strings.TrimSpace(state) == "running"
+    case "iptables":
+        // iptables is stateless; if the tool exists it is considered active.
+        return which("iptables")
+    }
+    return false
+}
+
+
 func which(name string) bool {
     _, err := exec.LookPath(name)
     return err == nil
