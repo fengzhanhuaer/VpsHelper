@@ -66,6 +66,24 @@
             </div>
 
             <div class="muted" id="last-updated" style="margin-top: 10px;">最后刷新：--</div>
+
+            <h3 style="margin-top: 32px; font-size: 16px;">Top 10 占用进程</h3>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">PID</th>
+                            <th style="width: 100px;">User</th>
+                            <th style="width: 80px;">CPU %</th>
+                            <th style="width: 80px;">RAM %</th>
+                            <th>Command</th>
+                        </tr>
+                    </thead>
+                    <tbody id="process-list">
+                        <tr><td colspan="5" class="muted" style="text-align: center;">正在加载...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </section>
     </main>
 
@@ -96,6 +114,23 @@
 
             document.getElementById("disk-usage").textContent = (data.disk.usage_percent || 0) + "%";
             document.getElementById("disk-detail").textContent = "已用 " + fmtBytes(data.disk.used) + " / 总计 " + fmtBytes(data.disk.total);
+
+            // 更新进程列表
+            if (data.processes && data.processes.length > 0) {
+                let html = "";
+                data.processes.forEach(p => {
+                    html += `<tr>
+                        <td>${p.pid}</td>
+                        <td>${p.user}</td>
+                        <td>${p.cpu}%</td>
+                        <td>${p.mem}%</td>
+                        <td style="word-break: break-all;">${p.command}</td>
+                    </tr>`;
+                });
+                document.getElementById("process-list").innerHTML = html;
+            } else {
+                document.getElementById("process-list").innerHTML = '<tr><td colspan="5" class="muted" style="text-align: center;">暂无进程数据或当前系统不支持</td></tr>';
+            }
 
             document.getElementById("last-updated").textContent = "最后刷新：" + new Date().toLocaleString("zh-CN");
         }

@@ -1,15 +1,16 @@
 ﻿package status
 
 import (
-    "bufio"
-    "fmt"
-    "os"
-    "path/filepath"
-    "runtime"
-    "strconv"
-    "strings"
-    "sync"
-    "time"
+	"bufio"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 type memStats struct {
@@ -36,11 +37,20 @@ type timeStats struct {
     Uptime   string `json:"uptime"`
 }
 
+type ProcessStats struct {
+    PID     string `json:"pid"`
+    User    string `json:"user"`
+    CPU     string `json:"cpu"`
+    Mem     string `json:"mem"`
+    Command string `json:"command"`
+}
+
 type Data struct {
-    Time timeStats `json:"time"`
-    RAM  memStats  `json:"ram"`
-    CPU  cpuStats  `json:"cpu"`
-    Disk diskStats `json:"disk"`
+    Time      timeStats      `json:"time"`
+    RAM       memStats       `json:"ram"`
+    CPU       cpuStats       `json:"cpu"`
+    Disk      diskStats      `json:"disk"`
+    Processes []ProcessStats `json:"processes"`
 }
 
 var (
@@ -67,10 +77,11 @@ func Collect() Data {
     }
 
     return Data{
-        Time: timeStats{Timezone: tz, Now: now, Uptime: formatDuration(uptime)},
-        RAM:  readMem(),
-        CPU:  cpuStats{UsagePercent: readCPUPercent()},
-        Disk: readDisk(),
+        Time:      timeStats{Timezone: tz, Now: now, Uptime: formatDuration(uptime)},
+        RAM:       readMem(),
+        CPU:       cpuStats{UsagePercent: readCPUPercent()},
+        Disk:      readDisk(),
+        Processes: readTopProcesses(),
     }
 }
 
@@ -258,4 +269,43 @@ func readDisk() diskStats {
     percent = float64(int(percent*100)) / 100
 
     return diskStats{Total: total, Used: used, Free: free, UsagePercent: percent}
+}
+
+func readTopProcesses() []ProcessStats {
+    if runtime.GOOS == "windows" {
+        return nil
+    }
+
+    cmd := exec.Command("ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%cpu")
+    out, err := cmd.Output()
+    if err != nil {
+        return nil
+    }
+
+    var procs []ProcessStats
+    lines := strings.Split(string(out), "\n")
+    
+    count := 0
+    for i := 1; i < len(lines); i++ {
+        line := strings.TrimSpace(lines[i])
+        if line == "" {
+            continue
+        }
+        fields := strings.Fields(line)
+        if len(fields) >= 5 {
+            procs = append(procs, ProcessStats{
+                PID:     fields[0],
+                User:    fields[1],
+                CPU:     fields[2],
+                Mem:     fields[3],
+                Command: strings.Join(fields[4:], " "),
+            })
+            count++
+            // 只取前 10 个进程
+            if count >= 10 {
+                break
+            }
+        }
+    }
+    return procs
 }
