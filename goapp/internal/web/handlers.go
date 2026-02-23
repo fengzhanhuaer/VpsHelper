@@ -2981,6 +2981,37 @@ func (h *Handler) firewallPage(c *gin.Context) {
 		}
 	}
 
+	// Handle domain rule deletion outside the switch so fresh data is read after any add
+	if c.Request.Method == http.MethodPost && strings.TrimSpace(c.PostForm("action")) == "delete_domain_rule" {
+		idxText := strings.TrimSpace(c.PostForm("rule_idx"))
+		idx, err := strconv.Atoi(idxText)
+		if err == nil {
+			settings, _ := store.GetSettings(h.dbConn, []string{"fw_domain_rules"})
+			var rules []firewall.DomainRule
+			if settings["fw_domain_rules"] != "" {
+				_ = json.Unmarshal([]byte(settings["fw_domain_rules"]), &rules)
+			}
+			if idx >= 0 && idx < len(rules) {
+				rule := rules[idx]
+				cacheKey := fmt.Sprintf("fw_cache_%s_%s_%d_%s", rule.Domain, rule.Suffix, rule.Port, rule.Protocol)
+				lastIPsStr := store.GetLocalSetting(cacheKey)
+				if lastIPsStr != "" {
+					var oldIPs []string
+					_ = json.Unmarshal([]byte(lastIPsStr), &oldIPs)
+					for _, ip := range oldIPs {
+						firewall.DeletePort(fwType, rule.Port, rule.Protocol, ip)
+					}
+					_ = store.SetLocalSetting(cacheKey, "")
+				}
+				rules = append(rules[:idx], rules[idx+1:]...)
+				newJSON, _ := json.Marshal(rules)
+				_ = store.SetSetting(h.dbConn, "fw_domain_rules", string(newJSON))
+				message = fmt.Sprintf("已删除规则 %s%s、端口 %d/%s", rule.Domain, rule.Suffix, rule.Port, rule.Protocol)
+				msgOK = true
+			}
+		}
+	}
+
 	openPorts, fwStatus, note := firewall.CollectOpenPortsAndStatus(fwType)
 	bindings := firewall.CollectListeningBindings()
 	procMap := firewall.CollectPortProcesses()
@@ -3007,6 +3038,32 @@ func (h *Handler) firewallPage(c *gin.Context) {
 		})
 	}
 
+	// Load domain rules for display
+	dbRulesSettings, _ := store.GetSettings(h.dbConn, []string{"fw_domain_rules"})
+	var domainRules []map[string]any
+	if dbRulesSettings["fw_domain_rules"] != "" {
+		var rules []firewall.DomainRule
+		if err := json.Unmarshal([]byte(dbRulesSettings["fw_domain_rules"]), &rules); err == nil {
+			for i, r := range rules {
+				cacheKey := fmt.Sprintf("fw_cache_%s_%s_%d_%s", r.Domain, r.Suffix, r.Port, r.Protocol)
+				cachedIPs := ""
+				if raw := store.GetLocalSetting(cacheKey); raw != "" {
+					var ips []string
+					if json.Unmarshal([]byte(raw), &ips) == nil {
+						cachedIPs = strings.Join(ips, ", ")
+					}
+				}
+				domainRules = append(domainRules, map[string]any{
+					"idx":      i,
+					"domain":   r.Domain + r.Suffix,
+					"port":     r.Port,
+					"protocol": r.Protocol,
+					"cur_ips":  cachedIPs,
+				})
+			}
+		}
+	}
+
 	c.HTML(http.StatusOK, "firewall.html", gin.H{
 		"Title":          "防火墙",
 		"Message":        message,
@@ -3016,6 +3073,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 		"Note":           note,
 		"PortRows":       portRows,
 		"ListeningRows":  listeningRows,
+		"DomainRules":    domainRules,
 	})
 }
 

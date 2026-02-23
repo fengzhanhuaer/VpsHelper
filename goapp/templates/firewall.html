@@ -48,7 +48,43 @@
                 </div>
             </form>
 
-            <h3 style="margin: 0 0 8px; font-size: 16px;">防火墙已开放端口</h3>
+            <h3 style="margin: 0 0 8px; font-size: 16px;">动态 IP 白名单规则（来源跟踪）</h3>
+            <p class="muted" style="margin-bottom: 10px; font-size:12px;">以下规则由 SSH 白名单或防火墙手动添加，后台每5分钟自动检测 IP 变化并同步更新防火墙放行规则。</p>
+
+            {{ if .DomainRules }}
+            <table>
+                <thead>
+                    <tr>
+                        <th>来源域名/IP</th>
+                        <th style="width:80px;">端口</th>
+                        <th style="width:60px;">协议</th>
+                        <th>当前解析 IP</th>
+                        <th style="width:70px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range .DomainRules }}
+                    <tr>
+                        <td>{{ .domain }}</td>
+                        <td>{{ .port }}</td>
+                        <td>{{ .protocol }}</td>
+                        <td>{{ if .cur_ips }}{{ .cur_ips }}{{ else }}<span class="muted">解析中...</span>{{ end }}</td>
+                        <td>
+                            <form method="post" action="/firewall" style="display:inline;">
+                                <input type="hidden" name="action" value="delete_domain_rule" />
+                                <input type="hidden" name="rule_idx" value="{{ .idx }}" />
+                                <button class="ghost" type="submit" onclick="return confirm('确认删除该规则并撤销防火墙放行？')" style="padding:4px 8px; font-size:12px; color:var(--color-error, #c00);">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+            {{ else }}
+            <p class="muted" style="margin-top:6px; margin-bottom:16px;">暂无动态 IP 白名单规则。在上方填入来源 IP 或域名并点击"开放端口"即可添加。</p>
+            {{ end }}
+
+            <h3 style="margin: 16px 0 8px; font-size: 16px;">防火墙已开放端口</h3>
 
             {{ if .PortRows }}
             <table>
