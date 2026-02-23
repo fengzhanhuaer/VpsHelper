@@ -23,6 +23,10 @@ var watchTicker *time.Ticker
 
 // helper to resolve domain to IPs and append matched CIDR suffix
 func ResolveIPWithCIDR(domain, suffix string) ([]string, error) {
+	if net.ParseIP(domain) != nil {
+		return []string{domain + suffix}, nil
+	}
+
 	ips, err := net.LookupIP(domain)
 	if err != nil || len(ips) == 0 {
 		return nil, err

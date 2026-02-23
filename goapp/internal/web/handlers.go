@@ -2628,20 +2628,16 @@ func (h *Handler) sshSettings(c *gin.Context) {
 							suffix = part[idx:]
 						}
 
-						if net.ParseIP(base) != nil {
-							fwOk, fwMsg := firewall.OpenPort(fwType, p, "tcp", part)
-							if fwOk {
-								fwMsgs = append(fwMsgs, fwMsg)
-							}
-						} else {
-							ips, err := firewall.ResolveIPWithCIDR(base, suffix)
-							if err == nil && len(ips) > 0 {
-								for _, ip := range ips {
-									firewall.OpenPort(fwType, p, "tcp", ip)
+						ips, err := firewall.ResolveIPWithCIDR(base, suffix)
+						if err == nil && len(ips) > 0 {
+							for _, ip := range ips {
+								fwOk, fwMsg := firewall.OpenPort(fwType, p, "tcp", ip)
+								if fwOk {
+									fwMsgs = append(fwMsgs, fwMsg)
 								}
 							}
 							if err := firewall.AddDomainRule(h.dbConn, base, suffix, p, "tcp", ips); err == nil {
-								fwMsgs = append(fwMsgs, fmt.Sprintf("域名 %s 的防火墙联动放行均已提交", part))
+								fwMsgs = append(fwMsgs, fmt.Sprintf("规则 %s 的防火墙联动放行均已提交并录入", part))
 							}
 						}
 					}
