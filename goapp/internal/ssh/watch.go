@@ -82,23 +82,16 @@ func runListenWatchTick(ctx context.Context, dbConn *sql.DB) {
 		return
 	}
 
-	expectedAllowUsers := ""
-	if len(addrs) > 0 {
-		var userPatterns []string
-		for _, addr := range addrs {
-			userPatterns = append(userPatterns, "*@"+addr)
-		}
-		expectedAllowUsers = "AllowUsers " + strings.Join(userPatterns, " ")
-	}
+	expectedHash := strings.Join(addrs, ",")
 
-	if lastAllowUsers != expectedAllowUsers {
-		log.Printf("[ssh-watch] SSH domain IP changed (or newly set), updating sshd_config AllowUsers...")
+	if lastAllowUsers != expectedHash {
+		log.Printf("[ssh-watch] SSH domain IP changed (or newly set), updating sshd_config AllowList...")
 		sysCfg := ReadSystemConfig()
 		ok, msg := ApplySettings(ctx, sysCfg.Port, addrs, sysCfg.AllowPassword, sysCfg.AllowPubkey, pubKey)
 		if !ok {
 			log.Printf("[ssh-watch] Failed to apply SSH settings: %s", msg)
 		} else {
-			_ = store.SetLocalSetting("ssh_last_allowusers", expectedAllowUsers)
+			_ = store.SetLocalSetting("ssh_last_allowusers", expectedHash)
 			log.Printf("[ssh-watch] SSH config updated successfully.")
 		}
 	}

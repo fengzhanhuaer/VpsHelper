@@ -178,9 +178,10 @@ func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPas
 
 	content := string(b)
 	
-	// Strip all existing ListenAddress and AllowUsers lines
+	// Strip all existing ListenAddress, AllowUsers lines, and previous VPSHELPER blocks
 	lines := strings.Split(content, "\n")
 	var newLines []string
+	inVpsHelperBlock := false
 	
 	for _, ln := range lines {
 		trim := strings.TrimSpace(ln)
@@ -190,22 +191,48 @@ func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPas
 		if strings.HasPrefix(strings.ToLower(trim), "allowusers") {
 			continue
 		}
+		if trim == "# --- VPSHELPER SSH ALLOWLIST START ---" {
+			inVpsHelperBlock = true
+			continue
+		}
+		if trim == "# --- VPSHELPER SSH ALLOWLIST END ---" {
+			inVpsHelperBlock = false
+			continue
+		}
+		if inVpsHelperBlock {
+			continue
+		}
 		newLines = append(newLines, ln)
 	}
 
-	if len(listenAddrs) > 0 {
-		var userPatterns []string
-		for _, addr := range listenAddrs {
-			userPatterns = append(userPatterns, "*@"+addr)
-		}
-		newLines = append(newLines, fmt.Sprintf("AllowUsers %s", strings.Join(userPatterns, " ")))
-	}
-	
 	content = strings.Join(newLines, "\n")
 
 	content = setConfigOption(content, "Port", strconv.Itoa(port))
 	content = setConfigOption(content, "PasswordAuthentication", yesNo(allowPassword))
 	content = setConfigOption(content, "PubkeyAuthentication", yesNo(allowKey))
+
+	if len(listenAddrs) > 0 {
+		var negations []string
+		for _, addr := range listenAddrs {
+			if strings.Contains(addr, "/") {
+				_, ipnet, err := net.ParseCIDR(addr)
+				if err == nil {
+					negations = append(negations, "!"+ipnet.String())
+				} else {
+					negations = append(negations, "!"+addr)
+				}
+			} else {
+				negations = append(negations, "!"+addr)
+			}
+		}
+		negations = append(negations, "*")
+        
+		content += "\n# --- VPSHELPER SSH ALLOWLIST START ---\n"
+		content += fmt.Sprintf("Match Address %s\n", strings.Join(negations, ","))
+		content += "    DenyUsers *\n"
+		content += "Match All\n"
+		content += "# --- VPSHELPER SSH ALLOWLIST END ---\n"
+	}
 
 	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
 		return false, "写入 sshd_config 失败（需要 root 权限）：" + err.Error()
@@ -265,7 +292,20 @@ func setConfigOption(content, key, value string) string {
 		}
 	}
 	if !found {
-		lines = append(lines, fmt.Sprintf("%s %s", key, value))
+		matchIdx := -1
+		for i, ln := range lines {
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(ln)), "match ") {
+				matchIdx = i
+				break
+			}
+		}
+		newLine := fmt.Sprintf("%s %s", key, value)
+		if matchIdx == -1 {
+			lines = append(lines, newLine)
+		} else {
+			lines = append(lines[:matchIdx+1], lines[matchIdx:]...)
+			lines[matchIdx] = newLine
+		}
 	}
 	return strings.Join(lines, "\n")
 }
