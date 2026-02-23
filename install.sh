@@ -18,6 +18,17 @@ if [[ -z "${INSTALL_DIR}" ]]; then
   INSTALL_DIR="/opt/vpshelper"
 fi
 
+if [[ "${1:-}" == "uninstall" ]]; then
+  echo "正在卸载 ${SERVICE_NAME}..."
+  systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1 || true
+  systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1 || true
+  rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+  systemctl daemon-reload
+  rm -rf "${INSTALL_DIR}"
+  echo "卸载完成！"
+  exit 0
+fi
+
 ensure_command() {
   local cmd="$1"
   local hint="$2"

@@ -42,6 +42,13 @@ curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/instal
 ```
 > This script automatically detects your architecture, downloads the latest Go-built ELF binary release, initializes the environment, and sets up `vpshelper.service` via systemd.
 
+### Uninstall
+To completely remove the VpsHelper service and its associated data directories, run the following one-click command:
+
+```bash
+curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash -s uninstall
+```
+
 ## Building from Source
 
 ```bash
