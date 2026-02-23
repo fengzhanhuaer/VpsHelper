@@ -186,6 +186,13 @@
                             <div class="server-name">
                                 <span class="status-indicator {{ if .Online }}status-online{{ else }}status-offline{{ end }}" id="dot-{{ .ID }}"></span>
                                 {{ .Name }}
+                                {{ if .Vendor }}
+                                    {{ if .VendorUrl }}
+                                        <span style="font-size: 0.9em;">(<a href="{{ .VendorUrl }}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">{{ .Vendor }}</a>)</span>
+                                    {{ else }}
+                                        <span style="font-size: 0.9em;">({{ .Vendor }})</span>
+                                    {{ end }}
+                                {{ end }}
                                 {{ if .Note }}<span class="server-note">({{.Note}})</span>{{ end }}
                             </div>
                             <div style="font-size: 0.8em; color: var(--color-text-muted);" id="uptime-{{ .ID }}">获取中...</div>
