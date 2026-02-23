@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        textarea.ip-list { min-height: 160px; font-family: monospace; font-size: 13px; }
+        .hint { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+        .action-bar { margin-top: 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/cloudflare">← Cloudflare</a>
+            <a class="ghost" href="/home">主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+    <main>
+        <section class="panel panel--wide">
+            <h1>🔥 防火墙 BlockList</h1>
+            <p class="muted">阻止来自非允许来源的 URI 访问。规则通过 Cloudflare API 推送到对应 Zone 的自定义防火墙规则集。公共凭据（API Token / Zone ID）在 <a href="/cloudflare">Cloudflare 设置</a> 中统一配置。</p>
+
+            {{ if .Error }}
+            <div class="error" style="margin-bottom:18px;">{{ .Error }}</div>
+            {{ else if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom:18px;">{{ .Message }}</div>
+            {{ end }}
+
+            <!-- Hidden sync form — populated by JS before submit -->
+            <form method="post" action="/cloudflare/blocklist/sync" id="syncForm"></form>
+
+            <form method="post" action="/cloudflare/blocklist" id="mainForm">
+
+                <div class="field">
+                    <label for="cf_block_uris">保护的 URI / URL（触发阻断规则的路径，每行一个）</label>
+                    <textarea id="cf_block_uris" name="cf_block_uris" class="ip-list"
+                              placeholder="/api/tg_secret&#10;/admin&#10;https://example.com/webhook">{{ .BlockURIs }}</textarea>
+                    <p class="hint">支持路径 <code>/api/xx</code> 或完整 URL <code>https://…</code>，多条 OR 匹配</p>
+                </div>
+
+                <div class="field">
+                    <label for="cf_block_ips">放行的 IP / ASN（访问上述 URI 时，仅允许这些来源，每行一个）</label>
+                    <textarea id="cf_block_ips" name="cf_block_ips" class="ip-list"
+                              placeholder="AS62041&#10;AS59930&#10;1.2.3.4&#10;10.0.0.0/24">{{ .BlockIPs }}</textarea>
+                    <p class="hint">支持 IP、CIDR（<code>10.0.0.0/24</code>）、ASN（<code>AS62041</code>）</p>
+                </div>
+
+                <div class="action-bar">
+                    <button type="submit" name="action" value="sync_block"
+                            class="btn" form="syncForm" onclick="syncInputs()">
+                        同步推送到 CF 防火墙
+                    </button>
+                    <button type="submit" class="ghost">只保存（不同步）</button>
+                    <span class="hint">规则名称固定为 <strong>BlockList</strong>，已有同名规则将被更新</span>
+                </div>
+
+            </form>
+        </section>
+    </main>
+
+    <script>
+        function syncInputs() {
+            var syncForm = document.getElementById('syncForm');
+            syncForm.innerHTML = '';
+            document.querySelectorAll('#mainForm input, #mainForm textarea').forEach(function(el) {
+                if (el.name) {
+                    var h = document.createElement('input');
+                    h.type = 'hidden'; h.name = el.name; h.value = el.value;
+                    syncForm.appendChild(h);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

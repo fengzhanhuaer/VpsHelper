@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        textarea.ip-list { min-height: 180px; font-family: monospace; font-size: 13px; }
+        .hint { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+        .action-bar { margin-top: 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/cloudflare">← Cloudflare</a>
+            <a class="ghost" href="/home">主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+    <main>
+        <section class="panel panel--wide">
+            <h1>🛡️ ZeroTrust 白名单</h1>
+            <p class="muted">管理 ZeroTrust 复用策略，允许指定 IP 或 DDNS 域名绕过 Access 检查。公共凭据（API Token / Account ID / Policy ID）在 <a href="/cloudflare">Cloudflare 设置</a> 中统一配置。</p>
+
+            {{ if .Error }}
+            <div class="error" style="margin-bottom:18px;">{{ .Error }}</div>
+            {{ else if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom:18px;">{{ .Message }}</div>
+            {{ end }}
+
+            <!-- Hidden sync form — populated by JS before submit -->
+            <form method="post" action="/cloudflare/whitelist/sync" id="syncForm"></form>
+
+            <form method="post" action="/cloudflare/whitelist" id="mainForm">
+
+                <div class="field">
+                    <label for="cf_allow_ips">放行的 IP / 域名（每行一个）</label>
+                    <textarea id="cf_allow_ips" name="cf_allow_ips" class="ip-list"
+                              placeholder="1.2.3.4&#10;myddns.example.com/56&#10;2001:db8::/32">{{ .AllowIPs }}</textarea>
+                    <p class="hint">
+                        支持 IPv4、IPv6、CIDR，以及 DDNS 域名（如 <code>home.ddns.net/56</code>）——域名会实时解析后推送。<br>
+                        注意：ASN 在 ZeroTrust 策略中不受支持，将被自动跳过。
+                    </p>
+                </div>
+
+                <div class="action-bar">
+                    <button type="submit" name="action" value="sync_allow"
+                            class="btn" form="syncForm" onclick="syncInputs()">
+                        同步推送到 ZeroTrust 策略
+                    </button>
+                    <button type="submit" class="ghost">只保存（不同步）</button>
+                    <button id="addself-btn" class="ghost" type="button">📍 一键添加我的 IP</button>
+                </div>
+                <div id="addself-msg" style="display:none; margin-top:10px;"></div>
+                <p class="hint" style="margin-top:12px;">💡 后台已自动监控白名单中域名的 IP 变化（每 5 分钟），IP 变更时将自动推送到 Cloudflare。</p>
+
+            </form>
+        </section>
+    </main>
+
+    <script>
+        function syncInputs() {
+            var syncForm = document.getElementById('syncForm');
+            syncForm.innerHTML = '';
+            document.querySelectorAll('#mainForm input, #mainForm textarea').forEach(function(el) {
+                if (el.name) {
+                    var h = document.createElement('input');
+                    h.type = 'hidden'; h.name = el.name; h.value = el.value;
+                    syncForm.appendChild(h);
+                }
+            });
+        }
+
+        document.getElementById('addself-btn').addEventListener('click', async function () {
+            var btn = this;
+            var msgEl = document.getElementById('addself-msg');
+            btn.disabled = true;
+            btn.textContent = '获取中...';
+            msgEl.style.display = 'none';
+            try {
+                var res = await fetch('/cloudflare/addself', { method: 'POST', credentials: 'same-origin' });
+                var data = await res.json();
+                if (data.ok) {
+                    var ta = document.getElementById('cf_allow_ips');
+                    var current = ta.value.trim();
+                    var ip = data.ip || '';
+                    if (ip && current.indexOf(ip) === -1) {
+                        ta.value = current ? current + '\n' + ip : ip;
+                    }
+                    msgEl.className = 'success';
+                    msgEl.textContent = data.message || '已添加';
+                } else {
+                    msgEl.className = 'error';
+                    msgEl.textContent = data.error || '操作失败';
+                }
+            } catch (err) {
+                msgEl.className = 'error';
+                msgEl.textContent = '请求出错: ' + (err && err.message ? err.message : String(err));
+            } finally {
+                msgEl.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = '📍 一键添加我的 IP';
+            }
+        });
+    </script>
+</body>
+</html>

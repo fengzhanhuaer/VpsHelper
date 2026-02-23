@@ -86,17 +86,58 @@ func (h *Handler) cloudflareAddSelf(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"ok": true, "ip": cidrIP, "message": "已将 " + cidrIP + " 添加到白名单"})
 }
+func (h *Handler) cfIndex(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
 
-func (h *Handler) cloudflarePage(c *gin.Context) {
+	if c.Request.Method == http.MethodGet {
+		settings, err := store.GetSettings(h.dbConn, []string{
+			"cf_api_token", "cf_account_id", "cf_zone_id", "cf_zone_domain", "cf_policy_id",
+		})
+		if err != nil {
+			c.String(http.StatusInternalServerError, "load settings failed")
+			return
+		}
+
+		c.HTML(http.StatusOK, "cloudflare_index.html", gin.H{
+			"Title":      "Cloudflare 管理",
+			"Token":      settings["cf_api_token"],
+			"AccountID":  settings["cf_account_id"],
+			"ZoneID":     settings["cf_zone_id"],
+			"ZoneDomain": settings["cf_zone_domain"],
+			"PolicyID":   settings["cf_policy_id"],
+			"Message":    c.Query("message"),
+			"MsgOK":      c.Query("status") == "ok",
+		})
+		return
+	}
+
+	// POST save for global credentials
+	cfToken := strings.TrimSpace(c.PostForm("cf_api_token"))
+	cfAccountID := strings.TrimSpace(c.PostForm("cf_account_id"))
+	cfZoneID := strings.TrimSpace(c.PostForm("cf_zone_id"))
+	cfZoneDomain := strings.TrimSpace(c.PostForm("cf_zone_domain"))
+	cfPolicyID := strings.TrimSpace(c.PostForm("cf_policy_id"))
+
+	_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
+	_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
+	_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
+	_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
+	_ = store.SetSetting(h.dbConn, "cf_policy_id", cfPolicyID)
+
+	c.Redirect(http.StatusSeeOther, "/cloudflare?message=公共凭据已保存&status=ok")
+}
+
+func (h *Handler) cfBlocklistPage(c *gin.Context) {
 	if h.currentUser(c) == "" {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
 
 	settings, err := store.GetSettings(h.dbConn, []string{
-		"cf_api_token", "cf_zone_id", "cf_zone_domain", "cf_block_uris", "cf_block_ips",
-		"cf_account_id", "cf_policy_id", "cf_allow_ips",
-		"tg_bot_webhook_secret",
+		"cf_block_uris", "cf_block_ips", "tg_bot_webhook_secret",
 	})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "load settings failed")
@@ -119,93 +160,56 @@ func (h *Handler) cloudflarePage(c *gin.Context) {
 			cfBlockIPs = "AS62041\nAS59930\nAS44907\nAS211157" // Telegram ASNs
 		}
 
-		c.HTML(http.StatusOK, "cloudflare.html", gin.H{
-			"Title":     "Cloudflare Settings",
-			"Token":      settings["cf_api_token"],
-			"ZoneID":     settings["cf_zone_id"],
-			"ZoneDomain": settings["cf_zone_domain"],
-			"BlockURIs":  cfBlockURIs,
-			"BlockIPs":   cfBlockIPs,
-			"AccountID":  settings["cf_account_id"],
-			"PolicyID":   settings["cf_policy_id"],
-			"AllowIPs":   settings["cf_allow_ips"],
+		c.HTML(http.StatusOK, "cloudflare_blocklist.html", gin.H{
+			"Title":     "🔥 防火墙 BlockList",
+			"BlockURIs": cfBlockURIs,
+			"BlockIPs":  cfBlockIPs,
+			"Message":   c.Query("message"),
+			"MsgOK":     c.Query("status") == "ok",
+			"Error":     c.Query("error"),
 		})
 		return
 	}
 
-	// POST save
-	cfToken := strings.TrimSpace(c.PostForm("cf_api_token"))
-	cfZoneID := strings.TrimSpace(c.PostForm("cf_zone_id"))
-	cfZoneDomain := strings.TrimSpace(c.PostForm("cf_zone_domain"))
+	// POST save only
 	cfBlockURIs := strings.TrimSpace(c.PostForm("cf_block_uris"))
 	cfBlockIPs := strings.TrimSpace(c.PostForm("cf_block_ips"))
-	cfAccountID := strings.TrimSpace(c.PostForm("cf_account_id"))
-	cfPolicyID := strings.TrimSpace(c.PostForm("cf_policy_id"))
-	cfAllowIPs := strings.TrimSpace(c.PostForm("cf_allow_ips"))
-	currentTab := strings.TrimSpace(c.PostForm("current_tab"))
 
-	_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
-	_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
-	_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
 	_ = store.SetSetting(h.dbConn, "cf_block_uris", cfBlockURIs)
 	_ = store.SetSetting(h.dbConn, "cf_block_ips", cfBlockIPs)
-	_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
-	_ = store.SetSetting(h.dbConn, "cf_policy_id", cfPolicyID)
-	_ = store.SetSetting(h.dbConn, "cf_allow_ips", cfAllowIPs)
 
-	c.HTML(http.StatusOK, "cloudflare.html", gin.H{
-		"Title":      "Cloudflare Settings",
-		"Token":      cfToken,
-		"ZoneID":     cfZoneID,
-		"ZoneDomain": cfZoneDomain,
-		"BlockURIs":  cfBlockURIs,
-		"BlockIPs":   cfBlockIPs,
-		"AccountID":  cfAccountID,
-		"PolicyID":   cfPolicyID,
-		"AllowIPs":   cfAllowIPs,
-		"CurrentTab": currentTab,
-		"Message":    "配置已保存。",
-		"MsgOK":      true,
-	})
+	c.Redirect(http.StatusSeeOther, "/cloudflare/blocklist?message=配置已保存（不同步）&status=ok")
 }
 
-func (h *Handler) cloudflareSync(c *gin.Context) {
+func (h *Handler) cfBlocklistSync(c *gin.Context) {
 	if h.currentUser(c) == "" {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
 
-	cfToken := strings.TrimSpace(c.PostForm("cf_api_token"))
-	cfZoneID := strings.TrimSpace(c.PostForm("cf_zone_id"))
-	cfZoneDomain := strings.TrimSpace(c.PostForm("cf_zone_domain"))
 	cfBlockURIs := strings.TrimSpace(c.PostForm("cf_block_uris"))
 	cfBlockIPs := strings.TrimSpace(c.PostForm("cf_block_ips"))
-	cfAccountID := strings.TrimSpace(c.PostForm("cf_account_id"))
-	cfPolicyID := strings.TrimSpace(c.PostForm("cf_policy_id"))
-	cfAllowIPs := strings.TrimSpace(c.PostForm("cf_allow_ips"))
-	currentTab := strings.TrimSpace(c.PostForm("current_tab"))
 
 	// Save first
-	_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
-	_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
-	_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
 	_ = store.SetSetting(h.dbConn, "cf_block_uris", cfBlockURIs)
 	_ = store.SetSetting(h.dbConn, "cf_block_ips", cfBlockIPs)
-	_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
-	_ = store.SetSetting(h.dbConn, "cf_policy_id", cfPolicyID)
-	_ = store.SetSetting(h.dbConn, "cf_allow_ips", cfAllowIPs)
 
-	action := c.PostForm("action")
-	var errMsg string
-	var succMsg string
+	settings, _ := store.GetSettings(h.dbConn, []string{"cf_api_token", "cf_account_id", "cf_zone_id", "cf_zone_domain"})
+	cfToken := settings["cf_api_token"]
+	cfAccountID := settings["cf_account_id"]
+	cfZoneID := settings["cf_zone_id"]
+	cfZoneDomain := settings["cf_zone_domain"]
+
+	if cfToken == "" {
+		c.Redirect(http.StatusSeeOther, "/cloudflare/blocklist?error=缺少%20API%20Token，请在公共凭据中设置")
+		return
+	}
 
 	client := cloudflare.NewAPIClient(cfToken, cfAccountID, cfZoneID)
 
-	// If Zone ID is empty, resolve domain automatically
 	if cfZoneID == "" {
 		domain := cfZoneDomain
 		if domain == "" {
-			// Auto-detect from request Host (strip port if present)
 			host := c.Request.Host
 			if idx := strings.LastIndex(host, ":"); idx != -1 {
 				host = host[:idx]
@@ -213,9 +217,7 @@ func (h *Handler) cloudflareSync(c *gin.Context) {
 			domain = host
 		}
 		if domain != "" {
-			if id, err := client.LookupZoneID(domain); err != nil {
-				errMsg = "自动查询 Zone ID 失败 (" + domain + "): " + err.Error()
-			} else {
+			if id, err := client.LookupZoneID(domain); err == nil && id != "" {
 				cfZoneID = id
 				if cfZoneDomain == "" {
 					cfZoneDomain = domain
@@ -227,64 +229,90 @@ func (h *Handler) cloudflareSync(c *gin.Context) {
 		}
 	}
 
-	if action == "sync_block" {
-		uris := strings.Split(cfBlockURIs, "\n")
-		var validURIs []string
-		for _, u := range uris {
-			u = strings.TrimSpace(u)
-			if u != "" {
-				validURIs = append(validURIs, u)
-			}
+	// Make sync call
+	var validURIs, validIPs []string
+	for _, u := range strings.Split(cfBlockURIs, "\n") {
+		if t := strings.TrimSpace(u); t != "" {
+			validURIs = append(validURIs, t)
 		}
-
-		ips := strings.Split(cfBlockIPs, "\n")
-		var validIPs []string
-		for _, ip := range ips {
-			ip = strings.TrimSpace(ip)
-			if ip != "" {
-				validIPs = append(validIPs, ip)
-			}
+	}
+	for _, ip := range strings.Split(cfBlockIPs, "\n") {
+		if t := strings.TrimSpace(ip); t != "" {
+			validIPs = append(validIPs, t)
 		}
-		if err := client.SyncBlockList(validURIs, validIPs); err != nil {
-			errMsg = "推送防火墙 BlockList 失败: " + err.Error()
-		} else {
-			succMsg = "同步推送到防火墙屏蔽规则成功！"
-		}
-	} else if action == "sync_allow" {
-		ips := strings.Split(cfAllowIPs, "\n")
-		var validIPs []string
-		for _, ip := range ips {
-			ip = strings.TrimSpace(ip)
-			if ip != "" {
-				validIPs = append(validIPs, ip)
-			}
-		}
-		if newPolicyID, err := client.SyncReusablePolicy(cfPolicyID, validIPs); err != nil {
-			errMsg = "推送 ZeroTrust 复用策略白名单失败: " + err.Error()
-		} else {
-			if cfPolicyID == "" && newPolicyID != "" {
-				cfPolicyID = newPolicyID
-				_ = store.SetSetting(h.dbConn, "cf_policy_id", cfPolicyID)
-			}
-			succMsg = "同步推送到 ZeroTrust 全局复用策略成功！"
-		}
-	} else {
-		errMsg = "未知的同步动作。"
 	}
 
-	c.HTML(http.StatusOK, "cloudflare.html", gin.H{
-		"Title":      "Cloudflare Settings",
-		"Token":      cfToken,
-		"ZoneID":     cfZoneID,
-		"ZoneDomain": cfZoneDomain,
-		"BlockURIs":  cfBlockURIs,
-		"BlockIPs":   cfBlockIPs,
-		"AccountID":  cfAccountID,
-		"PolicyID":   cfPolicyID,
-		"AllowIPs":   cfAllowIPs,
-		"CurrentTab": currentTab,
-		"Error":      errMsg,
-		"Message":    succMsg,
-		"MsgOK":      succMsg != "",
-	})
+	if err := client.SyncBlockList(validURIs, validIPs); err != nil {
+		c.Redirect(http.StatusSeeOther, "/cloudflare/blocklist?error=推送失败:"+err.Error())
+	} else {
+		c.Redirect(http.StatusSeeOther, "/cloudflare/blocklist?message=同步推送到防火墙屏蔽规则成功！&status=ok")
+	}
+}
+
+func (h *Handler) cfWhitelistPage(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	settings, err := store.GetSettings(h.dbConn, []string{"cf_allow_ips"})
+	if err != nil {
+		c.String(http.StatusInternalServerError, "load settings failed")
+		return
+	}
+
+	if c.Request.Method == http.MethodGet {
+		c.HTML(http.StatusOK, "cloudflare_whitelist.html", gin.H{
+			"Title":    "🛡️ ZeroTrust 白名单",
+			"AllowIPs": settings["cf_allow_ips"],
+			"Message":  c.Query("message"),
+			"MsgOK":    c.Query("status") == "ok",
+			"Error":    c.Query("error"),
+		})
+		return
+	}
+
+	// POST save only
+	cfAllowIPs := strings.TrimSpace(c.PostForm("cf_allow_ips"))
+	_ = store.SetSetting(h.dbConn, "cf_allow_ips", cfAllowIPs)
+
+	c.Redirect(http.StatusSeeOther, "/cloudflare/whitelist?message=配置已保存（不同步）&status=ok")
+}
+
+func (h *Handler) cfWhitelistSync(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	cfAllowIPs := strings.TrimSpace(c.PostForm("cf_allow_ips"))
+	_ = store.SetSetting(h.dbConn, "cf_allow_ips", cfAllowIPs)
+
+	settings, _ := store.GetSettings(h.dbConn, []string{"cf_api_token", "cf_account_id", "cf_policy_id"})
+	cfToken := settings["cf_api_token"]
+	cfAccountID := settings["cf_account_id"]
+	cfPolicyID := settings["cf_policy_id"]
+
+	if cfToken == "" {
+		c.Redirect(http.StatusSeeOther, "/cloudflare/whitelist?error=缺少%20API%20Token，请在公共凭据中设置")
+		return
+	}
+
+	client := cloudflare.NewAPIClient(cfToken, cfAccountID, "")
+
+	var validIPs []string
+	for _, ip := range strings.Split(cfAllowIPs, "\n") {
+		if t := strings.TrimSpace(ip); t != "" {
+			validIPs = append(validIPs, t)
+		}
+	}
+
+	if newPolicyID, err := client.SyncReusablePolicy(cfPolicyID, validIPs); err != nil {
+		c.Redirect(http.StatusSeeOther, "/cloudflare/whitelist?error=推送失败:"+err.Error())
+	} else {
+		if cfPolicyID == "" && newPolicyID != "" {
+			_ = store.SetSetting(h.dbConn, "cf_policy_id", newPolicyID)
+		}
+		c.Redirect(http.StatusSeeOther, "/cloudflare/whitelist?message=同步推送到%20ZeroTrust%20全局复用策略成功！&status=ok")
+	}
 }

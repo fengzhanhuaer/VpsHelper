@@ -16,7 +16,8 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/cloudflare">← Cloudflare</a>
+            <a class="ghost" href="/home">主菜单</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
@@ -30,11 +31,7 @@
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
-            <form id="db-settings-form" method="post" action="/settings/database">
-                <div class="field">
-                    <label for="cf_api_token">Cloudflare API Token</label>
-                    <input id="cf_api_token" name="cf_api_token" value="{{ .CFToken }}" />
-                </div>
+            <form id="db-settings-form" method="post" action="/cloudflare/database">
                 <div class="field">
                     <label for="cf_d1_database_name">D1 云端数据库名称</label>
                     <input id="cf_d1_database_name" name="cf_d1_database_name" value="{{ .D1Name }}" placeholder="VpsHelper" />
@@ -71,7 +68,7 @@
             <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
 
             <h2 style="margin:0 0 10px; font-size:16px;">自动备份</h2>
-            <form method="post" action="/settings/database">
+            <form method="post" action="/cloudflare/database">
                 <div class="field" style="display:flex; align-items:center; gap:8px;">
                     <input id="db_auto_backup_enabled" name="db_auto_backup_enabled" type="checkbox" {{ if .AutoBackupEnabled }}checked{{ end }} style="width:auto;" />
                     <label for="db_auto_backup_enabled" style="margin:0;">启用每天自动备份</label>
@@ -205,10 +202,10 @@
         }
 
         backupBtn.addEventListener('click', function () {
-            runStream('/settings/database/backup/stream', '开始备份到云端 D1...');
+            runStream('/cloudflare/database/backup/stream', '开始备份到云端 D1...');
         });
         pullBtn.addEventListener('click', function () {
-            runStream('/settings/database/pull/stream', '开始从云端 D1 拉取...');
+            runStream('/cloudflare/database/pull/stream', '开始从云端 D1 拉取...');
         });
 
         /* ── 查看表数据 ───────────────────────────────────────── */
@@ -223,7 +220,7 @@
         /* ── 动态加载全部本地表名 ──────────────────────────────── */
         (async function loadTableList() {
             try {
-                var res  = await fetch('/settings/database/tables', { credentials: 'same-origin' });
+                var res  = await fetch('/cloudflare/database/tables', { credentials: 'same-origin' });
                 var data = await res.json();
                 if (!data.ok || !data.tables) throw new Error(data.error || '加载失败');
                 tableSelect.innerHTML = '<option value="">-- 选择表 --</option>';
@@ -250,7 +247,7 @@
             resultEl.innerHTML = '';
 
             try {
-                var res  = await fetch('/settings/database/cleanup', {
+                var res  = await fetch('/cloudflare/database/cleanup', {
                     method: 'POST',
                     credentials: 'same-origin'
                 });
@@ -306,7 +303,7 @@
 
                 // Refresh the table list dropdown
                 if (data.dropped > 0) {
-                    fetch('/settings/database/tables', { credentials: 'same-origin' })
+                    fetch('/cloudflare/database/tables', { credentials: 'same-origin' })
                         .then(function(r) { return r.json(); })
                         .then(function(d) {
                             if (!d.ok || !d.tables) return;
@@ -351,7 +348,7 @@
             viewBtn.disabled       = true;
 
             try {
-                var res  = await fetch('/settings/database/table/data?table=' + encodeURIComponent(table), {
+                var res  = await fetch('/cloudflare/database/table/data?table=' + encodeURIComponent(table), {
                     credentials: 'same-origin'
                 });
                 var data = await res.json();

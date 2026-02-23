@@ -85,13 +85,14 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/tg/auto/send/new", h.tgAutoSendNew)
 	router.POST("/tg/auto/send/new", h.tgAutoSendNew)
 	router.GET("/tg/auto/send/history", h.tgAutoSendHistory)
-	router.GET("/settings/database", h.databaseSettings)
-	router.POST("/settings/database", h.databaseSettings)
-	router.POST("/settings/database/backup/stream", h.databaseBackupStream)
-	router.POST("/settings/database/pull/stream", h.databasePullStream)
-	router.GET("/settings/database/tables", h.databaseTableList)
-	router.GET("/settings/database/table/data", h.databaseTableData)
-	router.POST("/settings/database/cleanup", h.databaseCleanup)
+	router.GET("/settings/database", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/cloudflare/database") })
+	router.GET("/cloudflare/database", h.databaseSettings)
+	router.POST("/cloudflare/database", h.databaseSettings)
+	router.POST("/cloudflare/database/backup/stream", h.databaseBackupStream)
+	router.POST("/cloudflare/database/pull/stream", h.databasePullStream)
+	router.GET("/cloudflare/database/tables", h.databaseTableList)
+	router.GET("/cloudflare/database/table/data", h.databaseTableData)
+	router.POST("/cloudflare/database/cleanup", h.databaseCleanup)
 	router.GET("/settings/ssh", h.sshSettings)
 	router.POST("/settings/ssh", h.sshSettings)
 	router.GET("/system/update", h.systemUpdate)
@@ -106,9 +107,14 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/shell/shortcuts/clear", h.shellShortcutsClear)
 	router.GET("/firewall", h.firewallPage)
 	router.POST("/firewall", h.firewallPage)
-	router.GET("/cloudflare", h.cloudflarePage)
-	router.POST("/cloudflare", h.cloudflarePage)
-	router.POST("/cloudflare/sync", h.cloudflareSync)
+	router.GET("/cloudflare", h.cfIndex)
+	router.POST("/cloudflare", h.cfIndex)
+	router.GET("/cloudflare/blocklist", h.cfBlocklistPage)
+	router.POST("/cloudflare/blocklist", h.cfBlocklistPage)
+	router.POST("/cloudflare/blocklist/sync", h.cfBlocklistSync)
+	router.GET("/cloudflare/whitelist", h.cfWhitelistPage)
+	router.POST("/cloudflare/whitelist", h.cfWhitelistPage)
+	router.POST("/cloudflare/whitelist/sync", h.cfWhitelistSync)
 	router.POST("/cloudflare/addself", h.cloudflareAddSelf)
 	router.GET("/ns/lottery", h.nsLottery)
 	router.POST("/ns/lottery", h.nsLottery)
@@ -1727,28 +1733,25 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 				action = "pull"
 			case c.PostForm("db_auto_backup_enabled") == "on" || strings.TrimSpace(c.PostForm("db_auto_backup_time")) != "":
 				action = "auto_backup"
-			case strings.TrimSpace(c.PostForm("cf_api_token")) != "":
+			case c.PostForm("cf_d1_database_name") != "":
 				action = "save"
 			}
 		}
 		switch action {
 		case "save":
-			cfToken = strings.TrimSpace(c.PostForm("cf_api_token"))
 			if cfToken == "" {
-				message = "Token 不能为空。"
+				message = "请先在 Cloudflare 设置中配置 API Token。"
 				break
 			}
 			if newD1Name := strings.TrimSpace(c.PostForm("cf_d1_database_name")); newD1Name != "" {
 				d1Name = newD1Name
 				_ = store.SetSetting(h.dbConn, "cf_d1_database_name", d1Name)
 			}
-			_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
-			message = "已保存 Token。"
+			message = "设置已保存。"
 			msgOK = true
 		case "create":
-			cfToken = strings.TrimSpace(c.PostForm("cf_api_token"))
 			if cfToken == "" {
-				message = "Token 不能为空。"
+				message = "请先在 Cloudflare 设置中配置 API Token。"
 				break
 			}
 			if newD1Name := strings.TrimSpace(c.PostForm("cf_d1_database_name")); newD1Name != "" {
@@ -1788,7 +1791,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			msgOK = true
 		case "backup":
 			if cfToken == "" || accountID == "" || dbID == "" {
-				message = "请先保存 Token 并执行“自动创建并绑定”。"
+				message = "请先执行“自动创建并绑定”。"
 				break
 			}
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Minute)
@@ -1799,7 +1802,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 			msgOK = ok
 		case "pull":
 			if cfToken == "" || accountID == "" || dbID == "" {
-				message = "请先保存 Token 并执行“自动创建并绑定”。"
+				message = "请先执行“自动创建并绑定”。"
 				break
 			}
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Minute)
@@ -1825,7 +1828,7 @@ func (h *Handler) databaseSettings(c *gin.Context) {
 		default:
 			message = "未知操作。"
 		}
-		redirectURL := "/settings/database"
+		redirectURL := "/cloudflare/database"
 		if message != "" {
 			redirectURL += "?message=" + url.QueryEscape(message)
 			if msgOK {
