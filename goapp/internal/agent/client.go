@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/yamux"
 
 	"vpshelper-go/internal/tunnel"
+	"vpshelper-go/internal/version"
 )
 
 type DiscoverResponse struct {
@@ -100,6 +101,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	dialer := websocket.DefaultDialer
 	wsHeader := http.Header{}
 	wsHeader.Set("X-Probe-Secret", secret)
+	wsHeader.Set("X-Probe-Version", version.Version)
 
 	conn, _, err := dialer.DialContext(ctx, wsAddress, wsHeader)
 	if err != nil {

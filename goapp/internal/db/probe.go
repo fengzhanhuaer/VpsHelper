@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -57,10 +58,13 @@ func MigrateProbe(db *sql.DB) error {
             ON probe_node_stats_history(node_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_pnsh_created
             ON probe_node_stats_history(created_at)`,
+		`ALTER TABLE probe_node_status ADD COLUMN version TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
-			return fmt.Errorf("migrate probe db: %w\nstmt: %s", err, s)
+			if !strings.Contains(err.Error(), "duplicate column name") {
+				return fmt.Errorf("migrate probe db: %w\nstmt: %s", err, s)
+			}
 		}
 	}
 

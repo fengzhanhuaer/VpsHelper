@@ -42,7 +42,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 
 		case "add":
 			name := strings.TrimSpace(c.PostForm("name"))
-			note := strings.TrimSpace(c.PostForm("note"))
 			if name == "" {
 				message = "节点名称不能为空。"
 				break
@@ -52,7 +51,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				message = "密钥生成失败：" + err.Error()
 				break
 			}
-			if _, err := store.CreateProbeNode(h.dbConn, name, note, secret); err != nil {
+			if _, err := store.CreateProbeNode(h.dbConn, name, "", secret); err != nil {
 				message = "添加节点失败：" + err.Error()
 				break
 			}
@@ -83,6 +82,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			name := strings.TrimSpace(c.PostForm("name"))
 			note := strings.TrimSpace(c.PostForm("note"))
 			vendor := strings.TrimSpace(c.PostForm("vendor"))
+			vendorUrl := strings.TrimSpace(c.PostForm("vendor_url"))
 			price := strings.TrimSpace(c.PostForm("price"))
 			expiredAt := strings.TrimSpace(c.PostForm("expired_at"))
 			intervalStr := strings.TrimSpace(c.PostForm("report_interval"))
@@ -97,7 +97,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				intervalVal = 60
 			}
 
-			if err := store.UpdateProbeNodeDetails(h.dbConn, id, name, note, vendor, price, expiredAt, intervalVal); err != nil {
+			if err := store.UpdateProbeNodeDetails(h.dbConn, id, name, note, vendor, vendorUrl, price, expiredAt, intervalVal); err != nil {
 				message = "更新失败：" + err.Error()
 				break
 			}

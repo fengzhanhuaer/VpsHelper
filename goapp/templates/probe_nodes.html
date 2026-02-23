@@ -100,10 +100,6 @@
                         <label>节点名称(必填)</label>
                         <input name="name" placeholder="例如：US-West-01" required />
                     </div>
-                    <div class="field" style="flex: 2; min-width: 250px;">
-                        <label>备注名</label>
-                        <input name="note" placeholder="例如：搬瓦工 GIA" />
-                    </div>
                     <div style="padding-bottom: 5px;">
                         <button class="btn" type="submit" name="action" value="add">添加节点生成密钥</button>
                     </div>
@@ -117,23 +113,24 @@
                     由于 CDN 会切断长连接并掩盖真实 IP，探针服务运行时会建立第二条直连底层通信隧道：
                 </p>
                 <form method="post" action="/probe/nodes" style="display: flex; flex-direction: column; gap: 12px;">
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <div class="field" style="flex: 1; min-width: 150px;">
+                    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                        <div class="field" style="flex: 1; min-width: 150px; max-width: 220px;">
                             <label>本地监听端口</label>
                             <input name="probe_private_port" value="{{ .PrivatePort }}" placeholder="例如：15019" required />
-                            <div class="muted">控制中心用于建立直连 WS 的独立端口</div>
+                            <div class="muted">用于建立直连 WS 的独立端口</div>
                         </div>
-                        <div class="field" style="flex: 2; min-width: 300px;">
+                        <div class="field" style="flex: 3; min-width: 450px;">
                             <label>公网访问地址 / 域名 (可选)</label>
-                            <input name="probe_address" value="{{ .Address }}" placeholder="例如：1.2.3.4 或 probe.example.com" />
+                            <div style="display: flex; align-items: center; gap: 16px;">
+                                <input style="flex: 1;" name="probe_address" value="{{ .Address }}" placeholder="例如：1.2.3.4 或 probe.example.com" />
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
+                                    <input type="checkbox" name="enable_ddns" {{ if .EnableDDNS }}checked{{ end }} />
+                                    自动同步该域名到 Cloudflare (DDNS)
+                                </label>
+                            </div>
                             <div class="muted">指定给探针拨号的高优先级地址</div>
                         </div>
-                        <div class="field" style="flex: 2; min-width: 200px; display: flex; align-items: center;">
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" name="enable_ddns" {{ if .EnableDDNS }}checked{{ end }} />
-                                自动同步该域名到 Cloudflare (DDNS)
-                            </label>
-                        </div>
+                    </div>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
                         <div class="field" style="flex: 1; min-width: 150px;">
                             <label>历史数据保存天数</label>
@@ -168,7 +165,6 @@
                                 <th style="padding: 8px;">厂商</th>
                                 <th style="padding: 8px;">价格</th>
                                 <th style="padding: 8px;">到期时间</th>
-                                <th style="padding: 8px;">周期</th>
                                 <th style="padding: 8px;">操作</th>
                             </tr>
                         </thead>
@@ -182,21 +178,42 @@
                                     {{ else }}
                                         <span class="status-badge status-offline">离线</span>
                                     {{ end }}
+                                    {{ if .Version }}
+                                    <div style="font-size: 0.75em; color: var(--color-text-muted); margin-top: 4px;">{{ .Version }}</div>
+                                    {{ end }}
                                 </td>
                                 <td style="padding: 8px;">
                                     <strong>{{ .Name }}</strong>
                                     {{ if .Note }}<br><span style="font-size:0.85em; color:var(--color-text-muted);">{{.Note}}</span>{{ end }}
                                 </td>
-                                <td style="padding: 8px;">{{ if .Vendor }}{{ .Vendor }}{{ else }}--{{ end }}</td>
+                                <td style="padding: 8px;">
+                                    {{ if .Vendor }}
+                                        {{ if .VendorUrl }}
+                                            <a href="{{ .VendorUrl }}" target="_blank" style="color: var(--color-primary); text-decoration: none;">{{ .Vendor }}</a>
+                                        {{ else }}
+                                            {{ .Vendor }}
+                                        {{ end }}
+                                    {{ else }}
+                                        --
+                                    {{ end }}
+                                </td>
                                 <td style="padding: 8px;">{{ if .Price }}{{ .Price }}{{ else }}--{{ end }}</td>
-                                <td style="padding: 8px;">{{ if .ExpiredAt }}{{ .ExpiredAt }}{{ else }}--{{ end }}</td>
-                                <td style="padding: 8px;">{{ .ReportInterval }}s</td>
+                                <td style="padding: 8px;">
+                                    {{ if .ExpiredAt }}
+                                        {{ .ExpiredAt }}
+                                        {{ if .ExpireDaysStr }}
+                                        <br><span style="font-size:0.85em; color:var(--color-text-muted);">({{.ExpireDaysStr}})</span>
+                                        {{ end }}
+                                    {{ else }}
+                                        --
+                                    {{ end }}
+                                </td>
                                 <td style="padding: 8px;">
                                     <!-- 隐藏一键安装命令用于复制 -->
                                     <div id="cmd-{{.ID}}" style="display:none;">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
                                     
                                     <div class="actions">
-                                        <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}')">⚙️ 设置</button>
+                                        <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.VendorUrl}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}')">⚙️ 设置</button>
                                         
                                         <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-{{.ID}}')">复制命令</button>
                                         
@@ -233,29 +250,33 @@
                     <label>节点名称(必填)</label>
                     <input type="text" name="name" id="edit-name" required />
                 </div>
-                <div class="field">
-                    <label>备注名</label>
-                    <input type="text" name="note" id="edit-note" />
-                </div>
                 <div style="display: flex; gap: 10px;">
                     <div class="field" style="flex: 1;">
                         <label>厂商</label>
                         <input type="text" name="vendor" id="edit-vendor" placeholder="如：搬瓦工" />
                     </div>
                     <div class="field" style="flex: 1;">
-                        <label>价格</label>
-                        <input type="text" name="price" id="edit-price" placeholder="如：$49.9/yr" />
+                        <label>厂商链接</label>
+                        <input type="url" name="vendor_url" id="edit-vendor-url" placeholder="可选：包含 http://" />
                     </div>
                 </div>
                 <div style="display: flex; gap: 10px;">
                     <div class="field" style="flex: 1;">
+                        <label>价格</label>
+                        <input type="text" name="price" id="edit-price" placeholder="如：$49.9/yr" />
+                    </div>
+                    <div class="field" style="flex: 1;">
                         <label>到期时间</label>
                         <input type="date" name="expired_at" id="edit-expired" />
                     </div>
-                    <div class="field" style="flex: 1;">
-                        <label>汇报周期(秒)</label>
-                        <input type="number" name="report_interval" id="edit-interval" min="1" max="3600" required />
-                    </div>
+                </div>
+                <div class="field">
+                    <label>汇报周期(秒)</label>
+                    <input type="number" name="report_interval" id="edit-interval" min="1" max="3600" required />
+                </div>
+                <div class="field">
+                    <label>备注名</label>
+                    <input type="text" name="note" id="edit-note" />
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
@@ -278,11 +299,12 @@
             });
         }
 
-        function openEditModal(id, name, note, vendor, price, expiredAt, interval) {
+        function openEditModal(id, name, note, vendor, vendorUrl, price, expiredAt, interval) {
             document.getElementById('edit-id').value = id;
             document.getElementById('edit-name').value = name;
             document.getElementById('edit-note').value = note;
             document.getElementById('edit-vendor').value = vendor;
+            document.getElementById('edit-vendor-url').value = vendorUrl;
             document.getElementById('edit-price').value = price;
             document.getElementById('edit-expired').value = expiredAt;
             document.getElementById('edit-interval').value = interval;
