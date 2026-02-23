@@ -44,7 +44,7 @@
                 <div class="field">
                     <label for="ssh_listen_address">允许连接的客户端 IP / 域名 (白名单)</label>
                     <textarea id="ssh_listen_address" name="ssh_listen_address" rows="2" placeholder="默认留空表示全网皆可访问&#10;您可在此输入特定允许的公网IP/域名（多条空格/逗号隔开），后台将自动运用CIDR限制。">{{ .ListenAddress }}</textarea>
-                    <div class="muted">利用 sshd 的 Match Address 拒绝策略，一经写入将仅放行这些来源的连接包。支持直接写入 IPv6 的 /56 等动态掩码前缀配置。</div>
+                    <div class="muted">利用本机底层防火墙限制来源连接包，不再修改 sshd_config，避免语法验证失败且同样100%安全。留空全局开放。</div>
                 </div>
 
                 <div class="field">

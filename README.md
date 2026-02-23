@@ -42,6 +42,14 @@ curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/instal
 ```
 > This script automatically detects your architecture, downloads the latest Go-built ELF binary release, initializes the environment, and sets up `vpshelper.service` via systemd.
 
+### Install Probe Node (VpsProbe)
+
+To deploy a probe node controlled by your VpsHelper master instance, go to "探针节点" in your dashboard, generate a secret, and run the following command on your target VPS:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret YOUR_SECRET_KEY --host https://your-main-panel.com
+```
+
 ### Uninstall
 To completely remove the VpsHelper service and its associated data directories, run the following one-click command:
 

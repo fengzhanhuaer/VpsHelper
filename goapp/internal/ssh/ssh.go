@@ -159,7 +159,7 @@ func Fail2banStatus(ctx context.Context) string {
 	return fmt.Sprintf("运行中 (累计失败: %s, 当前封禁: %s)", totalFailed, banned)
 }
 
-func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPassword, allowKey bool, publicKey string) (bool, string) {
+func ApplySettings(ctx context.Context, port int, allowPassword, allowKey bool, publicKey string) (bool, string) {
 	if runtime.GOOS == "windows" {
 		return false, "当前系统为 Windows，无法修改 Linux sshd 配置。"
 	}
@@ -210,29 +210,6 @@ func ApplySettings(ctx context.Context, port int, listenAddrs []string, allowPas
 	content = setConfigOption(content, "Port", strconv.Itoa(port))
 	content = setConfigOption(content, "PasswordAuthentication", yesNo(allowPassword))
 	content = setConfigOption(content, "PubkeyAuthentication", yesNo(allowKey))
-
-	if len(listenAddrs) > 0 {
-		var negations []string
-		for _, addr := range listenAddrs {
-			if strings.Contains(addr, "/") {
-				_, ipnet, err := net.ParseCIDR(addr)
-				if err == nil {
-					negations = append(negations, "!"+ipnet.String())
-				} else {
-					negations = append(negations, "!"+addr)
-				}
-			} else {
-				negations = append(negations, "!"+addr)
-			}
-		}
-		negations = append(negations, "*")
-        
-		content += "\n# --- VPSHELPER SSH ALLOWLIST START ---\n"
-		content += fmt.Sprintf("Match Address %s\n", strings.Join(negations, ","))
-		content += "    DenyUsers *\n"
-		content += "Match All\n"
-		content += "# --- VPSHELPER SSH ALLOWLIST END ---\n"
-	}
 
 	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
 		return false, "写入 sshd_config 失败（需要 root 权限）：" + err.Error()

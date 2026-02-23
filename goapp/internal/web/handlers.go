@@ -2601,35 +2601,6 @@ func (h *Handler) sshSettings(c *gin.Context) {
 				message = "SSH 端口范围必须在 1-65535。"
 				break
 			}
-			var addrs []string
-			if listenAddrsRaw != "" {
-				parts := regexp.MustCompile(`[,\s]+`).Split(listenAddrsRaw, -1)
-				for _, part := range parts {
-					if part == "" {
-						continue
-					}
-					
-					base := part
-					suffix := ""
-					if idx := strings.LastIndex(part, "/"); idx != -1 {
-						base = part[:idx]
-						suffix = part[idx:]
-					}
-
-					if net.ParseIP(base) != nil {
-						// For static IP or explicitly provided CIDR
-						addrs = append(addrs, part)
-					} else {
-						ips, err := firewall.ResolveIPWithCIDR(base, suffix)
-						if err == nil && len(ips) > 0 {
-							addrs = append(addrs, ips...)
-						} else {
-							// fallback
-							addrs = append(addrs, part)
-						}
-					}
-				}
-			}
 
 			// Only store public key and listen address in database (for backup)
 			_ = store.SetSetting(h.dbConn, "ssh_public_key", pub)
@@ -2637,7 +2608,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 45*time.Second)
 			defer cancel()
-			ok, msg := ssh.ApplySettings(ctx, p, addrs, allowPass, allowKey, pub)
+			ok, msg := ssh.ApplySettings(ctx, p, allowPass, allowKey, pub)
 			if ok {
 				message = "SSH 设置已应用到系统。"
 				msgOK = true

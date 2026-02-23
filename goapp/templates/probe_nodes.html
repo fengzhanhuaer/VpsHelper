@@ -167,7 +167,7 @@
                     <div class="secret-box">{{ .Secret }}</div>
 
                     <div><strong>一键安装命令 (推荐):</strong></div>
-                    <div class="install-cmd" id="cmd-{{.ID}}">curl -sSL {{ $.BaseURL }}/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
+                    <div class="install-cmd" id="cmd-{{.ID}}">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
                     
                     <div class="actions">
                         <button class="btn btn-sm" type="button" onclick="copyCmd('cmd-{{.ID}}')">复制安装命令</button>
