@@ -142,6 +142,7 @@ func (h *Handler) cloudflarePage(c *gin.Context) {
 	cfAccountID := strings.TrimSpace(c.PostForm("cf_account_id"))
 	cfPolicyID := strings.TrimSpace(c.PostForm("cf_policy_id"))
 	cfAllowIPs := strings.TrimSpace(c.PostForm("cf_allow_ips"))
+	currentTab := strings.TrimSpace(c.PostForm("current_tab"))
 
 	_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
 	_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
@@ -162,6 +163,7 @@ func (h *Handler) cloudflarePage(c *gin.Context) {
 		"AccountID":  cfAccountID,
 		"PolicyID":   cfPolicyID,
 		"AllowIPs":   cfAllowIPs,
+		"CurrentTab": currentTab,
 		"Message":    "配置已保存。",
 		"MsgOK":      true,
 	})
@@ -181,6 +183,7 @@ func (h *Handler) cloudflareSync(c *gin.Context) {
 	cfAccountID := strings.TrimSpace(c.PostForm("cf_account_id"))
 	cfPolicyID := strings.TrimSpace(c.PostForm("cf_policy_id"))
 	cfAllowIPs := strings.TrimSpace(c.PostForm("cf_allow_ips"))
+	currentTab := strings.TrimSpace(c.PostForm("current_tab"))
 
 	// Save first
 	_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
@@ -279,6 +282,7 @@ func (h *Handler) cloudflareSync(c *gin.Context) {
 		"AccountID":  cfAccountID,
 		"PolicyID":   cfPolicyID,
 		"AllowIPs":   cfAllowIPs,
+		"CurrentTab": currentTab,
 		"Error":      errMsg,
 		"Message":    succMsg,
 		"MsgOK":      succMsg != "",

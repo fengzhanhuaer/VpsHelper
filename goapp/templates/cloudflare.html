@@ -52,6 +52,9 @@
 
             <form method="post" action="/cloudflare" id="mainForm">
 
+                <!-- Hidden input to track the current tab -->
+                <input type="hidden" name="current_tab" id="current_tab" value="{{ if .CurrentTab }}{{ .CurrentTab }}{{ else }}blocklist{{ end }}" />
+
                 <!-- ── 全局凭据 ── -->
                 <div class="field" style="margin-bottom: 28px;">
                     <label for="cf_api_token">Cloudflare API Token</label>
@@ -159,8 +162,11 @@
         function switchTab(name) {
             document.querySelectorAll('.cf-tab').forEach(function(t) { t.classList.remove('active'); });
             document.querySelectorAll('.cf-pane').forEach(function(p) { p.classList.remove('active'); });
-            document.getElementById('pane-' + name).classList.add('active');
-            event.target.classList.add('active');
+            var pane = document.getElementById('pane-' + name);
+            if (pane) pane.classList.add('active');
+            if (event && event.target) event.target.classList.add('active');
+            var ct = document.getElementById('current_tab');
+            if (ct) ct.value = name;
         }
 
         function syncInputs() {
@@ -177,6 +183,11 @@
 
         // Auto-select correct tab based on URL or message context
         (function() {
+            var currentTab = "{{ .CurrentTab }}";
+            if (currentTab === 'whitelist' || currentTab === 'blocklist') {
+                switchTabByName(currentTab);
+            }
+            // Fallbacks for older errors if any
             {{ if .Error }}
             var msg = {{ .Error | js }};
             if (msg && msg.indexOf('ZeroTrust') !== -1) switchTabByName('whitelist');
