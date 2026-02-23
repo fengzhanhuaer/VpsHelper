@@ -112,16 +112,37 @@ func (h *Handler) probeNodes(c *gin.Context) {
 
 		case "save_settings":
 			privatePort := strings.TrimSpace(c.PostForm("probe_private_port"))
-			publicAddress := strings.TrimSpace(c.PostForm("probe_public_address"))
-			ddnsDomain := strings.TrimSpace(c.PostForm("probe_ddns_domain"))
+			addressIn := strings.TrimSpace(c.PostForm("probe_address"))
+			enableDDNS := c.PostForm("enable_ddns") == "on" || c.PostForm("enable_ddns") == "true"
+			
 			if privatePort == "" {
 				privatePort = "15019"
 			}
+			
+			var publicAddress, ddnsDomain string
+			if enableDDNS {
+				ddnsDomain = addressIn
+			} else {
+				publicAddress = addressIn
+			}
+
 			_ = store.SetSetting(h.dbConn, "probe_private_port", privatePort)
 			_ = store.SetSetting(h.dbConn, "probe_public_address", publicAddress)
 			_ = store.SetSetting(h.dbConn, "probe_ddns_domain", ddnsDomain)
-			message = "通讯端口设置已保存，重启服务后生效。"
+			
+			message = "设置已保存，端口更改需重启服务生效。"
 			msgOK = true
+			
+			// If a DDNS domain is configured, immediately push the current IP to Cloudflare.
+			if ddnsDomain != "" {
+				// Run a synchronous trigger so the user sees the result immediately.
+				if errMsg := cloudflare.TriggerProbeDDNS(h.dbConn); errMsg != "" {
+					message = "设置已保存，但 DDNS 更新失败：" + errMsg
+					msgOK = false
+				} else {
+					message = "设置已保存，DDNS 已成功更新到 Cloudflare。端口更改需重启服务生效。"
+				}
+			}
 		}
 	}
 
@@ -154,6 +175,13 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	}
 	baseURL := fmt.Sprintf("%s://%s", scheme, host)
 
+	// Consolidate for frontend
+	combinedAddress := publicAddress
+	if ddnsDomain != "" {
+		combinedAddress = ddnsDomain
+	}
+	enableDDNS := ddnsDomain != ""
+
 	c.HTML(http.StatusOK, "probe_nodes.html", gin.H{
 		"Title":         "探针节点管理",
 		"Message":       message,
@@ -161,8 +189,8 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"Nodes":         nodes,
 		"BaseURL":       baseURL,
 		"PrivatePort":   privatePort,
-		"PublicAddress": publicAddress,
-		"DDNSDomain":    ddnsDomain,
+		"Address":       combinedAddress,
+		"EnableDDNS":    enableDDNS,
 	})
 }
 

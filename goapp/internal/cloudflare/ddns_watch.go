@@ -34,6 +34,71 @@ func StartDDNSWatch(ctx context.Context, dbConn *sql.DB) {
 	}()
 }
 
+// TriggerProbeDDNS immediately attempts to update the Cloudflare DNS A/AAAA
+// record for the probe_ddns_domain setting. It clears the cached IP key first
+// so the update always runs even if the IP hasn't changed (e.g. domain was
+// just configured). Returns an error string for display in the UI, or "" on success.
+func TriggerProbeDDNS(dbConn *sql.DB) string {
+	keys := []string{"cf_api_token", "cf_account_id", "cf_zone_id", "cf_zone_domain", "probe_ddns_domain"}
+	settings, err := store.GetSettings(dbConn, keys)
+	if err != nil {
+		return "读取设置失败: " + err.Error()
+	}
+
+	cfToken := strings.TrimSpace(settings["cf_api_token"])
+	if cfToken == "" {
+		return "Cloudflare API Token 未配置，请先在 Cloudflare 设置中填写。"
+	}
+
+	probeDDNSDomain := strings.TrimSpace(settings["probe_ddns_domain"])
+	if probeDDNSDomain == "" {
+		return "DDNS 域名为空，跳过更新。"
+	}
+
+	accountID := strings.TrimSpace(settings["cf_account_id"])
+	zoneID := strings.TrimSpace(settings["cf_zone_id"])
+	zoneDomain := strings.TrimSpace(settings["cf_zone_domain"])
+
+	client := NewAPIClient(cfToken, accountID, zoneID)
+
+	if zoneID == "" && zoneDomain != "" {
+		if id, err := client.LookupZoneID(zoneDomain); err == nil && id != "" {
+			zoneID = id
+			_ = store.SetSetting(dbConn, "cf_zone_id", zoneID)
+			client = NewAPIClient(cfToken, accountID, zoneID)
+		}
+	}
+	if zoneID == "" {
+		// Try to auto-detect zone from the ddns domain itself
+		if id, err := client.LookupZoneID(probeDDNSDomain); err == nil && id != "" {
+			zoneID = id
+			_ = store.SetSetting(dbConn, "cf_zone_id", zoneID)
+			client = NewAPIClient(cfToken, accountID, zoneID)
+		}
+	}
+	if zoneID == "" {
+		return "无法确定 Cloudflare Zone ID，请在 Cloudflare 设置中填写区域域名或 Zone ID。"
+	}
+
+	ips := GetPublicIPs()
+	if ips.IPv4 == "" && ips.IPv6 == "" {
+		return "无法获取本机公网 IP，DDNS 更新中止。"
+	}
+
+	// Reset the cached key so the background watcher also re-syncs on next tick
+	_ = store.SetLocalSetting("probe_ddns_last_ip", "")
+
+	if err := client.SyncDDNSRecord(probeDDNSDomain, ips); err != nil {
+		log.Printf("[ddns] TriggerProbeDDNS failed: %v", err)
+		return "DDNS 更新失败: " + err.Error()
+	}
+
+	currentIPKey := ips.IPv4 + "|" + ips.IPv6
+	_ = store.SetLocalSetting("probe_ddns_last_ip", currentIPKey)
+	log.Printf("[ddns] TriggerProbeDDNS: updated %s -> v4=%s v6=%s", probeDDNSDomain, ips.IPv4, ips.IPv6)
+	return ""
+}
+
 // domainIPKey computes a stable string representing the current resolved IPs
 // of all hostnames in a list of IP/CIDR/domain entries.
 // Pure IPs are skipped (stable); only domains are resolved and included.

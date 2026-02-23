@@ -121,14 +121,15 @@
                             <div class="muted">控制中心用于建立直连 WS 的独立端口</div>
                         </div>
                         <div class="field" style="flex: 2; min-width: 300px;">
-                            <label>指定公网访问地址 (可选)</label>
-                            <input name="probe_public_address" value="{{ .PublicAddress }}" placeholder="例如：1.2.3.4:15019 或 wss://my-ws.com:443" />
-                            <div class="muted">优先级最高，直接发送给探针拨号</div>
+                            <label>公网访问地址 / 域名 (可选)</label>
+                            <input name="probe_address" value="{{ .Address }}" placeholder="例如：1.2.3.4 或 probe.example.com" />
+                            <div class="muted">指定给探针拨号的高优先级地址</div>
                         </div>
-                        <div class="field" style="flex: 2; min-width: 300px;">
-                            <label>自动 DDNS 域名 (可选)</label>
-                            <input name="probe_ddns_domain" value="{{ .DDNSDomain }}" placeholder="例如：probe.example.com" />
-                            <div class="muted">面板将自动解析本身公网 IP 并更新 Cloudflare DNS 记录。优先级次于公网访问地址。</div>
+                        <div class="field" style="flex: 2; min-width: 200px; display: flex; align-items: center;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" name="enable_ddns" {{ if .EnableDDNS }}checked{{ end }} />
+                                自动同步该域名到 Cloudflare (DDNS)
+                            </label>
                         </div>
                     </div>
                     <div>
