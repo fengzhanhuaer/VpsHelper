@@ -22,7 +22,7 @@
         <section class="panel panel--wide" style="max-width: 100%;">
             <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                 <div>
-                    <h1>拨测监控大屏</h1>
+                    <h1>拨测监控</h1>
                     <p class="muted">实时监控各探针执行 Ping 任务的网络丢包与延迟曲线</p>
                 </div>
                 <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">
@@ -35,159 +35,186 @@
                     <p class="muted" style="margin-bottom: 20px;">系统目前没有任何探针节点。</p>
                 </div>
             {{ else }}
-                <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: center; background: var(--color-bg-alt); padding: 16px; border-radius: var(--radius); border: 1px solid var(--color-border);">
-                    <label style="font-weight: 500;">选择探针节点：</label>
-                    <select id="ping-node-select" onchange="loadPingHistory(this.value)" style="padding: 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); min-width: 200px;">
-                        <option value="">-- 请选择节点 --</option>
-                        {{ range .Nodes }}
-                        <option value="{{ .ID }}">{{ .Name }}</option>
-                        {{ end }}
-                    </select>
-                    <button class="btn btn-sm" onclick="refreshPingHistory()" style="padding: 8px 16px; font-size: 0.9em;">刷新历史曲线</button>
-                </div>
-
                 <div id="ping-charts-container" style="display: flex; flex-direction: column; gap: 24px;">
-                    <div class="muted" style="text-align: center; padding: 40px;">请在上方选择一个探针节点以查看其拨测指标。</div>
+                    <div class="muted" style="text-align: center; padding: 40px;">初始化中...</div>
                 </div>
             {{ end }}
         </section>
     </main>
 
     <script>
-        const tasks = {};
+        const tasksMap = {};
         {{ range .Tasks }}
-            tasks["{{ .ID }}"] = "{{ .Name }} ({{ .Target }})";
+            tasksMap["{{ .ID }}"] = "{{ .Name }} ({{ .Target }})";
+        {{ end }}
+
+        const nodesList = [];
+        {{ range .Nodes }}
+            nodesList.push({ id: {{ .ID }}, name: "{{ .Name }}", vendor: "{{ .Vendor }}", vendorUrl: "{{ .VendorUrl }}" });
         {{ end }}
 
         const chartInstances = {};
+        const nodeContainers = {};
         let currentWs = null;
 
-        async function loadPingHistory(nodeId) {
-            if (!nodeId) return;
-            const container = document.getElementById('ping-charts-container');
-            container.innerHTML = '<div class="muted" style="text-align:center;">正在加载历史数据...</div>';
+        const colors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+        ];
 
+        async function initDashboard() {
+            if (nodesList.length === 0) return;
+
+            const container = document.getElementById('ping-charts-container');
+            container.innerHTML = '';
+
+            for (const node of nodesList) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.style.position = 'relative';
+                card.style.height = '420px'; // Give enough height for legend and chart
+                card.style.marginBottom = '24px';
+                
+                const title = document.createElement('h3');
+                title.style.marginTop = '0';
+                let titleHtml = node.name;
+                if (node.vendor) {
+                    if (node.vendorUrl) {
+                        titleHtml += ` (<a href="${node.vendorUrl}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">${node.vendor}</a>)`;
+                    } else {
+                        titleHtml += ` (${node.vendor})`;
+                    }
+                }
+                title.innerHTML = titleHtml;
+                card.appendChild(title);
+
+                const statusBox = document.createElement('div');
+                statusBox.className = 'muted';
+                statusBox.textContent = '加载中...';
+                card.appendChild(statusBox);
+
+                const chartContainer = document.createElement('div');
+                chartContainer.style.position = 'relative';
+                chartContainer.style.height = '350px';
+                chartContainer.style.width = '100%';
+                card.appendChild(chartContainer);
+
+                const canvas = document.createElement('canvas');
+                canvas.id = 'chart-node-' + node.id;
+                canvas.style.display = 'none';
+                chartContainer.appendChild(canvas);
+                
+                container.appendChild(card);
+                nodeContainers[node.id] = { card, statusBox, canvas, taskMapping: {} };
+                
+                loadPingHistory(node.id);
+            }
+            connectWS();
+        }
+
+        async function loadPingHistory(nodeId) {
             try {
                 const res = await fetch('/api/probe/ping_history?hours=24&node_id=' + nodeId);
                 const data = await res.json();
                 
+                const nc = nodeContainers[nodeId];
+
                 if (!data.history || Object.keys(data.history).length === 0) {
-                    container.innerHTML = '<div class="muted" style="text-align:center;">当前探针在最近24小时内没有任何历史拨测数据。原因是节点尚未分配任务，或处于离线状态。</div>';
+                    nc.statusBox.textContent = '当前探针在最近24小时内没有任何历史拨测数据。原因是节点尚未分配任务，或处于离线状态。';
                     return;
                 }
-
-                container.innerHTML = '';
                 
+                nc.statusBox.style.display = 'none';
+                nc.canvas.style.display = 'block';
+
+                const datasets = [];
+                let labels = [];
+
+                let colorIdx = 0;
                 for (const taskId in data.history) {
                     const points = data.history[taskId];
-                    const taskLabel = tasks[taskId] || ("未知任务 ID:" + taskId);
+                    const taskLabel = tasksMap[taskId] || ("未知任务 ID:" + taskId);
                     
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.style.position = 'relative';
-                    card.style.height = '350px';
-
-                    const title = document.createElement('h3');
-                    title.style.marginTop = '0';
-                    title.textContent = `目标: ${taskLabel}`;
-                    card.appendChild(title);
-
-                    const canvas = document.createElement('canvas');
-                    canvas.id = 'chart-' + taskId;
-                    card.appendChild(canvas);
-                    container.appendChild(card);
-
-                    const times = points.map(p => {
-                        const d = new Date(p.created_at * 1000);
-                        return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-                    });
-                    const latencies = points.map(p => p.latency);
-                    const losses = points.map(p => p.loss);
-
-                    const ctx = canvas.getContext('2d');
-                    if (chartInstances[taskId]) {
-                        chartInstances[taskId].destroy();
+                    if (labels.length === 0) {
+                        labels = points.map(p => {
+                            const d = new Date(p.created_at * 1000);
+                            return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+                        });
                     }
 
-                    chartInstances[taskId] = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: times,
-                            datasets: [
-                                {
-                                    label: '延迟 (ms)',
-                                    data: latencies,
-                                    borderColor: '#17a2b8',
-                                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
-                                    yAxisID: 'y',
-                                    fill: true,
-                                    borderWidth: 2,
-                                    pointRadius: 0,
-                                    pointHitRadius: 10,
-                                },
-                                {
-                                    label: '丢包率 (%)',
-                                    data: losses,
-                                    borderColor: '#dc3545',
-                                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
-                                    yAxisID: 'y1',
-                                    fill: true,
-                                    borderWidth: 2,
-                                    pointRadius: 0,
-                                    pointHitRadius: 10,
-                                    stepped: true
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: {
-                                mode: 'index',
-                                intersect: false,
-                            },
-                            scales: {
-                                x: {
-                                    ticks: { maxTicksLimit: 20 }
-                                },
-                                y: {
-                                    type: 'linear',
-                                    display: true,
-                                    position: 'left',
-                                    title: { display: true, text: '延迟 (ms)' },
-                                    min: 0,
-                                    suggestedMax: 200
-                                },
-                                y1: {
-                                    type: 'linear',
-                                    display: true,
-                                    position: 'right',
-                                    title: { display: true, text: '丢包率 (%)' },
-                                    grid: { drawOnChartArea: false },
-                                    min: 0,
-                                    max: 100
-                                },
-                            }
-                        }
+                    const latencies = points.map(p => p.latency);
+                    const losses = points.map(p => p.loss);
+                    
+                    const color = colors[colorIdx % colors.length];
+
+                    datasets.push({
+                        label: `${taskLabel} - 延迟(ms)`,
+                        data: latencies,
+                        borderColor: color,
+                        backgroundColor: color, // For legend
+                        yAxisID: 'y',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHitRadius: 10,
+                        tension: 0.1,
+                        fill: false
                     });
+                    datasets.push({
+                        label: `${taskLabel} - 丢包(%)`,
+                        data: losses,
+                        borderColor: color,
+                        backgroundColor: color, // For legend
+                        borderDash: [5, 5], 
+                        yAxisID: 'y1',
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        pointHitRadius: 10,
+                        stepped: true,
+                        fill: false,
+                        hidden: true // hide loss by default to reduce clutter
+                    });
+                    
+                    nc.taskMapping[taskId] = { 
+                        datasetLatencyIdx: datasets.length - 2, 
+                        datasetLossIdx: datasets.length - 1 
+                    };
+
+                    colorIdx++;
                 }
-                
-                // Keep listening to newly pushed results over websocket
-                connectWS();
 
+                const ctx = nc.canvas.getContext('2d');
+                chartInstances[nodeId] = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            x: { ticks: { maxTicksLimit: 20 } },
+                            y: {
+                                type: 'linear', display: true, position: 'left',
+                                title: { display: true, text: '延迟 (ms)' },
+                                min: 0, suggestedMax: 200
+                            },
+                            y1: {
+                                type: 'linear', display: true, position: 'right',
+                                title: { display: true, text: '丢包率 (%)' },
+                                grid: { drawOnChartArea: false },
+                                min: 0, max: 100
+                            },
+                        }
+                    }
+                });
             } catch (e) {
-                container.innerHTML = '<div class="error">加载历史数据失败: ' + e.message + '</div>';
+                const nc = nodeContainers[nodeId];
+                nc.statusBox.textContent = '加载历史数据失败: ' + e.message;
             }
-        }
-
-        function refreshPingHistory() {
-            const sel = document.getElementById('ping-node-select');
-            loadPingHistory(sel.value);
         }
 
         function connectWS() {
             if (currentWs) {
-                currentWs.close(); // Prevent multiple connections
+                currentWs.close(); 
             }
             const wsScheme = window.location.protocol === "https:" ? "wss://" : "ws://";
             const wsUrl = wsScheme + window.location.host + "/probe/ws";
@@ -202,32 +229,40 @@
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                const nodeId = data.node_id;
-
                 if (data.type === "ping_results") {
-                    const sel = document.getElementById('ping-node-select');
-                    if (sel && parseInt(sel.value) === nodeId) {
+                    const nodeId = data.node_id;
+                    const chart = chartInstances[nodeId];
+                    const nc = nodeContainers[nodeId];
+                    if (chart && nc && data.results) {
                         const now = new Date();
                         const timeLabel = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-                        if (data.results) {
-                            for (const taskId in data.results) {
-                                if (chartInstances[taskId]) {
-                                    const chart = chartInstances[taskId];
-                                    const res = data.results[taskId];
-                                    chart.data.labels.push(timeLabel);
-                                    chart.data.datasets[0].data.push(res.latency);
-                                    chart.data.datasets[1].data.push(res.loss);
-                                    
-                                    // keep only latest 200 points to prevent memory leak
-                                    if (chart.data.labels.length > 200) {
-                                        chart.data.labels.shift();
-                                        chart.data.datasets[0].data.shift();
-                                        chart.data.datasets[1].data.shift();
-                                    }
-                                    chart.update('none'); 
-                                }
+                        
+                        chart.data.labels.push(timeLabel);
+                        if (chart.data.labels.length > 200) {
+                            chart.data.labels.shift();
+                        }
+                        
+                        const mapping = nc.taskMapping;
+                        
+                        for (let tId in mapping) {
+                            const res = data.results[tId];
+                            const idxLat = mapping[tId].datasetLatencyIdx;
+                            const idxLoss = mapping[tId].datasetLossIdx;
+                            
+                            if (res) {
+                                chart.data.datasets[idxLat].data.push(res.latency);
+                                chart.data.datasets[idxLoss].data.push(res.loss);
+                            } else {
+                                chart.data.datasets[idxLat].data.push(null);
+                                chart.data.datasets[idxLoss].data.push(null);
+                            }
+                            
+                            if (chart.data.datasets[idxLat].data.length > 200) {
+                                chart.data.datasets[idxLat].data.shift();
+                                chart.data.datasets[idxLoss].data.shift();
                             }
                         }
+                        chart.update('none');
                     }
                 }
             };
@@ -241,6 +276,9 @@
                 console.error("WS error:", err);
             };
         }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', initDashboard);
     </script>
 </body>
 </html>

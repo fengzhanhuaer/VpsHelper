@@ -436,7 +436,7 @@ func (h *Handler) probePingDashboard(c *gin.Context) {
 	tasks, _ := store.ListProbeTasks(h.dbConn)
 
 	c.HTML(http.StatusOK, "probe_ping_dashboard.html", gin.H{
-		"Title": "拨测监控大屏",
+		"Title": "拨测监控",
 		"Nodes": nodes,
 		"Tasks": tasks,
 	})
