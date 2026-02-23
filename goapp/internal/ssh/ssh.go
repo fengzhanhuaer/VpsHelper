@@ -129,6 +129,31 @@ func InstallFail2ban(ctx context.Context) (bool, string) {
 
 	return false, "未检测到 apt-get，暂不支持自动安装。"
 }
+
+func DisableFail2ban(ctx context.Context) (bool, string) {
+	if runtime.GOOS == "windows" {
+		return false, "当前系统为 Windows，无法操作 Linux Fail2ban。"
+	}
+	if _, err := exec.LookPath("fail2ban-client"); err != nil {
+		return false, "Fail2ban 未安装，无需关闭。"
+	}
+
+	// Stop service
+	ok, msg := run(ctx, "systemctl", "stop", "fail2ban")
+	if !ok {
+		ok, msg = run(ctx, "service", "fail2ban", "stop")
+		if !ok {
+			return false, "停止 Fail2ban 失败：" + msg
+		}
+	}
+
+	// Disable auto-start
+	run(ctx, "systemctl", "disable", "fail2ban")
+
+	return true, "Fail2ban 已停止并禁用自启。"
+}
+
+
 func Fail2banStatus(ctx context.Context) string {
 	if runtime.GOOS == "windows" {
 		return "不支持 (Windows)"

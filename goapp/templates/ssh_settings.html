@@ -56,9 +56,18 @@
                 <button class="btn" type="submit" name="action" value="save">保存</button>
             </form>
 
-            <form method="post" action="/settings/ssh" style="margin-top:10px;">
-                <button class="ghost" type="submit" name="action" value="install_fail2ban" style="width:100%;">安装 Fail2ban</button>
-            </form>
+            <div style="display:flex; gap:8px; margin-top:10px;">
+                <form method="post" action="/settings/ssh" style="flex:1;">
+                    <button class="ghost" type="submit" name="action" value="install_fail2ban" style="width:100%;">安装 / 启动 Fail2ban</button>
+                </form>
+                {{ if ne .Fail2banStatus "未安装" }}
+                <form method="post" action="/settings/ssh" style="flex:1;">
+                    <button class="ghost" type="submit" name="action" value="disable_fail2ban"
+                        style="width:100%; color:var(--color-error,#c00); border-color:var(--color-error,#c00);"
+                        onclick="return confirm('确认停止 Fail2ban 并禁用自启？')">关闭 Fail2ban</button>
+                </form>
+                {{ end }}
+            </div>
 
             <form method="post" action="/settings/ssh" style="margin-top:10px;">
                 <input type="hidden" name="ssh_port" value="{{ .SSHPort }}" />

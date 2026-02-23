@@ -2589,6 +2589,16 @@ func (h *Handler) sshSettings(c *gin.Context) {
 			} else {
 				message = "安装失败: " + msg
 			}
+		case "disable_fail2ban":
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+			defer cancel()
+			ok, msg := ssh.DisableFail2ban(ctx)
+			if ok {
+				message = msg
+				msgOK = true
+			} else {
+				message = "操作失败: " + msg
+			}
 		case "diagnose_ssh":
 			portText := strings.TrimSpace(c.PostForm("ssh_port"))
 			p, _ := strconv.Atoi(portText)
