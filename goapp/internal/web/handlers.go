@@ -128,6 +128,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/probe/ws", h.probeDashboardWS)
 	router.GET("/api/probe/discover", h.probeDiscover)
 	router.GET("/api/probe/ping_history", h.probePingHistory)
+	router.GET("/api/probe/latest_binary", h.probeLatestBinary)
 	router.POST("/api/:secret", h.tgBotWebhook)
 }
 

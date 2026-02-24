@@ -184,12 +184,16 @@ arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
 
 case "$os" in
   linux) goos="linux" ;;
-  *) echo "暂不支持该系统: $os"; exit 1 ;;
+  darwin) goos="darwin" ;;
+  *) echo "无法识别的操作系统: $os"; exit 1 ;;
 esac
 
 case "$arch" in
   x86_64|amd64) goarch="amd64" ;;
-  *) echo "暂不支持该架构: $arch (目前探针仅打包 AMD64 Linux)"; exit 1 ;;
+  aarch64|arm64) goarch="arm64" ;;
+  armv7l|armv6l|arm) goarch="arm" ;;
+  i386|i686) goarch="386" ;;
+  *) echo "暂不支持该架构: $arch"; exit 1 ;;
 esac
 
 asset="${BINARY_NAME}_${goos}_${goarch}"

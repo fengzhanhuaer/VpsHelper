@@ -2,15 +2,56 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"vpshelper-go/internal/update"
 )
+
+func fallbackDownloadWithProgress(ctx context.Context, host, secret, osParam, archParam string, destPath string, onProgress update.ProgressCallback) (string, error) {
+	baseURL := strings.TrimSuffix(host, "/")
+	infoURL := fmt.Sprintf("%s/api/probe/latest_binary?os=%s&arch=%s&info=true", baseURL, osParam, archParam)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", infoURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+secret)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("control center returned status %d", resp.StatusCode)
+	}
+
+	var data struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", err
+	}
+
+	asset := update.SelectedAsset{
+		Name:       data.Name,
+		BrowserURL: baseURL + data.URL,
+	}
+
+	return update.DownloadReleaseAssetWithProgress(ctx, asset, secret, destPath, onProgress)
+}
 
 func handleAgentUpgradeTrigger(secret, host string) {
 	log.Printf("[Agent] 收到服务端在线更新指令，准备执行自更新流程...")
@@ -18,24 +59,6 @@ func handleAgentUpgradeTrigger(secret, host string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-
-		log.Printf("[Agent] 正在向 GitHub 拉取释放版本元数据...")
-		info, release, err := update.FetchLatestGitHubRelease(ctx, "fengzhanhuaer", "VpsHelper", "")
-		if err != nil {
-			log.Printf("[Agent] 获取最新版本失败: %v", err)
-			return
-		}
-
-		if !info.OK {
-			log.Printf("[Agent] 获取版本失败: %s", info.Note)
-			return
-		}
-
-		asset, err := update.SelectReleaseAsset(release, "vpsprobe")
-		if err != nil {
-			log.Printf("[Agent] 无法为探针定位合适的发布件: %v", err)
-			return
-		}
 
 		exePath, err := os.Executable()
 		if err != nil {
@@ -46,8 +69,6 @@ func handleAgentUpgradeTrigger(secret, host string) {
 		downloadPath := filepath.Join(filepath.Dir(exePath), "vpsprobe.download")
 		backupPath := filepath.Join(filepath.Dir(exePath), "vpsprobe.backup")
 
-		log.Printf("[Agent] 开始下载新探针包: %s...", asset.Name)
-		
 		lastPercent := -1
 		progressCb := func(p update.DownloadProgress) {
 			if p.Total > 0 {
@@ -59,11 +80,26 @@ func handleAgentUpgradeTrigger(secret, host string) {
 			}
 		}
 
-		tmpFile, err := update.DownloadReleaseAssetWithProgress(ctx, asset, "", downloadPath, progressCb)
-		if err != nil {
-			log.Printf("[Agent] 下载失败: %v", err)
-			_ = os.Remove(downloadPath)
-			return
+		log.Printf("[Agent] 正在向 GitHub 拉取释放版本元数据...")
+		var tmpFile string
+		
+		info, release, err := update.FetchLatestGitHubRelease(ctx, "fengzhanhuaer", "VpsHelper", "")
+		if err == nil && info.OK {
+			asset, err := update.SelectReleaseAsset(release, "vpsprobe")
+			if err == nil {
+				log.Printf("[Agent] 开始从 GitHub 下载新探针包: %s...", asset.Name)
+				tmpFile, err = update.DownloadReleaseAssetWithProgress(ctx, asset, "", downloadPath, progressCb)
+			}
+		}
+
+		if err != nil || tmpFile == "" {
+			log.Printf("[Agent] 从 GitHub 获取版本失败 (%v)，回退请求主控代理转发探针文件...", err)
+			tmpFile, err = fallbackDownloadWithProgress(ctx, host, secret, runtime.GOOS, runtime.GOARCH, downloadPath, progressCb)
+			if err != nil {
+				log.Printf("[Agent] 代理转发下载依然失败: %v", err)
+				_ = os.Remove(downloadPath + ".download")
+				return
+			}
 		}
 		defer os.Remove(tmpFile) // clean up
 

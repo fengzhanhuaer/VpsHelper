@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,6 +17,7 @@ import (
 	"vpshelper-go/internal/security"
 	"vpshelper-go/internal/store"
 	"vpshelper-go/internal/tunnel"
+	"vpshelper-go/internal/update"
 )
 
 // generateProbeSecret generates a cryptographically random 32-byte hex secret.
@@ -474,4 +476,76 @@ func (h *Handler) probePingHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"history": history,
 	})
+}
+
+// probeLatestBinary proxies the download of the latest probe binary to bypass GitHub blockades.
+func (h *Handler) probeLatestBinary(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	secret := strings.TrimPrefix(authHeader, "Bearer ")
+	_, err := store.GetProbeNodeBySecret(h.dbConn, secret)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	osParam := strings.ToLower(c.Query("os"))
+	archParam := strings.ToLower(c.Query("arch"))
+	if osParam == "" || archParam == "" {
+		c.String(http.StatusBadRequest, "missing os/arch")
+		return
+	}
+
+	info, rel, err := update.FetchLatestGitHubRelease(c.Request.Context(), "fengzhanhuaer", "VpsHelper", "")
+	if err != nil || !info.OK {
+		c.String(http.StatusInternalServerError, "failed to get release from upstream")
+		return
+	}
+
+	var targetURL string
+	var targetName string
+	for _, a := range rel.Assets {
+		n := strings.ToLower(a.Name)
+		if strings.Contains(n, "vpsprobe") && strings.Contains(n, osParam) && strings.Contains(n, archParam) {
+			targetURL = a.BrowserDownload
+			targetName = a.Name
+			break
+		}
+	}
+	if targetURL == "" {
+		c.String(http.StatusNotFound, "asset not found")
+		return
+	}
+
+	if c.Query("info") == "true" {
+		c.JSON(http.StatusOK, gin.H{
+			"name": targetName,
+			"url":  fmt.Sprintf("/api/probe/latest_binary?os=%s&arch=%s", osParam, archParam),
+		})
+		return
+	}
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", targetURL, nil)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "req create error")
+		return
+	}
+	
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.String(http.StatusBadGateway, "upstream download failed")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.String(resp.StatusCode, "upstream returned error")
+		return
+	}
+
+	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 }
