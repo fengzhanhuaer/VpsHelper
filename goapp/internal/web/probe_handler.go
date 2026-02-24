@@ -522,8 +522,9 @@ func (h *Handler) probeLatestBinary(c *gin.Context) {
 
 	if c.Query("info") == "true" {
 		c.JSON(http.StatusOK, gin.H{
-			"name": targetName,
-			"url":  fmt.Sprintf("/api/probe/latest_binary?os=%s&arch=%s", osParam, archParam),
+			"name":     targetName,
+			"tag_name": info.TagName,
+			"url":      fmt.Sprintf("/api/probe/latest_binary?os=%s&arch=%s", osParam, archParam),
 		})
 		return
 	}

@@ -12,8 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
 	"vpshelper-go/internal/update"
+	"vpshelper-go/internal/version"
 
 	"github.com/hashicorp/yamux"
 )
@@ -40,16 +40,23 @@ func fallbackDownloadWithProgress(ctx context.Context, host, secret, osParam, ar
 	}
 
 	var data struct {
-		Name string `json:"name"`
-		URL  string `json:"url"`
+		Name    string `json:"name"`
+		URL     string `json:"url"`
+		TagName string `json:"tag_name"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return "", err
 	}
 
+	if version.Version != "dev" && data.TagName == version.Version {
+		log.Printf("[Agent] (Fallback) 当前已是最新的主控指定版本 %s，无需下载。", data.TagName)
+		return "", fmt.Errorf("ALREADY_LATEST")
+	}
+
 	asset := update.SelectedAsset{
 		Name:       data.Name,
 		BrowserURL: baseURL + data.URL,
+		APIURL:     baseURL + data.URL,
 	}
 
 	return update.DownloadReleaseAssetWithProgress(ctx, asset, secret, destPath, onProgress)
@@ -95,30 +102,19 @@ func handleAgentUpgradeTrigger(secret, host string, session *yamux.Session) {
 			}
 		}
 
-		log.Printf("[Agent] 正在向 GitHub 拉取释放版本元数据...")
-		sendProgress("正在拉取最新版本元数据...")
-		var tmpFile string
+		log.Printf("[Agent] [策略更新] 探针将只通过主控中心代理通道下载更新...")
+		sendProgress("正在从主控中心拉取版本元数据...")
 		
-		info, release, err := update.FetchLatestGitHubRelease(ctx, "fengzhanhuaer", "VpsHelper", "")
-		if err == nil && info.OK {
-			asset, err := update.SelectReleaseAsset(release, "vpsprobe")
-			if err == nil {
-				log.Printf("[Agent] 开始从 GitHub 下载新探针包: %s...", asset.Name)
-				sendProgress("开始从 GitHub 下载新探针包...")
-				tmpFile, err = update.DownloadReleaseAssetWithProgress(ctx, asset, "", downloadPath, progressCb)
-			}
-		}
-
-		if err != nil || tmpFile == "" {
-			log.Printf("[Agent] 从 GitHub 获取版本失败 (%v)，回退请求主控代理转发探针文件...", err)
-			sendProgress("直连获取失败，回退至主控代理下载...")
-			tmpFile, err = fallbackDownloadWithProgress(ctx, host, secret, runtime.GOOS, runtime.GOARCH, downloadPath, progressCb)
-			if err != nil {
-				log.Printf("[Agent] 代理转发下载依然失败: %v", err)
-				sendProgress("更新失败: 下载探针文件失败")
-				_ = os.Remove(downloadPath + ".download")
+		tmpFile, err := fallbackDownloadWithProgress(ctx, host, secret, runtime.GOOS, runtime.GOARCH, downloadPath, progressCb)
+		if err != nil {
+			if err.Error() == "ALREADY_LATEST" {
+				sendProgress("当前已是最新版，无需升级")
 				return
 			}
+			log.Printf("[Agent] 从主控代理下载失败: %v", err)
+			sendProgress("更新失败: 下载探针文件失败")
+			_ = os.Remove(downloadPath + ".download")
+			return
 		}
 		defer os.Remove(tmpFile) // clean up
 

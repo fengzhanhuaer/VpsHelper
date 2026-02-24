@@ -207,7 +207,8 @@ func SetProbeNodeOnline(nodeID int64, online bool, version, ip string) {
 		 	online = excluded.online, 
 		 	last_ping = excluded.last_ping,
 		 	version = CASE WHEN excluded.version != '' THEN excluded.version ELSE version END,
-			ip = CASE WHEN excluded.ip != '' THEN excluded.ip ELSE ip END`,
+			ip = CASE WHEN excluded.ip != '' THEN excluded.ip ELSE ip END,
+			upgrade_progress = CASE WHEN excluded.online = 1 THEN '' ELSE upgrade_progress END`,
 		nodeID, onlineInt, time.Now().Unix(), version, ip,
 	)
 }
