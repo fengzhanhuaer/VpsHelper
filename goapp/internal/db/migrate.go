@@ -112,5 +112,8 @@ func Migrate(dbConn *sql.DB) error {
 		created_at TEXT    NOT NULL DEFAULT ''
 	)`)
 
+	// v5: add report interval to probe tests
+	_, _ = dbConn.Exec("ALTER TABLE probe_tasks ADD COLUMN report_interval INTEGER NOT NULL DEFAULT 60;")
+
 	return nil
 }
