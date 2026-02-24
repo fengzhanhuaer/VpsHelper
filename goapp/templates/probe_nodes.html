@@ -195,7 +195,7 @@
                                     {{ if .IPs }}
                                         <div style="display: flex; flex-direction: column; gap: 4px;">
                                             {{ range .IPs }}
-                                            <span style="font-family: monospace; font-size: 0.85em; background: var(--color-surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;" title="{{.}}">{{ . }}</span>
+                                            <span style="font-family: monospace; font-size: 0.85em; background: var(--color-surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; cursor: pointer;" title="点击复制 IP：{{.}}" onclick="copyText(this, '{{ . }}')">{{ . }}</span>
                                             {{ end }}
                                         </div>
                                     {{ else }}
@@ -324,6 +324,23 @@
                 alert("安装命令已复制到剪贴板。");
             }).catch(err => {
                 prompt("请手动复制以下命令：", text);
+            });
+        }
+
+        function copyText(el, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const oldColor = el.style.backgroundColor;
+                const oldText = el.innerText;
+                el.style.backgroundColor = '#28a745';
+                el.style.color = '#fff';
+                el.innerText = '已复制!';
+                setTimeout(() => {
+                    el.style.backgroundColor = oldColor;
+                    el.style.color = '';
+                    el.innerText = oldText;
+                }, 1000);
+            }).catch(err => {
+                prompt("请手动复制：", text);
             });
         }
 
