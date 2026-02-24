@@ -165,8 +165,6 @@
 
                                 <th style="padding: 8px;">节点名称</th>
                                 <th style="padding: 8px;">IP</th>
-                                <th style="padding: 8px;">厂商</th>
-                                <th style="padding: 8px;">价格</th>
                                 <th style="padding: 8px;">到期时间</th>
                                 <th style="padding: 8px;">操作</th>
                             </tr>
@@ -179,6 +177,19 @@
                                 <td style="padding: 8px;">
                                     <strong>{{ .Name }}</strong>
                                     {{ if .Note }}<br><span style="font-size:0.85em; color:var(--color-text-muted);">{{.Note}}</span>{{ end }}
+                                    {{ if .Version }}<br><span style="font-size:0.80em; color:#17a2b8; font-family:monospace;">{{.Version}}</span>{{ end }}
+                                    <div style="font-size: 0.85em; margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
+                                        {{ if .Vendor }}
+                                        <span style="background:var(--color-surface); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--color-border); color:var(--color-text-muted);">
+                                            🏢 {{ if .VendorUrl }}<a href="{{ .VendorUrl }}" target="_blank" title="访问：{{ .VendorUrl }}" style="text-decoration: none; color:inherit;">{{ .Vendor }}</a>{{ else }}{{ .Vendor }}{{ end }}
+                                        </span>
+                                        {{ end }}
+                                        {{ if .Price }}
+                                        <span style="background:var(--color-surface); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--color-border); color:var(--color-text-muted);">
+                                            💰 {{ .Price }}
+                                        </span>
+                                        {{ end }}
+                                    </div>
                                 </td>
                                 <td style="padding: 8px;">
                                     {{ if .IPs }}
@@ -191,18 +202,6 @@
                                         <span class="muted">--</span>
                                     {{ end }}
                                 </td>
-                                <td style="padding: 8px;">
-                                    {{ if .Vendor }}
-                                        {{ if .VendorUrl }}
-                                            <a href="{{ .VendorUrl }}" target="_blank" title="访问：{{ .VendorUrl }}" style="color: var(--color-primary); text-decoration: none; border-bottom: 1px dashed var(--color-primary); padding-bottom: 1px; font-weight: 500;">{{ .Vendor }} ↗</a>
-                                        {{ else }}
-                                            {{ .Vendor }}
-                                        {{ end }}
-                                    {{ else }}
-                                        --
-                                    {{ end }}
-                                </td>
-                                <td style="padding: 8px;">{{ if .Price }}{{ .Price }}{{ else }}--{{ end }}</td>
                                 <td style="padding: 8px;">
                                     {{ if .ExpiredAt }}
                                         {{ .ExpiredAt }}
