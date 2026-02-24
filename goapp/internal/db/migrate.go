@@ -20,23 +20,6 @@ func Migrate(dbConn *sql.DB) error {
 			tg_user_id INTEGER DEFAULT 0,
             created_at TEXT NOT NULL
         )`,
-		`CREATE TABLE IF NOT EXISTS tg_dialogs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
-            dialog_id TEXT NOT NULL,
-            title TEXT,
-            username TEXT,
-            updated_at TEXT NOT NULL
-        )`,
-		`CREATE TABLE IF NOT EXISTS tg_sign_tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            owner TEXT NOT NULL,
-            account_id INTEGER NOT NULL,
-            dialog_id TEXT NOT NULL,
-            message TEXT,
-            created_at TEXT NOT NULL,
-            UNIQUE(owner, account_id)
-        )`,
 		`CREATE TABLE IF NOT EXISTS tg_auto_send_tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner TEXT NOT NULL,
@@ -54,15 +37,6 @@ func Migrate(dbConn *sql.DB) error {
             last_reply TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
-        )`,
-		`CREATE TABLE IF NOT EXISTS tg_login_flows (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            owner TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            account_name TEXT,
-            session_text TEXT NOT NULL,
-            phone_code_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL
         )`,
 		`CREATE TABLE IF NOT EXISTS tg_auto_reply_rules (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
