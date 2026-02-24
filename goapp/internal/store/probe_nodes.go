@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type ProbeNode struct {
 	LastPingStr     string
 	Version         string
 	IP              string
+	IPs             []string
 	UpgradeProgress string
 }
 
@@ -84,6 +86,9 @@ func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 			nodes[i].Online = online == 1
 			nodes[i].Version = versionStr
 			nodes[i].IP = ipStr
+			if ipStr != "" {
+				nodes[i].IPs = strings.Split(ipStr, "\n")
+			}
 			nodes[i].UpgradeProgress = upStr
 			if nodes[i].LastPing > 0 {
 				nodes[i].LastPingStr = time.Unix(nodes[i].LastPing, 0).Format("2006-01-02 15:04:05")
@@ -133,6 +138,9 @@ func GetProbeNodeBySecret(dbConn *sql.DB, secret string) (ProbeNode, error) {
 		n.Online = online == 1
 		n.Version = versionStr
 		n.IP = ipStr
+		if ipStr != "" {
+			n.IPs = strings.Split(ipStr, "\n")
+		}
 		n.UpgradeProgress = upStr
 		if n.LastPing > 0 {
 			n.LastPingStr = time.Unix(n.LastPing, 0).Format("2006-01-02 15:04:05")

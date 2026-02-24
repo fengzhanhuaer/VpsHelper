@@ -180,8 +180,16 @@
                                     <strong>{{ .Name }}</strong>
                                     {{ if .Note }}<br><span style="font-size:0.85em; color:var(--color-text-muted);">{{.Note}}</span>{{ end }}
                                 </td>
-                                <td style="padding: 8px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap;">
-                                    {{ if .IP }}{{ .IP }}{{ else }}--{{ end }}
+                                <td style="padding: 8px;">
+                                    {{ if .IPs }}
+                                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                                            {{ range .IPs }}
+                                            <span style="font-family: monospace; font-size: 0.85em; background: var(--color-surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;" title="{{.}}">{{ . }}</span>
+                                            {{ end }}
+                                        </div>
+                                    {{ else }}
+                                        <span class="muted">--</span>
+                                    {{ end }}
                                 </td>
                                 <td style="padding: 8px;">
                                     {{ if .Vendor }}
