@@ -7,39 +7,48 @@ INSTALL_DIR="/opt/vpsprobe"
 SERVICE_NAME="vpsprobe"
 BINARY_NAME="vpsprobe"
 
+OFFLINE_MODE=0
+
 show_menu() {
   while true; do
     echo "======================================"
     echo "         VpsProbe 探针管理菜单        "
     echo "======================================"
-    echo "1. 安装/更新 探针服务"
-    echo "2. 查看探针运行状态 (systemctl status)"
-    echo "3. 查看探针实时日志 (journalctl -f)  "
-    echo "4. 重启探针服务"
-    echo "5. 停止探针服务"
+    echo "1. 安装/更新 探针服务 (在线下载)"
+    echo "2. 离线安装 探针服务 (从当前目录读取)"
+    echo "3. 查看探针运行状态 (systemctl status)"
+    echo "4. 查看探针实时日志 (journalctl -f)  "
+    echo "5. 重启探针服务"
+    echo "6. 停止探针服务"
     echo "0. 退出菜单"
     echo "======================================"
-    if ! read -rp "请输入对应的数字 [0-5]: " choice </dev/tty; then
+    if ! read -rp "请输入对应的数字 [0-6]: " choice </dev/tty; then
       echo "无法打开交互终端，自动退出菜单。"
       exit 0
     fi
     case "$choice" in
       1)
-        echo "开始执行安装/更新流程..."
+        OFFLINE_MODE=0
+        echo "开始执行在线安装/更新流程..."
         break
         ;;
       2)
-        systemctl status "${SERVICE_NAME}.service" --no-pager || true
+        OFFLINE_MODE=1
+        echo "开始执行离线安装流程..."
+        break
         ;;
       3)
+        systemctl status "${SERVICE_NAME}.service" --no-pager || true
+        ;;
+      4)
         echo "按 Ctrl+C 退出日志查看..."
         journalctl -u "${SERVICE_NAME}.service" -f || true
         ;;
-      4)
+      5)
         systemctl restart "${SERVICE_NAME}.service"
         echo "已重启探针服务。"
         ;;
-      5)
+      6)
         systemctl stop "${SERVICE_NAME}.service"
         echo "已停止探针服务。"
         ;;
@@ -48,7 +57,7 @@ show_menu() {
         exit 0
         ;;
       *)
-        echo "无效选择，请输入 0-5 之间的数字。"
+        echo "无效选择，请输入 0-6 之间的数字。"
         ;;
     esac
     echo ""
@@ -77,8 +86,15 @@ fi
 
 REPO_SLUG="${REPO_SLUG:-$DEFAULT_REPO}"
 
+if [[ -z "$PROBE_SECRET" ]] && [[ "$MENU_ONLY" == "1" ]]; then
+  read -rp "请输入为您分配的探针节点密钥 (--secret): " PROBE_SECRET </dev/tty || true
+fi
+if [[ -z "$PROBE_HOST" ]] && [[ "$MENU_ONLY" == "1" ]]; then
+  read -rp "请输入主控端访问地址 (--host, 如 https://example.com): " PROBE_HOST </dev/tty || true
+fi
+
 if [[ -z "$PROBE_SECRET" ]] || [[ -z "$PROBE_HOST" ]]; then
-  echo "安装探针必须同时指定 --secret 和 --host"
+  echo "错误：安装探针必须提供 --secret 和 --host"
   echo "例如: curl -sSL https://.../install-probe.sh | bash -s -- --secret XXX --host https://... "
   exit 1
 fi
@@ -185,8 +201,26 @@ bin_path="${INSTALL_DIR}/bin/${BINARY_NAME}"
 tmp="${bin_path}.download"
 mkdir -p "$(dirname "${tmp}")"
 
-echo "下载探针 Release: ${url}"
-download_release "${url}" "$tmp"
+if [[ "$OFFLINE_MODE" == "1" ]]; then
+  local_file=""
+  if [[ -f "./${asset}" ]]; then
+    local_file="./${asset}"
+  elif [[ -f "./vpsprobe" ]]; then
+    local_file="./vpsprobe"
+  fi
+  
+  if [[ -z "$local_file" ]]; then
+    echo "错误：当前目录 ($(pwd)) 未找到离线安装包！"
+    echo "请将下载好的 ${asset} 或 vpsprobe 放到此目录后重试。"
+    exit 1
+  fi
+  
+  echo "正在使用本地包进行离线安装: ${local_file}"
+  cp -f "$local_file" "$tmp"
+else
+  echo "下载探针 Release: ${url}"
+  download_release "${url}" "$tmp"
+fi
 
 chmod 755 "$tmp"
 

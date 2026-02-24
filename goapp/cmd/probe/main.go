@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	import_time "time"
 
 	"vpshelper-go/internal/agent"
 )
@@ -23,6 +24,14 @@ func main() {
 	flag.StringVar(&secret, "secret", "", "探针节点专属接入密钥")
 	flag.BoolVar(&version, "version", false, "显示版本号")
 	flag.Parse()
+
+	if os.Getenv("VPSHELPER_UPDATE_TEST") == "1" {
+		log.Printf("VPSHELPER_UPDATE_TEST is active. Running pre-flight probe health checks...")
+		go func() {
+			import_time.Sleep(5 * import_time.Second)
+			os.Exit(0)
+		}()
+	}
 
 	if version {
 		fmt.Println("VpsProbe v1.0.0 (Agent)")

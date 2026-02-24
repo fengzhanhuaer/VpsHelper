@@ -7,9 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -234,25 +231,7 @@ func handleIncomingControlStream(stream *yamux.Stream, intervalCh chan int, ping
 			Host   string `json:"host"`
 		}
 		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.Secret != "" {
-			log.Printf("[Agent] 收到服务端在线更新指令，开始执行自动升级并重启...")
-			go func() {
-				script := fmt.Sprintf(`#!/bin/bash
-sleep 2
-curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh > /tmp/install-probe.sh
-chmod +x /tmp/install-probe.sh
-/tmp/install-probe.sh --secret "%s" --host "%s"
-rm -f /tmp/install-probe.sh /tmp/vpsprobe_upgrade_*.sh
-`, payload.Secret, payload.Host)
-				scriptPath := fmt.Sprintf("/tmp/vpsprobe_upgrade_%d.sh", time.Now().Unix())
-				if err := os.WriteFile(scriptPath, []byte(script), 0755); err == nil {
-					cmd := exec.Command("systemd-run", "--unit=vpsprobe-upgrade-"+strconv.FormatInt(time.Now().Unix(), 10), scriptPath)
-					if err := cmd.Start(); err != nil {
-						log.Printf("[Agent] 启动升级进程失败: %v", err)
-					} else {
-						log.Printf("[Agent] 已将升级任务投递给独立 systemd worker。")
-					}
-				}
-			}()
+			handleAgentUpgradeTrigger(payload.Secret, payload.Host)
 		}
 
 	default:
