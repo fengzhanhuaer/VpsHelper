@@ -146,9 +146,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				scheme = "https"
 			}
 			host := c.Request.Host
-			if !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
-				scheme = "https"
-			}
 			baseURL := fmt.Sprintf("%s://%s", scheme, host)
 
 			if idStr == "all" {
@@ -279,9 +276,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		scheme = "https"
 	}
 	host := c.Request.Host
-	if !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
-		scheme = "https"
-	}
 	baseURL := fmt.Sprintf("%s://%s", scheme, host)
 
 	// Consolidate for frontend
