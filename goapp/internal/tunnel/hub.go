@@ -154,3 +154,28 @@ func PushConfigToNode(nodeID int64, msgType string, payload interface{}) error {
 	}
 	return nil
 }
+
+// PushConfigToAllNodes pushes a control message to all currently connected probes.
+func PushConfigToAllNodes(msgType string, payload interface{}) {
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	msg := ControlMsg{
+		Type:    msgType,
+		Payload: rawPayload,
+	}
+
+	ActiveSessions.Range(func(key, value interface{}) bool {
+		sess := value.(*yamux.Session)
+		stream, err := sess.OpenStream()
+		if err == nil {
+			go func() {
+				defer stream.Close()
+				enc := json.NewEncoder(stream)
+				_ = enc.Encode(msg)
+			}()
+		}
+		return true
+	})
+}
