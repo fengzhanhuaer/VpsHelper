@@ -192,10 +192,10 @@
                                     </div>
                                 </td>
                                 <td style="padding: 8px;">
-                                    {{ if .IPs }}
+                                    {{ if .IPInfos }}
                                         <div style="display: flex; flex-direction: column; gap: 4px;">
-                                            {{ range .IPs }}
-                                            <span style="font-family: monospace; font-size: 0.85em; background: var(--color-surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; cursor: pointer;" title="点击复制 IP：{{.}}" onclick="copyText(this, '{{ . }}')">{{ . }}</span>
+                                            {{ range .IPInfos }}
+                                            <span style="font-family: monospace; font-size: 0.85em; background: var(--color-surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; cursor: pointer;" title="点击复制 IP：{{.Value}}" onclick="copyText(this, '{{ .Value }}')">{{ .Value }}</span>
                                             {{ end }}
                                         </div>
                                     {{ else }}

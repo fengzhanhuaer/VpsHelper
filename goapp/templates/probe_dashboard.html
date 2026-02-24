@@ -192,16 +192,25 @@
                         </div>
                         <div class="server-header">
                             <div class="server-name">
-                                <span class="status-indicator {{ if .Online }}status-online{{ else }}status-offline{{ end }}" id="dot-{{ .ID }}"></span>
-                                {{ .Name }}
-                                {{ if .Vendor }}
-                                    {{ if .VendorUrl }}
-                                        <span style="font-size: 0.9em;">(<a href="{{ .VendorUrl }}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">{{ .Vendor }}</a>)</span>
-                                    {{ else }}
-                                        <span style="font-size: 0.9em;">({{ .Vendor }})</span>
+                                <div style="display:flex; align-items:center; flex-wrap:wrap;">
+                                    <span class="status-indicator {{ if .Online }}status-online{{ else }}status-offline{{ end }}" id="dot-{{ .ID }}"></span>
+                                    {{ .Name }}
+                                    {{ if .Vendor }}
+                                        {{ if .VendorUrl }}
+                                            <span style="font-size: 0.9em; margin-left:4px;">(<a href="{{ .VendorUrl }}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">{{ .Vendor }}</a>)</span>
+                                        {{ else }}
+                                            <span style="font-size: 0.9em; margin-left:4px;">({{ .Vendor }})</span>
+                                        {{ end }}
                                     {{ end }}
+                                    {{ if .Note }}<span class="server-note" style="margin-left:4px;">({{.Note}})</span>{{ end }}
+                                </div>
+                                {{ if .IPInfos }}
+                                <div style="margin-left: 14px; margin-top: 4px; display: flex; flex-direction: column; gap: 2px;">
+                                    {{ range .IPInfos }}
+                                    <span style="font-size: 0.75em; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="{{ .Geo }}">🌍 {{ .Geo }}</span>
+                                    {{ end }}
+                                </div>
                                 {{ end }}
-                                {{ if .Note }}<span class="server-note">({{.Note}})</span>{{ end }}
                             </div>
                             <div style="text-align: right;">
                                 <div style="font-size: 0.8em; color: var(--color-text-muted);" id="uptime-{{ .ID }}">获取中...</div>

@@ -3,9 +3,67 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
+
+var geoCache sync.Map
+
+func getGeoForIP(ip string) string {
+	if val, ok := geoCache.Load(ip); ok {
+		return val.(string)
+	}
+
+	geoCache.Store(ip, "获取中...")
+
+	go func() {
+		geoReq, err := http.NewRequest("GET", "http://ip-api.com/line/"+ip+"?fields=country,city,isp&lang=zh-CN", nil)
+		if err != nil {
+			geoCache.Store(ip, "未知归属地")
+			return
+		}
+		
+		client := &http.Client{Timeout: 5 * time.Second}
+		geoResp, err := client.Do(geoReq)
+		if err != nil {
+			geoCache.Store(ip, "未知归属地")
+			return
+		}
+		defer geoResp.Body.Close()
+		
+		geoBody, _ := io.ReadAll(geoResp.Body)
+		parts := strings.Split(strings.TrimSpace(string(geoBody)), "\n")
+		var geoStr string
+		
+		label := "IPv4"
+		if strings.Contains(ip, ":") {
+			label = "IPv6"
+		}
+
+		if len(parts) == 3 {
+			if parts[1] != "" {
+				geoStr = fmt.Sprintf("%s: %s %s (%s)", label, parts[0], parts[1], parts[2])
+			} else {
+				geoStr = fmt.Sprintf("%s: %s (%s)", label, parts[0], parts[2])
+			}
+		} else {
+			geoStr = label + "未知归属地"
+		}
+		
+		geoCache.Store(ip, geoStr)
+	}()
+
+	return "获取中..."
+}
+
+type NodeIPInfo struct {
+	Value string
+	Geo   string
+	Raw   string
+}
 
 // ProbeNode represents a registered probe agent node (identity, stored in main DB).
 type ProbeNode struct {
@@ -28,6 +86,7 @@ type ProbeNode struct {
 	Version         string
 	IP              string
 	IPs             []string
+	IPInfos         []NodeIPInfo
 	UpgradeProgress string
 }
 
@@ -90,6 +149,10 @@ func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 				nodes[i].IPs = strings.FieldsFunc(ipStr, func(r rune) bool {
 					return r == '\n' || r == ','
 				})
+				for _, rawIP := range nodes[i].IPs {
+					geo := getGeoForIP(rawIP)
+					nodes[i].IPInfos = append(nodes[i].IPInfos, NodeIPInfo{Raw: rawIP, Value: rawIP, Geo: geo})
+				}
 			}
 			nodes[i].UpgradeProgress = upStr
 			if nodes[i].LastPing > 0 {
@@ -144,6 +207,10 @@ func GetProbeNodeBySecret(dbConn *sql.DB, secret string) (ProbeNode, error) {
 			n.IPs = strings.FieldsFunc(ipStr, func(r rune) bool {
 				return r == '\n' || r == ','
 			})
+			for _, rawIP := range n.IPs {
+				geo := getGeoForIP(rawIP)
+				n.IPInfos = append(n.IPInfos, NodeIPInfo{Raw: rawIP, Value: rawIP, Geo: geo})
+			}
 		}
 		n.UpgradeProgress = upStr
 		if n.LastPing > 0 {
