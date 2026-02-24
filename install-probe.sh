@@ -38,18 +38,34 @@ show_menu() {
         break
         ;;
       3)
-        systemctl status "${SERVICE_NAME}.service" --no-pager || true
+        if [[ "$INITSYS" == "systemd" ]]; then
+          systemctl status "${SERVICE_NAME}.service" --no-pager || true
+        elif [[ "$INITSYS" == "openrc" ]]; then
+          rc-service "${SERVICE_NAME}" status || true
+        fi
         ;;
       4)
         echo "按 Ctrl+C 退出日志查看..."
-        journalctl -u "${SERVICE_NAME}.service" -f || true
+        if [[ "$INITSYS" == "systemd" ]]; then
+          journalctl -u "${SERVICE_NAME}.service" -f || true
+        elif [[ "$INITSYS" == "openrc" ]]; then
+          tail -f "/var/log/${SERVICE_NAME}.err" "/var/log/${SERVICE_NAME}.log" || true
+        fi
         ;;
       5)
-        systemctl restart "${SERVICE_NAME}.service"
+        if [[ "$INITSYS" == "systemd" ]]; then
+          systemctl restart "${SERVICE_NAME}.service"
+        elif [[ "$INITSYS" == "openrc" ]]; then
+          rc-service "${SERVICE_NAME}" restart
+        fi
         echo "已重启探针服务。"
         ;;
       6)
-        systemctl stop "${SERVICE_NAME}.service"
+        if [[ "$INITSYS" == "systemd" ]]; then
+          systemctl stop "${SERVICE_NAME}.service"
+        elif [[ "$INITSYS" == "openrc" ]]; then
+          rc-service "${SERVICE_NAME}" stop
+        fi
         echo "已停止探针服务。"
         ;;
       0)
@@ -177,13 +193,30 @@ download_release() {
   fi
 }
 
-ensure_command systemctl "需要 systemd (systemctl) 才能一键安装为服务"
+INITSYS=""
+if command -v systemctl >/dev/null 2>&1; then
+  INITSYS="systemd"
+elif command -v rc-service >/dev/null 2>&1; then
+  INITSYS="openrc"
+else
+  echo "当前系统既没有发现 systemd (systemctl) 也没有 openrc (rc-service)。"
+  echo "请手动将命令 ${INSTALL_DIR}/bin/${BINARY_NAME} -host ${PROBE_HOST} -secret ${PROBE_SECRET} 加入开机自启。"
+  exit 1
+fi
 
 disable_service_if_exists() {
   local svc="$1"
-  if systemctl cat "${svc}.service" >/dev/null 2>&1; then
-    echo "检测到已有探针服务：${svc}.service，正在停止并禁用..."
-    systemctl disable --now "${svc}.service" >/dev/null 2>&1 || true
+  if [[ "$INITSYS" == "systemd" ]]; then
+    if systemctl cat "${svc}.service" >/dev/null 2>&1; then
+      echo "检测到已有探针服务：${svc}.service，正在停止并禁用..."
+      systemctl disable --now "${svc}.service" >/dev/null 2>&1 || true
+    fi
+  elif [[ "$INITSYS" == "openrc" ]]; then
+    if rc-service "${svc}" status >/dev/null 2>&1 || [[ -f "/etc/init.d/${svc}" ]]; then
+      echo "检测到已有探针服务：${svc}，正在停止并禁用..."
+      rc-service "${svc}" stop >/dev/null 2>&1 || true
+      rc-update del "${svc}" >/dev/null 2>&1 || true
+    fi
   fi
 }
 
@@ -257,8 +290,10 @@ fi
 
 mv -f "$tmp" "$bin_path"
 
-service_file="/etc/systemd/system/${SERVICE_NAME}.service"
-cat >"$service_file" <<EOF
+
+if [[ "$INITSYS" == "systemd" ]]; then
+  service_file="/etc/systemd/system/${SERVICE_NAME}.service"
+  cat >"$service_file" <<EOF
 [Unit]
 Description=VpsProbe (Agent) Service
 After=network.target
@@ -275,35 +310,83 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}"
+  chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}"
 
-systemctl daemon-reload
-systemctl enable "${SERVICE_NAME}.service" >/dev/null 2>&1
-echo "正在启动当前探针服务并进行状态健康检查..."
-systemctl restart "${SERVICE_NAME}.service"
+  systemctl daemon-reload
+  systemctl enable "${SERVICE_NAME}.service" >/dev/null 2>&1
+  echo "正在启动当前探针服务并进行状态健康检查..."
+  systemctl restart "${SERVICE_NAME}.service"
 
-sleep 3
-if ! systemctl is-active --quiet "${SERVICE_NAME}.service"; then
-  echo "======================================"
-  echo "错误: 探针安装/升级后进程启动失败！"
-  if [[ $has_backup -eq 1 ]]; then
-    echo "正在触发回滚机制恢复前一个版本..."
-    mv -f "$backup_path" "$bin_path"
-    systemctl restart "${SERVICE_NAME}.service"
-    if systemctl is-active --quiet "${SERVICE_NAME}.service"; then
-      echo "回滚成功，已恢复到旧版本进程并重启！"
+  sleep 3
+  if ! systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+    echo "======================================"
+    echo "错误: 探针安装/升级后进程启动失败！"
+    if [[ $has_backup -eq 1 ]]; then
+      echo "正在触发回滚机制恢复前一个版本..."
+      mv -f "$backup_path" "$bin_path"
+      systemctl restart "${SERVICE_NAME}.service"
+      if systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+        echo "回滚成功，已恢复到旧版本进程并重启！"
+      else
+        echo "回滚后仍启动失败，请查阅日志详情: journalctl -fu ${SERVICE_NAME}.service"
+      fi
     else
-      echo "回滚后仍启动失败，请查阅日志详情: journalctl -fu ${SERVICE_NAME}.service"
+      echo "无可用旧版本执行档用于回滚。请查阅系统日志: journalctl -fu ${SERVICE_NAME}.service"
     fi
+    echo "======================================"
+    exit 1
   else
-    echo "无可用旧版本执行档用于回滚。请查阅系统日志: journalctl -fu ${SERVICE_NAME}.service"
+    echo "✅ 探针进程启动/运行健康，安装/更新完成。"
   fi
-  echo "======================================"
-  exit 1
-else
-  echo "✅ 探针进程启动/运行健康，安装/更新完成。"
+
+elif [[ "$INITSYS" == "openrc" ]]; then
+  service_file="/etc/init.d/${SERVICE_NAME}"
+  cat >"$service_file" <<EOF
+#!/sbin/openrc-run
+
+name="VpsProbe (Agent) Service"
+description="VPS Helper Agent Node"
+command="${bin_path}"
+command_args="-host ${PROBE_HOST} -secret ${PROBE_SECRET}"
+command_background="yes"
+pidfile="/run/${SERVICE_NAME}.pid"
+output_log="/var/log/${SERVICE_NAME}.log"
+error_log="/var/log/${SERVICE_NAME}.err"
+directory="${INSTALL_DIR}"
+command_user="${RUN_USER}:${RUN_USER}"
+
+depend() {
+        need net
+}
+EOF
+
+  chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}"
+  chmod +x "$service_file"
+
+  rc-update add "${SERVICE_NAME}" default >/dev/null 2>&1
+  echo "正在启动当前探针服务并进行状态健康检查..."
+  rc-service "${SERVICE_NAME}" restart
+
+  sleep 3
+  if ! rc-service "${SERVICE_NAME}" status | grep -q 'started'; then
+    echo "======================================"
+    echo "错误: 探针进程启动失败！"
+    if [[ $has_backup -eq 1 ]]; then
+      echo "正在触发回滚机制..."
+      mv -f "$backup_path" "$bin_path"
+      rc-service "${SERVICE_NAME}" restart
+      if rc-service "${SERVICE_NAME}" status | grep -q 'started'; then
+        echo "回滚成功！"
+      fi
+    fi
+    echo "请检查 /var/log/${SERVICE_NAME}.err"
+    echo "======================================"
+    exit 1
+  else
+    echo "✅ 探针进程启动/运行健康，安装/更新完成。"
+  fi
 fi
 
 echo ""
-echo "探针安装/更新完成！程序目前由 Systemd 托管运行，已连接至 ${PROBE_HOST}。"
+echo "探针安装/更新完成！程序目前由后台服务自动托管运行，已连接至 ${PROBE_HOST}。"
 show_menu
