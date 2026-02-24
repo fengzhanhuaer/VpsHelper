@@ -218,22 +218,23 @@
                                     <div id="cmd-github-{{.ID}}" style="display:none;">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
                                     <div id="cmd-proxy-{{.ID}}" style="display:none;">curl -sSL "{{ $.BaseURL }}/api/probe/install?secret={{ .Secret }}" | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
                                     
-                                    <div class="actions">
-                                        <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.VendorUrl}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}')">⚙️ 设置</button>
-                                        
-                                        <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-github-{{.ID}}')" title="从 GitHub 下载脚本">命令(直连)</button>
-                                        <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-proxy-{{.ID}}')" title="从主控端代理下载脚本，解决 GitHub 污染问题">命令(代理)</button>
-                                        
-                                        <form method="post" action="/probe/nodes" style="display:inline;">
-                                            <input type="hidden" name="id" value="{{ .ID }}" />
-                                            <input type="hidden" name="secret_for_upgrade" value="{{ .Secret }}" />
-                                            <button class="ghost btn-sm" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')" style="color: #2563eb;">升级</button>
-                                        </form>
-
-                                        <form method="post" action="/probe/nodes" style="display:inline;">
-                                            <input type="hidden" name="id" value="{{ .ID }}" />
-                                            <button class="ghost btn-sm" type="submit" name="action" value="delete" onclick="return confirm('确认删除该节点吗？')" style="color:var(--color-error);">删除</button>
-                                        </form>
+                                    <div class="actions" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                            <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.VendorUrl}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}')">⚙️ 设置</button>
+                                            <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-github-{{.ID}}')" title="从 GitHub 下载脚本">命令(直连)</button>
+                                            <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-proxy-{{.ID}}')" title="从主控端代理下载脚本，解决 GitHub 污染问题">命令(代理)</button>
+                                        </div>
+                                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                            <form method="post" action="/probe/nodes" style="margin:0;">
+                                                <input type="hidden" name="id" value="{{ .ID }}" />
+                                                <input type="hidden" name="secret_for_upgrade" value="{{ .Secret }}" />
+                                                <button class="ghost btn-sm" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')" style="color: #2563eb;">🚀 升级探针</button>
+                                            </form>
+                                            <form method="post" action="/probe/nodes" style="margin:0;">
+                                                <input type="hidden" name="id" value="{{ .ID }}" />
+                                                <button class="ghost btn-sm" type="submit" name="action" value="delete" onclick="return confirm('确认删除该节点吗？')" style="color:var(--color-error);">🗑️ 删除节点</button>
+                                            </form>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
