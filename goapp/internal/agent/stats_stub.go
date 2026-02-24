@@ -6,6 +6,8 @@ type SystemStats struct {
 	CPU      float64 `json:"cpu"`
 	MemPct   float64 `json:"mem_pct"`
 	MemUsed  string  `json:"mem_used"`
+	SwapPct  float64 `json:"swap_pct"`
+	SwapUsed string  `json:"swap_used"`
 	DiskPct  float64 `json:"disk_pct"`
 	DiskUsed string  `json:"disk_used"`
 	NetIn    uint64  `json:"net_in"`

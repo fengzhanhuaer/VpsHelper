@@ -224,8 +224,16 @@
                             <div class="metric-label">🧠 内存</div>
                             <div class="metric-value"><span id="mem-val-{{ .ID }}">--</span></div>
                         </div>
-                        <div class="progress-bar-bg">
+                        <div class="progress-bar-bg" style="margin-bottom: 8px;">
                             <div class="progress-bar-fill" id="mem-bar-{{ .ID }}" style="width: 0%;"></div>
+                        </div>
+						
+                        <div class="metric-row">
+                            <div class="metric-label">🔄 Swap</div>
+                            <div class="metric-value"><span id="swap-val-{{ .ID }}">--</span></div>
+                        </div>
+                        <div class="progress-bar-bg" style="margin-bottom: 12px;">
+                            <div class="progress-bar-fill" id="swap-bar-{{ .ID }}" style="background-color: #17a2b8; width: 0%;"></div>
                         </div>
 
                         <div class="metric-row">
@@ -340,6 +348,11 @@
                 if (data.mem_pct !== undefined) {
                     document.getElementById('mem-val-' + nodeId).textContent = data.mem_used + " (" + data.mem_pct.toFixed(1) + "%)";
                     updateBarColor('mem-bar-' + nodeId, data.mem_pct);
+                }
+
+                if (data.swap_pct !== undefined) {
+                    document.getElementById('swap-val-' + nodeId).textContent = data.swap_used + " (" + data.swap_pct.toFixed(1) + "%)";
+                    updateBarColor('swap-bar-' + nodeId, data.swap_pct);
                 }
 
                 if (data.disk_pct !== undefined) {

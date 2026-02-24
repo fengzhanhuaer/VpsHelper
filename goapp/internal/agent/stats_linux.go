@@ -16,6 +16,8 @@ type SystemStats struct {
 	CPU      float64 `json:"cpu"`       // 0-100
 	MemPct   float64 `json:"mem_pct"`   // 0-100
 	MemUsed  string  `json:"mem_used"`  // e.g. "1.2G/2.0G"
+	SwapPct  float64 `json:"swap_pct"`  // 0-100
+	SwapUsed string  `json:"swap_used"` // e.g. "1.2G/2.0G"
 	DiskPct  float64 `json:"disk_pct"`  // 0-100
 	DiskUsed string  `json:"disk_used"` // e.g. "10G/20G"
 	NetIn    uint64  `json:"net_in"`    // Bytes/sec
@@ -60,14 +62,14 @@ func readCPU() (total uint64, idle uint64, err error) {
 	return total, idle, nil
 }
 
-func readMem() (float64, string) {
+func readMem() (float64, string, float64, string) {
 	file, err := os.Open("/proc/meminfo")
 	if err != nil {
-		return 0, ""
+		return 0, "", 0, ""
 	}
 	defer file.Close()
 
-	var memTotal, memAvailable uint64
+	var memTotal, memAvailable, swapTotal, swapFree uint64
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -81,18 +83,44 @@ func readMem() (float64, string) {
 			if len(fields) > 1 {
 				memAvailable, _ = strconv.ParseUint(fields[1], 10, 64)
 			}
+		} else if strings.HasPrefix(line, "SwapTotal:") {
+			fields := strings.Fields(line)
+			if len(fields) > 1 {
+				swapTotal, _ = strconv.ParseUint(fields[1], 10, 64)
+			}
+		} else if strings.HasPrefix(line, "SwapFree:") {
+			fields := strings.Fields(line)
+			if len(fields) > 1 {
+				swapFree, _ = strconv.ParseUint(fields[1], 10, 64)
+			}
 		}
 	}
 
-	if memTotal == 0 {
-		return 0, ""
+	var memPct float64
+	var memStr string
+	if memTotal > 0 {
+		memUsed := memTotal - memAvailable
+		memPct = float64(memUsed) / float64(memTotal) * 100
+		memStr = fmt.Sprintf("%.1fG/%.1fG", float64(memUsed)/1024/1024, float64(memTotal)/1024/1024)
 	}
 
-	memUsed := memTotal - memAvailable
-	pct := float64(memUsed) / float64(memTotal) * 100
+	var swapPct float64
+	var swapStr string
+	if swapTotal > 0 {
+		swapUsed := swapTotal - swapFree
+		swapPct = float64(swapUsed) / float64(swapTotal) * 100
+		
+		// Adjust display format based on size
+		if swapTotal < 1024*1024 { // Less than 1GB -> show MB
+			swapStr = fmt.Sprintf("%.1fM/%.1fM", float64(swapUsed)/1024, float64(swapTotal)/1024)
+		} else { // Show GB
+			swapStr = fmt.Sprintf("%.1fG/%.1fG", float64(swapUsed)/1024/1024, float64(swapTotal)/1024/1024)
+		}
+	} else {
+		swapStr = "0M/0M"
+	}
 
-	usedStr := fmt.Sprintf("%.1fG/%.1fG", float64(memUsed)/1024/1024, float64(memTotal)/1024/1024)
-	return pct, usedStr
+	return memPct, memStr, swapPct, swapStr
 }
 
 // pseudoFSTypes lists virtual/kernel filesystems that should never be counted as disk space.
@@ -269,8 +297,8 @@ func CollectStats() SystemStats {
 	lastCPUTotal = tot
 	lastCPUIdle = idl
 
-	// Mem & Disk
-	s.MemPct, s.MemUsed = readMem()
+	// Mem & Swap & Disk
+	s.MemPct, s.MemUsed, s.SwapPct, s.SwapUsed = readMem()
 	s.DiskPct, s.DiskUsed = readDisk()
 	s.Uptime = readUptime()
 
