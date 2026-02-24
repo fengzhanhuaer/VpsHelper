@@ -215,12 +215,14 @@
                                 </td>
                                 <td style="padding: 8px;">
                                     <!-- 隐藏一键安装命令用于复制 -->
-                                    <div id="cmd-{{.ID}}" style="display:none;">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
+                                    <div id="cmd-github-{{.ID}}" style="display:none;">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
+                                    <div id="cmd-proxy-{{.ID}}" style="display:none;">curl -sSL "{{ $.BaseURL }}/api/probe/install?secret={{ .Secret }}" | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
                                     
                                     <div class="actions">
                                         <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.VendorUrl}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}')">⚙️ 设置</button>
                                         
-                                        <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-{{.ID}}')">复制命令</button>
+                                        <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-github-{{.ID}}')" title="从 GitHub 下载脚本">命令(直连)</button>
+                                        <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-proxy-{{.ID}}')" title="从主控端代理下载脚本，解决 GitHub 污染问题">命令(代理)</button>
                                         
                                         <form method="post" action="/probe/nodes" style="display:inline;">
                                             <input type="hidden" name="id" value="{{ .ID }}" />

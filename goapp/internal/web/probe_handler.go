@@ -544,3 +544,42 @@ func (h *Handler) probeLatestBinary(c *gin.Context) {
 
 	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 }
+
+// probeInstallScript downloads the install script from GitHub and proxies it
+func (h *Handler) probeInstallScript(c *gin.Context) {
+	secret := c.Query("secret")
+	if secret == "" {
+		c.String(http.StatusUnauthorized, "echo 'Error: secret parameter is required'; exit 1")
+		return
+	}
+	
+	_, err := store.GetProbeNodeBySecret(h.dbConn, secret)
+	if err != nil {
+		c.String(http.StatusForbidden, "echo 'Error: invalid secret or node not found'; exit 1")
+		return
+	}
+
+	const scriptURL = "https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh"
+	
+	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", scriptURL, nil)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "echo 'Error: Failed to construct proxy request'; exit 1")
+		return
+	}
+	
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.String(http.StatusBadGateway, "Failed to download installation script from upstream: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		c.String(resp.StatusCode, "Upstream returned non-OK status: %d", resp.StatusCode)
+		return
+	}
+	
+	c.DataFromReader(resp.StatusCode, resp.ContentLength, "text/plain; charset=utf-8", resp.Body, nil)
+}
+
