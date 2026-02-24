@@ -160,6 +160,13 @@ func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 			"version": probeVersion,
 		}
 	}
+	
+	// Explicitly broadcast to clear the upgrade progress UI when reconnecting
+	EventBroadcast <- map[string]interface{}{
+		"type":     "upgrade_progress",
+		"node_id":  node.ID,
+		"progress": "",
+	}
 
 	// Maintain connection state / block until dropped
 	go monitorSession(node.ID, node.Name, yamuxSession)
