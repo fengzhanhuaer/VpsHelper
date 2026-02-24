@@ -2520,6 +2520,11 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 		return
 	}
 
+	if version.Version != "dev" && info.TagName == version.Version {
+		_ = send(100, "当前已是最新版本，无需升级！", true, true)
+		return
+	}
+
 	asset, err := update.SelectReleaseAsset(rel, ghAsset)
 	if err != nil {
 		fail(25, "选择 Release Asset 失败: "+err.Error())
