@@ -197,7 +197,15 @@ case "$arch" in
 esac
 
 asset="${BINARY_NAME}_${goos}_${goarch}"
-url="https://github.com/${REPO_SLUG}/releases/latest/download/${asset}"
+
+# Try to download from the master proxy instead of raw github URL directly
+if [[ -n "${PROBE_HOST}" ]]; then
+  # Try to form proxy url
+  clean_host="${PROBE_HOST%/}"
+  url="${clean_host}/api/probe/latest_binary?os=${goos}&arch=${goarch}"
+else
+  url="https://github.com/${REPO_SLUG}/releases/latest/download/${asset}"
+fi
 
 mkdir -p "${INSTALL_DIR}/bin" "${INSTALL_DIR}/userdata"
 bin_path="${INSTALL_DIR}/bin/${BINARY_NAME}"
