@@ -348,12 +348,14 @@ name="VpsProbe (Agent) Service"
 description="VPS Helper Agent Node"
 command="${bin_path}"
 command_args="-host ${PROBE_HOST} -secret ${PROBE_SECRET}"
-command_background="yes"
+supervisor="supervise-daemon"
 pidfile="/run/${SERVICE_NAME}.pid"
 output_log="/var/log/${SERVICE_NAME}.log"
 error_log="/var/log/${SERVICE_NAME}.err"
 directory="${INSTALL_DIR}"
 command_user="${RUN_USER}:${RUN_USER}"
+respawn_delay="5"
+respawn_max="0"
 
 depend() {
         need net
