@@ -1877,12 +1877,43 @@ func localUserTables(dbConn *sql.DB) ([]string, error) {
 	return tables, nil
 }
 
-// databaseTableList returns the names of all user tables in the local SQLite DB.
+// databaseTableList returns the names of all user tables in the local SQLite DB or Cloudflare D1.
 func (h *Handler) databaseTableList(c *gin.Context) {
 	if h.currentUser(c) == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
 		return
 	}
+
+	source := c.Query("source")
+	if source == "d1" {
+		settings, _ := store.GetSettings(h.dbConn, []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"})
+		cfToken := strings.TrimSpace(settings["cf_api_token"])
+		accountID := strings.TrimSpace(settings["cf_account_id"])
+		dbID := strings.TrimSpace(settings["cf_d1_database_id"])
+		if cfToken == "" || accountID == "" || dbID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "请先绑定并配置 D1 数据库"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+		defer cancel()
+		cf := d1.Client{Token: cfToken}
+		ok, rows, msg := cf.D1Query(ctx, accountID, dbID, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", nil)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": msg})
+			return
+		}
+
+		var tables []string
+		for _, row := range rows {
+			if name, ok := row["name"].(string); ok && name != "" {
+				tables = append(tables, name)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "tables": tables})
+		return
+	}
+
 	tables, err := localUserTables(h.dbConn)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
@@ -1941,9 +1972,8 @@ func (h *Handler) autoDatabaseCleanup() {
 	}
 }
 
-// databaseTableData returns JSON-encoded rows for a given local SQLite table.
-// The allowlist is dynamically built from sqlite_master, so ALL local user
-// tables are accessible — no hard-coded list needed.
+// databaseTableData returns JSON-encoded rows for a given local SQLite table or Cloudflare D1 table.
+// The allowlist is dynamically built from sqlite_master, so ALL user tables are accessible.
 func (h *Handler) databaseTableData(c *gin.Context) {
 	if h.currentUser(c) == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
@@ -1956,7 +1986,81 @@ func (h *Handler) databaseTableData(c *gin.Context) {
 		return
 	}
 
-	// Dynamic allowlist: only tables that actually exist in the local DB.
+	source := c.Query("source")
+	if source == "d1" {
+		settings, _ := store.GetSettings(h.dbConn, []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"})
+		cfToken := strings.TrimSpace(settings["cf_api_token"])
+		accountID := strings.TrimSpace(settings["cf_account_id"])
+		dbID := strings.TrimSpace(settings["cf_d1_database_id"])
+		if cfToken == "" || accountID == "" || dbID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "请先绑定并配置 D1 数据库"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		defer cancel()
+		cf := d1.Client{Token: cfToken}
+
+		// Allowlist check via D1 sqlite_master
+		okCheck, checkRows, msgCheck := cf.D1Query(ctx, accountID, dbID, "SELECT name FROM sqlite_master WHERE type='table' AND name = ?", []any{tableName})
+		if !okCheck {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "查询云端表结构出错: " + msgCheck})
+			return
+		}
+		if len(checkRows) == 0 {
+			c.JSON(http.StatusForbidden, gin.H{"ok": false, "error": "table not found in D1: " + tableName})
+			return
+		}
+
+		okData, dataRows, msgData := cf.D1Query(ctx, accountID, dbID, "SELECT * FROM "+tableName+" LIMIT 500", nil)
+		if !okData {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "查询云端数据出错: " + msgData})
+			return
+		}
+
+		var cols []string
+		if len(dataRows) > 0 {
+			for k := range dataRows[0] {
+				cols = append(cols, k)
+			}
+			sort.Strings(cols)
+		} else {
+			okPragma, pragmaRows, _ := cf.D1Query(ctx, accountID, dbID, "PRAGMA table_info("+tableName+")", nil)
+			if okPragma {
+				type colInfo struct {
+					cid  int
+					name string
+				}
+				var pCols []colInfo
+				for _, pRow := range pragmaRows {
+					cidNum := 0
+					switch v := pRow["cid"].(type) {
+					case float64:
+						cidNum = int(v)
+					case int:
+						cidNum = v
+					}
+					if name, ok := pRow["name"].(string); ok && name != "" {
+						pCols = append(pCols, colInfo{cid: cidNum, name: name})
+					}
+				}
+				sort.Slice(pCols, func(i, j int) bool { return pCols[i].cid < pCols[j].cid })
+				for _, c := range pCols {
+					cols = append(cols, c.name)
+				}
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"ok":      true,
+			"table":   tableName,
+			"columns": cols,
+			"rows":    dataRows,
+		})
+		return
+	}
+
+	// Dynamic allowlist for local DB
 	tables, err := localUserTables(h.dbConn)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})

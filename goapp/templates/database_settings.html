@@ -90,6 +90,10 @@
             <!-- ── 查看表数据 ─────────────────────────────────── -->
             <h2 style="margin:0 0 12px; font-size:16px;">查看表数据</h2>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+                <select id="db-source-select" style="min-width:120px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; font:inherit;">
+                    <option value="local">🖥 本地 SQLite</option>
+                    <option value="d1">☁ Cloudflare D1</option>
+                </select>
                 <select id="db-table-select" style="flex:1; min-width:180px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; font:inherit; box-sizing:border-box;">
                     <option value="">-- 加载中… --</option>
                 </select>
@@ -200,18 +204,21 @@
         });
 
         /* ── 查看表数据 ───────────────────────────────────────── */
-        var viewBtn     = document.getElementById('db-view-btn');
-        var tableSelect = document.getElementById('db-table-select');
-        var statusEl    = document.getElementById('db-table-status');
-        var errorEl     = document.getElementById('db-table-error');
-        var wrapper     = document.getElementById('db-table-wrapper');
-        var thead       = document.getElementById('db-table-head');
-        var tbody       = document.getElementById('db-table-body');
+        var viewBtn      = document.getElementById('db-view-btn');
+        var sourceSelect = document.getElementById('db-source-select');
+        var tableSelect  = document.getElementById('db-table-select');
+        var statusEl     = document.getElementById('db-table-status');
+        var errorEl      = document.getElementById('db-table-error');
+        var wrapper      = document.getElementById('db-table-wrapper');
+        var thead        = document.getElementById('db-table-head');
+        var tbody        = document.getElementById('db-table-body');
 
-        /* ── 动态加载全部本地表名 ──────────────────────────────── */
-        (async function loadTableList() {
+        /* ── 动态加载全部表名 ──────────────────────────────── */
+        async function loadTableList() {
+            var source = sourceSelect.value;
+            tableSelect.innerHTML = '<option value="">-- 加载中… --</option>';
             try {
-                var res  = await fetch('/cloudflare/database/tables', { credentials: 'same-origin' });
+                var res  = await fetch('/cloudflare/database/tables?source=' + source, { credentials: 'same-origin' });
                 var data = await res.json();
                 if (!data.ok || !data.tables) throw new Error(data.error || '加载失败');
                 tableSelect.innerHTML = '<option value="">-- 选择表 --</option>';
@@ -222,9 +229,12 @@
                     tableSelect.appendChild(opt);
                 });
             } catch (e) {
-                tableSelect.innerHTML = '<option value="">-- 加载失败 --</option>';
+                tableSelect.innerHTML = '<option value="">-- 加载失败: ' + (e.message || '未知错误') + ' --</option>';
             }
-        })();
+        }
+        
+        loadTableList();
+        sourceSelect.addEventListener('change', loadTableList);
 
 
         function esc(v) {
@@ -239,6 +249,7 @@
 
         viewBtn.addEventListener('click', async function () {
             var table = tableSelect.value;
+            var source = sourceSelect.value;
             if (!table) {
                 errorEl.textContent = '请先选择一个表。';
                 errorEl.style.display = 'block';
@@ -251,7 +262,7 @@
             viewBtn.disabled       = true;
 
             try {
-                var res  = await fetch('/cloudflare/database/table/data?table=' + encodeURIComponent(table), {
+                var res  = await fetch('/cloudflare/database/table/data?source=' + source + '&table=' + encodeURIComponent(table), {
                     credentials: 'same-origin'
                 });
                 var data = await res.json();
