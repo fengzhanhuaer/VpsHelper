@@ -58,7 +58,11 @@ func main() {
 	defer probeDB.Close()
 	appstore.SetProbeDB(probeDB)
 
-	// Background tasks.
+	// =========================================================================
+	// 【私有服务端口】(Private Server Port) (默认: 15019)
+	// 作用: 仅用于响应探针长链接 WebSocket 握手，下发命令及后续建立代理网络隧道(Yamux)。
+	// 它不提供任何网页界面或常规 API 响应。
+	// =========================================================================
 	if err := tunnel.StartServer(context.Background(), database); err != nil {
 		log.Printf("[warn] tunnel server start failed: %v", err)
 	}
@@ -97,7 +101,11 @@ func main() {
 	router.SetHTMLTemplate(tmpl)
 
 	routes.Register(router, cfg, database)
-
+	// =========================================================================
+	// 【主控服务端口】(Main Server Port) (默认: 15018)
+	// 作用: 承载面向管理员的后台 Web 面板页面，同时响应探针的常规 HTTP 短链请求
+	// (例如探针启动寻址 /api/probe/discover，或走代理通道下载最新安装包 /api/probe/latest_binary)。
+	// =========================================================================
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           router,

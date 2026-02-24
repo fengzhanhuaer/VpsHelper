@@ -32,6 +32,8 @@ var (
 )
 
 // StartServer starts the WebSocket tunnel listener on the specified private port.
+// 这个隔离出来的服务专门用于响应探针的长链接请求握手，
+// 以便后续下发指令并建立 Yamux 代理网络隧道。不在此处提供常规 API。
 func StartServer(ctx context.Context, dbConn *sql.DB) error {
 	settings, err := store.GetSettings(dbConn, []string{"probe_private_port"})
 	if err != nil {
