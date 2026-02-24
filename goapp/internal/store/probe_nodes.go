@@ -21,9 +21,12 @@ type ProbeNode struct {
 	ExpireDaysStr  string
 
 	// Runtime fields loaded from local DB (probe_node_status), not backed up.
-	Online   bool
-	LastPing int64 // unix seconds
-	Version  string
+	Online          bool
+	LastPing        int64 // unix seconds
+	LastPingStr     string
+	Version         string
+	IP              string
+	UpgradeProgress string
 }
 
 // ListProbeNodes returns all probe nodes from the main DB, merged with runtime
@@ -73,13 +76,20 @@ func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 		// Merge runtime status from probe DB.
 		if probeDB != nil {
 			var online int
-			var versionStr string
+			var versionStr, ipStr, upStr string
 			_ = probeDB.QueryRow(
-				`SELECT online, last_ping, version FROM probe_node_status WHERE node_id = ?`,
+				`SELECT online, last_ping, version, ip, upgrade_progress FROM probe_node_status WHERE node_id = ?`,
 				nodes[i].ID,
-			).Scan(&online, &nodes[i].LastPing, &versionStr)
+			).Scan(&online, &nodes[i].LastPing, &versionStr, &ipStr, &upStr)
 			nodes[i].Online = online == 1
 			nodes[i].Version = versionStr
+			nodes[i].IP = ipStr
+			nodes[i].UpgradeProgress = upStr
+			if nodes[i].LastPing > 0 {
+				nodes[i].LastPingStr = time.Unix(nodes[i].LastPing, 0).Format("2006-01-02 15:04:05")
+			} else {
+				nodes[i].LastPingStr = "--"
+			}
 		}
 	}
 	return nodes, nil
@@ -116,12 +126,19 @@ func GetProbeNodeBySecret(dbConn *sql.DB, secret string) (ProbeNode, error) {
 	// Merge runtime status.
 	if probeDB != nil {
 		var online int
-		var versionStr string
+		var versionStr, ipStr, upStr string
 		_ = probeDB.QueryRow(
-			`SELECT online, last_ping, version FROM probe_node_status WHERE node_id = ?`, n.ID,
-		).Scan(&online, &n.LastPing, &versionStr)
+			`SELECT online, last_ping, version, ip, upgrade_progress FROM probe_node_status WHERE node_id = ?`, n.ID,
+		).Scan(&online, &n.LastPing, &versionStr, &ipStr, &upStr)
 		n.Online = online == 1
 		n.Version = versionStr
+		n.IP = ipStr
+		n.UpgradeProgress = upStr
+		if n.LastPing > 0 {
+			n.LastPingStr = time.Unix(n.LastPing, 0).Format("2006-01-02 15:04:05")
+		} else {
+			n.LastPingStr = "--"
+		}
 	}
 	return n, nil
 }
@@ -175,7 +192,7 @@ func UpdateProbeNodeSecret(dbConn *sql.DB, id int64, secret string) error {
 
 
 // SetProbeNodeOnline updates the runtime online/ping state (and version) in probe DB only.
-func SetProbeNodeOnline(nodeID int64, online bool, version string) {
+func SetProbeNodeOnline(nodeID int64, online bool, version, ip string) {
 	if probeDB == nil {
 		return
 	}
@@ -184,12 +201,21 @@ func SetProbeNodeOnline(nodeID int64, online bool, version string) {
 		onlineInt = 1
 	}
 	_, _ = probeDB.Exec(
-		`INSERT INTO probe_node_status (node_id, online, last_ping, version)
-		 VALUES (?, ?, ?, ?)
+		`INSERT INTO probe_node_status (node_id, online, last_ping, version, ip, upgrade_progress)
+		 VALUES (?, ?, ?, ?, ?, '')
 		 ON CONFLICT(node_id) DO UPDATE SET 
 		 	online = excluded.online, 
 		 	last_ping = excluded.last_ping,
-		 	version = CASE WHEN excluded.version != '' THEN excluded.version ELSE version END`,
-		nodeID, onlineInt, time.Now().Unix(), version,
+		 	version = CASE WHEN excluded.version != '' THEN excluded.version ELSE version END,
+			ip = CASE WHEN excluded.ip != '' THEN excluded.ip ELSE ip END`,
+		nodeID, onlineInt, time.Now().Unix(), version, ip,
 	)
+}
+
+// UpdateProbeNodeUpgradeProgress updates the upgrade progress text for a node.
+func UpdateProbeNodeUpgradeProgress(nodeID int64, progress string) {
+	if probeDB == nil {
+		return
+	}
+	_, _ = probeDB.Exec(`UPDATE probe_node_status SET upgrade_progress = ? WHERE node_id = ?`, progress, nodeID)
 }

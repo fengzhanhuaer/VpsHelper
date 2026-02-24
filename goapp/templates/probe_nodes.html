@@ -164,6 +164,7 @@
                                 <th style="padding: 8px;">ID</th>
                                 <th style="padding: 8px;">状态</th>
                                 <th style="padding: 8px;">节点名称</th>
+                                <th style="padding: 8px;">IP</th>
                                 <th style="padding: 8px;">厂商</th>
                                 <th style="padding: 8px;">价格</th>
                                 <th style="padding: 8px;">到期时间</th>
@@ -183,10 +184,17 @@
                                     {{ if .Version }}
                                     <div style="font-size: 0.75em; color: var(--color-text-muted); margin-top: 4px;">{{ .Version }}</div>
                                     {{ end }}
+                                    {{ if .UpgradeProgress }}
+                                    <div style="font-size: 0.75em; color: var(--color-primary); margin-top: 4px; font-weight: bold;">{{ .UpgradeProgress }}</div>
+                                    {{ end }}
+                                    <div title="最后心跳时间" style="font-size: 0.7em; color: var(--color-text-muted); margin-top: 4px;">{{ if .LastPingStr }}{{ .LastPingStr }}{{ else }}--{{ end }}</div>
                                 </td>
                                 <td style="padding: 8px;">
                                     <strong>{{ .Name }}</strong>
                                     {{ if .Note }}<br><span style="font-size:0.85em; color:var(--color-text-muted);">{{.Note}}</span>{{ end }}
+                                </td>
+                                <td style="padding: 8px; font-family: monospace; font-size: 0.9em;">
+                                    {{ if .IP }}{{ .IP }}{{ else }}--{{ end }}
                                 </td>
                                 <td style="padding: 8px;">
                                     {{ if .Vendor }}

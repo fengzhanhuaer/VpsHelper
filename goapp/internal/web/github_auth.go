@@ -45,7 +45,7 @@ func (h *Handler) githubSettings(c *gin.Context) {
 	}
 
 	if c.Request.Method == http.MethodGet {
-		settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_session_days"})
+		settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_session_days", "github_auth_enabled"})
 		
 		sessionDays := settings["github_session_days"]
 		if sessionDays == "" {
@@ -58,6 +58,10 @@ func (h *Handler) githubSettings(c *gin.Context) {
 			"ClientSecret": settings["github_client_secret"],
 			"AllowedUser":  settings["github_allowed_user"],
 			"SessionDays":  sessionDays,
+			"AuthEnabled":  settings["github_auth_enabled"] == "true",
+			"TestSuccess":  c.Query("test") == "success",
+			"TestError":    c.Query("test") == "error",
+			"ErrorMsg":     c.Query("msg"),
 		})
 		return
 	}
@@ -66,17 +70,28 @@ func (h *Handler) githubSettings(c *gin.Context) {
 	clientSecret := strings.TrimSpace(c.PostForm("client_secret"))
 	allowedUser := strings.TrimSpace(c.PostForm("allowed_user"))
 	sessionDays := strings.TrimSpace(c.PostForm("session_days"))
+	authEnabled := c.PostForm("auth_enabled") == "on" || c.PostForm("auth_enabled") == "true"
 
 	_ = store.SetSetting(h.dbConn, "github_client_id", clientID)
 	_ = store.SetSetting(h.dbConn, "github_client_secret", clientSecret)
 	_ = store.SetSetting(h.dbConn, "github_allowed_user", allowedUser)
 	_ = store.SetSetting(h.dbConn, "github_session_days", sessionDays)
+	_ = store.SetSetting(h.dbConn, "github_auth_enabled", fmt.Sprintf("%v", authEnabled))
+
+	if c.PostForm("action") == "test" {
+		c.Redirect(http.StatusFound, "/auth/github/login?type=test")
+		return
+	}
 
 	msg := "配置已更新！"
-	if clientID == "" || clientSecret == "" || allowedUser == "" {
-		msg = "配置部分留空，GitHub 鉴权防护现已禁用。"
+	if authEnabled {
+		if clientID == "" || clientSecret == "" || allowedUser == "" {
+			msg = "注意：配置部分留空，GitHub 鉴权防护将无法生效。"
+		} else {
+			msg += " 现在访问主页将受到 GitHub 授权防护。"
+		}
 	} else {
-		msg += " 现在访问主页将受到 GitHub 授权防护。"
+		msg += " GitHub 鉴权防护处于禁用状态。"
 	}
 
 	c.HTML(http.StatusOK, "github_settings.html", gin.H{
@@ -85,6 +100,7 @@ func (h *Handler) githubSettings(c *gin.Context) {
 		"ClientSecret": clientSecret,
 		"AllowedUser":  allowedUser,
 		"SessionDays":  sessionDays,
+		"AuthEnabled":  authEnabled,
 		"Message":      msg,
 		"MsgOK":        true,
 	})
@@ -105,6 +121,11 @@ func (h *Handler) githubLogin(c *gin.Context) {
 
 	sess := sessions.Default(c)
 	sess.Set("oauth_state", state)
+	if c.Query("type") == "test" {
+		sess.Set("github_login_type", "test")
+	} else {
+		sess.Set("github_login_type", "login")
+	}
 	_ = sess.Save()
 
 	url := conf.AuthCodeURL(state)
@@ -162,8 +183,21 @@ func (h *Handler) githubCallback(c *gin.Context) {
 		return
 	}
 
+	loginType := sess.Get("github_login_type")
 	if !strings.EqualFold(user.Login, allowedUser) {
+		if loginType == "test" {
+			c.Redirect(http.StatusFound, "/settings/github?test=error&msg=用户名不匹配")
+			return
+		}
 		c.String(http.StatusForbidden, fmt.Sprintf("Access Denied: You are logged in as %s, but only %s is allowed.", user.Login, allowedUser))
+		return
+	}
+
+	if loginType == "test" {
+		sess.Set("github_test_passed", true)
+		sess.Delete("github_login_type")
+		_ = sess.Save()
+		c.Redirect(http.StatusFound, "/settings/github?test=success")
 		return
 	}
 

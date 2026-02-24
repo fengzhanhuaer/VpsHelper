@@ -231,8 +231,9 @@ func (h *Handler) login(c *gin.Context) {
 	}
 
 	// GitHub Authentication Firewall Check
-	settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user"})
-	if strings.TrimSpace(settings["github_client_id"]) != "" &&
+	settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_auth_enabled"})
+	if settings["github_auth_enabled"] == "true" && 
+		strings.TrimSpace(settings["github_client_id"]) != "" &&
 		strings.TrimSpace(settings["github_client_secret"]) != "" &&
 		strings.TrimSpace(settings["github_allowed_user"]) != "" {
 		

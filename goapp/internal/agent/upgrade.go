@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"vpshelper-go/internal/update"
+
+	"github.com/hashicorp/yamux"
 )
 
 func fallbackDownloadWithProgress(ctx context.Context, host, secret, osParam, archParam string, destPath string, onProgress update.ProgressCallback) (string, error) {
@@ -53,8 +55,20 @@ func fallbackDownloadWithProgress(ctx context.Context, host, secret, osParam, ar
 	return update.DownloadReleaseAssetWithProgress(ctx, asset, secret, destPath, onProgress)
 }
 
-func handleAgentUpgradeTrigger(secret, host string) {
+func handleAgentUpgradeTrigger(secret, host string, session *yamux.Session) {
 	log.Printf("[Agent] 收到服务端在线更新指令，准备执行自更新流程...")
+	
+	sendProgress := func(msg string) {
+		if session == nil || session.IsClosed() {
+			return
+		}
+		stream, err := session.OpenStream()
+		if err == nil {
+			defer stream.Close()
+			_, _ = stream.Write([]byte("UPGRADE_PROGRESS\n"))
+			_ = json.NewEncoder(stream).Encode(map[string]string{"progress": msg})
+		}
+	}
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -75,12 +89,14 @@ func handleAgentUpgradeTrigger(secret, host string) {
 				percent := int(float64(p.Received) / float64(p.Total) * 100)
 				if percent%10 == 0 && percent != lastPercent {
 					log.Printf("[Agent] 下载进度: %d%% (%d / %d bytes)", percent, p.Received, p.Total)
+					sendProgress(fmt.Sprintf("下载进度: %d%%", percent))
 					lastPercent = percent
 				}
 			}
 		}
 
 		log.Printf("[Agent] 正在向 GitHub 拉取释放版本元数据...")
+		sendProgress("正在拉取最新版本元数据...")
 		var tmpFile string
 		
 		info, release, err := update.FetchLatestGitHubRelease(ctx, "fengzhanhuaer", "VpsHelper", "")
@@ -88,15 +104,18 @@ func handleAgentUpgradeTrigger(secret, host string) {
 			asset, err := update.SelectReleaseAsset(release, "vpsprobe")
 			if err == nil {
 				log.Printf("[Agent] 开始从 GitHub 下载新探针包: %s...", asset.Name)
+				sendProgress("开始从 GitHub 下载新探针包...")
 				tmpFile, err = update.DownloadReleaseAssetWithProgress(ctx, asset, "", downloadPath, progressCb)
 			}
 		}
 
 		if err != nil || tmpFile == "" {
 			log.Printf("[Agent] 从 GitHub 获取版本失败 (%v)，回退请求主控代理转发探针文件...", err)
+			sendProgress("直连获取失败，回退至主控代理下载...")
 			tmpFile, err = fallbackDownloadWithProgress(ctx, host, secret, runtime.GOOS, runtime.GOARCH, downloadPath, progressCb)
 			if err != nil {
 				log.Printf("[Agent] 代理转发下载依然失败: %v", err)
+				sendProgress("更新失败: 下载探针文件失败")
 				_ = os.Remove(downloadPath + ".download")
 				return
 			}
@@ -104,6 +123,7 @@ func handleAgentUpgradeTrigger(secret, host string) {
 		defer os.Remove(tmpFile) // clean up
 
 		log.Printf("[Agent] 新版下载完成，执行预检测试生存能力...")
+		sendProgress("下载完成，执行预检测试...")
 
 		cmd := exec.CommandContext(ctx, tmpFile)
 		cmd.Env = append(os.Environ(), "VPSHELPER_UPDATE_TEST=1")
@@ -111,6 +131,7 @@ func handleAgentUpgradeTrigger(secret, host string) {
 		
 		if err != nil {
 			log.Printf("[Agent] 新版预检失败，拒绝升级: %v, 输出: %s", err, string(output))
+			sendProgress("预检失败，拒绝升级")
 			return
 		}
 		
@@ -120,10 +141,12 @@ func handleAgentUpgradeTrigger(secret, host string) {
 		}
 
 		log.Printf("[Agent] 预检存活通过，正在执行程序文件热替换...")
+		sendProgress("预检通过，正在替换内核程序...")
 
 		_ = os.Rename(exePath, backupPath)
 		if err := os.Rename(tmpFile, exePath); err != nil {
 			log.Printf("[Agent] 核心文件替换失败，尝试回滚并中止操作: %v", err)
+			sendProgress("文件替换失败，操作中止")
 			_ = os.Rename(backupPath, exePath)
 			return
 		}
@@ -131,6 +154,7 @@ func handleAgentUpgradeTrigger(secret, host string) {
 		_ = os.Chmod(exePath, 0o755)
 
 		log.Printf("[Agent] 文件替换完成，触发生态热启 (%s)...", exePath)
+		sendProgress("更新成功！准备重启...")
 
 		// 让当前进程直接退出，交给 Systemd 将新文件重新拉起。
 		// 给一个很小的延迟，确保日志能写完。

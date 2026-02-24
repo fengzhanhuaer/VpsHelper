@@ -143,7 +143,7 @@ func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 	// Register session
 	ActiveSessions.Store(node.ID, yamuxSession)
 	probeVersion := c.GetHeader("X-Probe-Version")
-	store.SetProbeNodeOnline(node.ID, true, probeVersion)
+	store.SetProbeNodeOnline(node.ID, true, probeVersion, ip)
 	BroadcastStatus(node.ID, true) // Notify dashboard viewers
 
 	// Maintain connection state / block until dropped
@@ -156,7 +156,7 @@ func monitorSession(nodeID int64, nodeName string, session *yamux.Session) {
 		// Only remove if it's still THIS session (in case of quick reconnect overrides)
 		if active, ok := ActiveSessions.Load(nodeID); ok && active == session {
 			ActiveSessions.Delete(nodeID)
-			store.SetProbeNodeOnline(nodeID, false, "")
+			store.SetProbeNodeOnline(nodeID, false, "", "")
 			BroadcastStatus(nodeID, false) // Notify dashboard viewers
 			log.Printf("[Tunnel] Node %s (ID %d) detached.", nodeName, nodeID)
 		}
@@ -193,6 +193,13 @@ func handleIncomingProbeStream(nodeID int64, stream *yamux.Stream) {
 	switch handshake {
 	case "STATS":
 		handleStatsStream(nodeID, reader)
+	case "UPGRADE_PROGRESS":
+		var payload struct {
+			Progress string `json:"progress"`
+		}
+		if err := json.NewDecoder(reader).Decode(&payload); err == nil {
+			store.UpdateProbeNodeUpgradeProgress(nodeID, payload.Progress)
+		}
 	default:
 		log.Printf("[Tunnel] Unknown stream handshake from node %d: %s", nodeID, handshake)
 	}

@@ -172,7 +172,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 				}
 				return
 			}
-			go handleIncomingControlStream(stream, intervalCh, pingTasksCh)
+			go handleIncomingControlStream(stream, session, intervalCh, pingTasksCh)
 		}
 	}()
 
@@ -193,7 +193,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 // handleIncomingControlStream processes streams opened by the control center.
 // It decodes a generic JSON ControlMsg and dispatches to the correct handler.
 // New control types can be added by extending the switch below.
-func handleIncomingControlStream(stream *yamux.Stream, intervalCh chan int, pingTasksCh chan []PingTaskInfo) {
+func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, intervalCh chan int, pingTasksCh chan []PingTaskInfo) {
 	defer stream.Close()
 
 	var msg tunnel.ControlMsg
@@ -231,7 +231,7 @@ func handleIncomingControlStream(stream *yamux.Stream, intervalCh chan int, ping
 			Host   string `json:"host"`
 		}
 		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.Secret != "" {
-			handleAgentUpgradeTrigger(payload.Secret, payload.Host)
+			handleAgentUpgradeTrigger(payload.Secret, payload.Host, session)
 		}
 
 	default:

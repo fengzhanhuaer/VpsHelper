@@ -21,6 +21,9 @@
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px;">{{ .Message }}</div>
             {{ end }}
+            {{ if .TestError }}
+            <div class="error" style="padding: 10px; margin-bottom: 20px; border-radius: 4px;">❌ 授权测试失败：{{ .ErrorMsg }} (请检查客户端密钥和受信任用户配置)</div>
+            {{ end }}
             <form method="post" action="/settings/github">
                 <div class="field">
                     <label for="client_id">GitHub Client ID</label>
@@ -47,8 +50,22 @@
                     3. Authorization callback URL 请填写此主控所在机器的: <code>https://你的面板域名/auth/github/callback</code>
                 </div>
 
-                <div style="margin-top:20px;">
-                    <button class="btn" type="submit" style="width:100%;">保存配置</button>
+                <div class="field" style="margin-top:20px; padding: 10px; border: 1px solid var(--color-border); border-radius: 4px; background-color: var(--color-bg-alt);">
+                    <label style="display:flex; align-items:center; gap:8px; cursor: pointer;">
+                        <!-- If auth is already enabled, we keep it enabled, or let them uncheck. If it's disabled, they need test success to check it -->
+                        <input type="checkbox" name="auth_enabled" id="auth_enabled" {{ if .AuthEnabled }}checked{{ end }} {{ if and (not .TestSuccess) (not .AuthEnabled) }}disabled{{ end }} />
+                        <strong style="font-size: 1.1em;">启动 GitHub 授权登录保护</strong>
+                    </label>
+                    {{ if and (not .TestSuccess) (not .AuthEnabled) }}
+                        <small style="color: var(--color-error); margin-left: 28px; display: block; margin-top: 4px;">⚠️ 必须先在下方补充或更新您的授权凭据、点击 <b>测试授权配置</b> 通过后，才能允许勾选并开启保护！</small>
+                    {{ else }}
+                        <small style="color: var(--color-primary); margin-left: 28px; display: block; margin-top: 4px;">✅ 授权测试已通过，您可以勾选启用保护并保存了！如果您要关闭保护，直接取消勾选保存即可。</small>
+                    {{ end }}
+                </div>
+
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button class="btn ghost" type="submit" name="action" value="test" style="flex:1;">测试授权配置 (将自动暂存配置)</button>
+                    <button class="btn" type="submit" name="action" value="save" style="flex:1;">保存并返回</button>
                 </div>
             </form>
         </section>
