@@ -87,7 +87,9 @@ func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 			nodes[i].Version = versionStr
 			nodes[i].IP = ipStr
 			if ipStr != "" {
-				nodes[i].IPs = strings.Split(ipStr, "\n")
+				nodes[i].IPs = strings.FieldsFunc(ipStr, func(r rune) bool {
+					return r == '\n' || r == ','
+				})
 			}
 			nodes[i].UpgradeProgress = upStr
 			if nodes[i].LastPing > 0 {
@@ -139,7 +141,9 @@ func GetProbeNodeBySecret(dbConn *sql.DB, secret string) (ProbeNode, error) {
 		n.Version = versionStr
 		n.IP = ipStr
 		if ipStr != "" {
-			n.IPs = strings.Split(ipStr, "\n")
+			n.IPs = strings.FieldsFunc(ipStr, func(r rune) bool {
+				return r == '\n' || r == ','
+			})
 		}
 		n.UpgradeProgress = upStr
 		if n.LastPing > 0 {

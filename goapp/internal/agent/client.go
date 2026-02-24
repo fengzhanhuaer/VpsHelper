@@ -94,7 +94,7 @@ func fetchOutboundIPs(ctx context.Context) string {
 	v6 := <-v6Chan
 
 	if v4 != "" && v6 != "" && v4 != v6 {
-		return v4 + "\n" + v6
+		return v4 + "," + v6
 	}
 	if v4 != "" {
 		return v4
