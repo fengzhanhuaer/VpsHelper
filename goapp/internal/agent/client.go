@@ -181,8 +181,8 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	log.Printf("[Agent] Yamux 隧道连接已开启并就绪！")
 
 	errCh := make(chan error, 1)
-	// intervalCh allows the server to push interval changes to the telemetry goroutine
 	intervalCh := make(chan int, 4)
+	pingIntervalCh := make(chan int, 4)
 	// pingTasksCh receives new ping tasks configurations from server
 	pingTasksCh := make(chan []PingTaskInfo, 2)
 	pingTasksCh <- dResp.PingTasks // Initial set from discover
@@ -225,12 +225,12 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 				}
 				return
 			}
-			go handleIncomingControlStream(stream, session, intervalCh, pingTasksCh)
+			go handleIncomingControlStream(stream, session, intervalCh, pingIntervalCh, pingTasksCh)
 		}
 	}()
 
 	// Start ping worker loop
-	go startPingWorker(ctx, session, dResp.PingTasks, pingTasksCh, errCh)
+	go startPingWorker(ctx, session, dResp.PingTasks, reportInterval, pingTasksCh, pingIntervalCh, errCh)
 
 	// Block until context cancels or error triggers reconnect
 	select {
@@ -246,7 +246,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 // handleIncomingControlStream processes streams opened by the control center.
 // It decodes a generic JSON ControlMsg and dispatches to the correct handler.
 // New control types can be added by extending the switch below.
-func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, intervalCh chan int, pingTasksCh chan []PingTaskInfo) {
+func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, intervalCh chan int, pingIntervalCh chan int, pingTasksCh chan []PingTaskInfo) {
 	defer stream.Close()
 
 	var msg tunnel.ControlMsg
@@ -264,6 +264,10 @@ func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, i
 			log.Printf("[Agent] 服务端推送新汇报周期: %ds", cfg.ReportInterval)
 			select {
 			case intervalCh <- cfg.ReportInterval:
+			default:
+			}
+			select {
+			case pingIntervalCh <- cfg.ReportInterval:
 			default:
 			}
 		}
@@ -348,9 +352,18 @@ func startTelemetryStream(ctx context.Context, session *yamux.Session, initialIn
 	}
 }
 
-func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks []PingTaskInfo, pingTasksCh <-chan []PingTaskInfo, errCh chan<- error) {
+func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks []PingTaskInfo, initialInterval int, pingTasksCh <-chan []PingTaskInfo, pingIntervalCh <-chan int, errCh chan<- error) {
 	tasks := initialTasks
 	
+	// Start with default 60s unless dynamically updated to something else.
+	// But if initial is passed, maybe use it? Let's cap at 60s minimum for default ping, except when dashboard forces 5s.
+	currentInterval := 60 * time.Second
+	if initialInterval == 5 {
+		currentInterval = 5 * time.Second
+	}
+	ticker := time.NewTicker(currentInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -358,7 +371,17 @@ func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks [
 		case newTasks := <-pingTasksCh:
 			tasks = newTasks
 			log.Printf("[Agent] Ping Worker 检测到任务列表更新，当前共 %d 个任务", len(tasks))
-		case <-time.After(60 * time.Second): // Tick ping based on some interval
+		case newInterval := <-pingIntervalCh:
+			if newInterval > 0 {
+				newDuration := time.Duration(newInterval) * time.Second
+				if newInterval > 60 { // normal fallback
+					newDuration = 60 * time.Second 
+				}
+				currentInterval = newDuration
+				ticker.Reset(currentInterval)
+				log.Printf("[Agent] 拨测采集周期已动态调整为 %ds", int(newDuration.Seconds()))
+			}
+		case <-ticker.C:
 			if len(tasks) > 0 {
 				log.Printf("[Agent] 开始批量拨测 %d 个目标...", len(tasks))
 				
