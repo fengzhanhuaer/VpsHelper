@@ -122,15 +122,7 @@ func SelectReleaseAsset(rel *ghRelease, preferredName string) (SelectedAsset, er
 		return SelectedAsset{}, errors.New("release has no assets")
 	}
 
-	preferredName = strings.TrimSpace(preferredName)
-	if preferredName != "" {
-		for _, a := range rel.Assets {
-			if strings.EqualFold(a.Name, preferredName) {
-				return SelectedAsset{Name: a.Name, APIURL: a.APIURL, BrowserURL: a.BrowserDownload}, nil
-			}
-		}
-		return SelectedAsset{}, fmt.Errorf("未找到指定 asset：%s", preferredName)
-	}
+	preferredStr := strings.ToLower(strings.TrimSpace(preferredName))
 
 	// Auto select by GOOS/GOARCH.
 	goos := runtime.GOOS
@@ -138,6 +130,10 @@ func SelectReleaseAsset(rel *ghRelease, preferredName string) (SelectedAsset, er
 
 	score := func(name string) int {
 		n := strings.ToLower(name)
+		if preferredStr != "" && !strings.Contains(n, preferredStr) {
+			return -1
+		}
+
 		s := 0
 		if strings.Contains(n, strings.ToLower(goos)) {
 			s += 4
@@ -160,9 +156,9 @@ func SelectReleaseAsset(rel *ghRelease, preferredName string) (SelectedAsset, er
 		return s
 	}
 
-	best := rel.Assets[0]
-	bestScore := score(best.Name)
-	for _, a := range rel.Assets[1:] {
+	var best ghAsset
+	bestScore := -999
+	for _, a := range rel.Assets {
 		s := score(a.Name)
 		if s > bestScore {
 			best = a
@@ -170,8 +166,8 @@ func SelectReleaseAsset(rel *ghRelease, preferredName string) (SelectedAsset, er
 		}
 	}
 
-	if bestScore <= 0 && len(rel.Assets) > 1 {
-		return SelectedAsset{}, errors.New("无法自动选择合适的 asset，请在页面里填写 asset 名称")
+	if bestScore < 0 {
+		return SelectedAsset{}, fmt.Errorf("未找到合适匹配的 asset (OS: %s, ARCH: %s, 关键字: %s)", goos, goarch, preferredName)
 	}
 
 	return SelectedAsset{Name: best.Name, APIURL: best.APIURL, BrowserURL: best.BrowserDownload}, nil

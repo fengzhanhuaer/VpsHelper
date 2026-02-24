@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	import_time "time"
 
 	"vpshelper-go/internal/agent"
 )
@@ -26,11 +25,8 @@ func main() {
 	flag.Parse()
 
 	if os.Getenv("VPSHELPER_UPDATE_TEST") == "1" {
-		log.Printf("VPSHELPER_UPDATE_TEST is active. Running pre-flight probe health checks...")
-		go func() {
-			import_time.Sleep(5 * import_time.Second)
-			os.Exit(0)
-		}()
+		fmt.Println("VPSHELPER_UPDATE_TEST is active. Running pre-flight probe health checks...")
+		os.Exit(0)
 	}
 
 	if version {
