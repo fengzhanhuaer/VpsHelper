@@ -8,17 +8,18 @@ import (
 
 // ProbeTask represents a ping target task assigned to probe nodes.
 type ProbeTask struct {
-	ID        int64
-	Name      string // 备注名
-	Target    string // ping 的 IP / 域名
-	NodeIDs   string // 逗号分隔的节点 ID，例如 ",1,4,5,"
-	CreatedAt string
+	ID             int64
+	Name           string // 备注名
+	Target         string // ping 的 IP / 域名
+	NodeIDs        string // 逗号分隔的节点 ID，例如 ",1,4,5,"
+	ReportInterval int    // 拨测周期 (秒)
+	CreatedAt      string
 }
 
 // ListProbeTasks returns all ping tasks mapping.
 func ListProbeTasks(dbConn *sql.DB) ([]ProbeTask, error) {
 	rows, err := dbConn.Query(
-		`SELECT id, name, target, node_ids, created_at FROM probe_tasks ORDER BY id DESC`,
+		`SELECT id, name, target, node_ids, report_interval, created_at FROM probe_tasks ORDER BY id DESC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list probe tasks: %w", err)
@@ -28,7 +29,7 @@ func ListProbeTasks(dbConn *sql.DB) ([]ProbeTask, error) {
 	var tasks []ProbeTask
 	for rows.Next() {
 		var t ProbeTask
-		if err := rows.Scan(&t.ID, &t.Name, &t.Target, &t.NodeIDs, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Target, &t.NodeIDs, &t.ReportInterval, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)
@@ -37,20 +38,20 @@ func ListProbeTasks(dbConn *sql.DB) ([]ProbeTask, error) {
 }
 
 // CreateProbeTask inserts a new probe task map.
-func CreateProbeTask(dbConn *sql.DB, name, target, nodeIDs string) error {
+func CreateProbeTask(dbConn *sql.DB, name, target, nodeIDs string, reportInterval int) error {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	_, err := dbConn.Exec(
-		`INSERT INTO probe_tasks (name, target, node_ids, created_at) VALUES (?, ?, ?, ?)`,
-		name, target, nodeIDs, now,
+		`INSERT INTO probe_tasks (name, target, node_ids, report_interval, created_at) VALUES (?, ?, ?, ?, ?)`,
+		name, target, nodeIDs, reportInterval, now,
 	)
 	return err
 }
 
 // UpdateProbeTask edits an existing ping task.
-func UpdateProbeTask(dbConn *sql.DB, id int64, name, target, nodeIDs string) error {
+func UpdateProbeTask(dbConn *sql.DB, id int64, name, target, nodeIDs string, reportInterval int) error {
 	_, err := dbConn.Exec(
-		`UPDATE probe_tasks SET name = ?, target = ?, node_ids = ? WHERE id = ?`,
-		name, target, nodeIDs, id,
+		`UPDATE probe_tasks SET name = ?, target = ?, node_ids = ?, report_interval = ? WHERE id = ?`,
+		name, target, nodeIDs, reportInterval, id,
 	)
 	return err
 }
@@ -65,7 +66,7 @@ func DeleteProbeTask(dbConn *sql.DB, id int64) error {
 func GetProbeTasksForNode(dbConn *sql.DB, nodeID int64) ([]ProbeTask, error) {
 	nodeScope := fmt.Sprintf("%%,%d,%%", nodeID)
 	rows, err := dbConn.Query(
-		`SELECT id, name, target, node_ids, created_at FROM probe_tasks WHERE node_ids LIKE ? ORDER BY id DESC`,
+		`SELECT id, name, target, node_ids, report_interval, created_at FROM probe_tasks WHERE node_ids LIKE ? ORDER BY id DESC`,
 		nodeScope,
 	)
 	if err != nil {
@@ -76,7 +77,7 @@ func GetProbeTasksForNode(dbConn *sql.DB, nodeID int64) ([]ProbeTask, error) {
 	var tasks []ProbeTask
 	for rows.Next() {
 		var t ProbeTask
-		if err := rows.Scan(&t.ID, &t.Name, &t.Target, &t.NodeIDs, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Target, &t.NodeIDs, &t.ReportInterval, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)

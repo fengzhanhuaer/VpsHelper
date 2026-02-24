@@ -38,7 +38,13 @@ func (h *Handler) probeTasks(c *gin.Context) {
 				nodeIDsStr = "," + strings.Join(nodes, ",") + ","
 			}
 
-			if err := store.CreateProbeTask(h.dbConn, name, target, nodeIDsStr); err != nil {
+			reportIntervalStr := strings.TrimSpace(c.PostForm("report_interval"))
+			reportInterval, _ := strconv.Atoi(reportIntervalStr)
+			if reportInterval <= 0 {
+				reportInterval = 60
+			}
+
+			if err := store.CreateProbeTask(h.dbConn, name, target, nodeIDsStr, reportInterval); err != nil {
 				message = "添加失败：" + err.Error()
 				break
 			}
@@ -67,7 +73,13 @@ func (h *Handler) probeTasks(c *gin.Context) {
 				nodeIDsStr = "," + strings.Join(nodes, ",") + ","
 			}
 
-			if err := store.UpdateProbeTask(h.dbConn, id, name, target, nodeIDsStr); err != nil {
+			reportIntervalStr := strings.TrimSpace(c.PostForm("report_interval"))
+			reportInterval, _ := strconv.Atoi(reportIntervalStr)
+			if reportInterval <= 0 {
+				reportInterval = 60
+			}
+
+			if err := store.UpdateProbeTask(h.dbConn, id, name, target, nodeIDsStr, reportInterval); err != nil {
 				message = "更新任务失败：" + err.Error()
 				break
 			}
@@ -121,8 +133,9 @@ func (h *Handler) syncPingTasksToNodes() {
 		tasksRes := make([]map[string]interface{}, 0, len(tasksRaw))
 		for _, t := range tasksRaw {
 			tasksRes = append(tasksRes, map[string]interface{}{
-				"id":     t.ID,
-				"target": t.Target,
+				"id":              t.ID,
+				"target":          t.Target,
+				"report_interval": t.ReportInterval,
 			})
 		}
 		_ = tunnel.PushConfigToNode(nodeID, "ping_tasks", tasksRes)

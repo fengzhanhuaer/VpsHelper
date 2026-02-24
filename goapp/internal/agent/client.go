@@ -18,8 +18,9 @@ import (
 )
 
 type PingTaskInfo struct {
-	ID     int64  `json:"id"`
-	Target string `json:"target"`
+	ID             int64  `json:"id"`
+	Target         string `json:"target"`
+	ReportInterval int    `json:"report_interval"`
 }
 
 type DiscoverResponse struct {
@@ -357,12 +358,15 @@ func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks [
 	
 	// Start with default 60s unless dynamically updated to something else.
 	// But if initial is passed, maybe use it? Let's cap at 60s minimum for default ping, except when dashboard forces 5s.
-	currentInterval := 60 * time.Second
+	globalOverride := 0
 	if initialInterval == 5 {
-		currentInterval = 5 * time.Second
+		globalOverride = 5
 	}
-	ticker := time.NewTicker(currentInterval)
+
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+
+	lastRun := make(map[int64]time.Time)
 
 	for {
 		select {
@@ -371,22 +375,46 @@ func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks [
 		case newTasks := <-pingTasksCh:
 			tasks = newTasks
 			log.Printf("[Agent] Ping Worker 检测到任务列表更新，当前共 %d 个任务", len(tasks))
+			
+			// cleanup removed tasks from lastRun tracker
+			active := make(map[int64]bool)
+			for _, t := range tasks { active[t.ID] = true }
+			for id := range lastRun {
+				if !active[id] { delete(lastRun, id) }
+			}
+
 		case newInterval := <-pingIntervalCh:
 			if newInterval > 0 {
-				newDuration := time.Duration(newInterval) * time.Second
-				if newInterval > 60 { // normal fallback
-					newDuration = 60 * time.Second 
+				if newInterval <= 5 { 
+					globalOverride = newInterval
+				} else {
+					globalOverride = 0
 				}
-				currentInterval = newDuration
-				ticker.Reset(currentInterval)
-				log.Printf("[Agent] 拨测采集周期已动态调整为 %ds", int(newDuration.Seconds()))
+				log.Printf("[Agent] 拨测采集周期收到动态指令: globalOverride=%ds", globalOverride)
 			}
 		case <-ticker.C:
 			if len(tasks) > 0 {
-				log.Printf("[Agent] 开始批量拨测 %d 个目标...", len(tasks))
+				now := time.Now()
+				var toRun []PingTaskInfo
 				
-				results := make(map[int64]map[string]float64)
 				for _, t := range tasks {
+					interval := t.ReportInterval
+					if interval <= 0 { interval = 60 }
+					if globalOverride > 0 { interval = globalOverride }
+					
+					last, ok := lastRun[t.ID]
+					if !ok || now.Sub(last) >= time.Duration(interval)*time.Second {
+						toRun = append(toRun, t)
+						lastRun[t.ID] = now
+					}
+				}
+
+				if len(toRun) == 0 {
+					continue
+				}
+
+				results := make(map[int64]map[string]float64)
+				for _, t := range toRun {
 					latencyMs, lossPct, ok := doPing(ctx, t.Target)
 					if ok || lossPct == 100 {
 						results[t.ID] = map[string]float64{
