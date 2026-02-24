@@ -144,9 +144,22 @@ func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 
 	// Register session
 	ActiveSessions.Store(node.ID, yamuxSession)
+	
 	probeVersion := c.GetHeader("X-Probe-Version")
+	reportedIP := c.GetHeader("X-Probe-IP")
+	if reportedIP != "" {
+		ip = reportedIP // Use dual-stack IP autonomously reported by the probe
+	}
+
 	store.SetProbeNodeOnline(node.ID, true, probeVersion, ip)
 	BroadcastStatus(node.ID, true) // Notify dashboard viewers
+	if probeVersion != "" {
+		EventBroadcast <- map[string]interface{}{
+			"type":    "probe_version",
+			"node_id": node.ID,
+			"version": probeVersion,
+		}
+	}
 
 	// Maintain connection state / block until dropped
 	go monitorSession(node.ID, node.Name, yamuxSession)
@@ -201,6 +214,11 @@ func handleIncomingProbeStream(nodeID int64, stream *yamux.Stream) {
 		}
 		if err := json.NewDecoder(reader).Decode(&payload); err == nil {
 			store.UpdateProbeNodeUpgradeProgress(nodeID, payload.Progress)
+			EventBroadcast <- map[string]interface{}{
+				"type":     "upgrade_progress",
+				"node_id":  nodeID,
+				"progress": payload.Progress,
+			}
 		}
 	default:
 		log.Printf("[Tunnel] Unknown stream handshake from node %d: %s", nodeID, handshake)

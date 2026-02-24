@@ -162,7 +162,7 @@
                         <thead>
                             <tr style="border-bottom: 2px solid var(--color-border); text-align: left;">
                                 <th style="padding: 8px;">ID</th>
-                                <th style="padding: 8px;">状态</th>
+
                                 <th style="padding: 8px;">节点名称</th>
                                 <th style="padding: 8px;">IP</th>
                                 <th style="padding: 8px;">厂商</th>
@@ -175,25 +175,12 @@
                             {{ range .Nodes }}
                             <tr style="border-bottom: 1px solid var(--color-border);">
                                 <td style="padding: 8px;">{{ .ID }}</td>
-                                <td style="padding: 8px;">
-                                    {{ if .Online }}
-                                        <span class="status-badge status-online">在线</span>
-                                    {{ else }}
-                                        <span class="status-badge status-offline">离线</span>
-                                    {{ end }}
-                                    {{ if .Version }}
-                                    <div style="font-size: 0.75em; color: var(--color-text-muted); margin-top: 4px;">{{ .Version }}</div>
-                                    {{ end }}
-                                    {{ if .UpgradeProgress }}
-                                    <div style="font-size: 0.75em; color: var(--color-primary); margin-top: 4px; font-weight: bold;">{{ .UpgradeProgress }}</div>
-                                    {{ end }}
-                                    <div title="最后心跳时间" style="font-size: 0.7em; color: var(--color-text-muted); margin-top: 4px;">{{ if .LastPingStr }}{{ .LastPingStr }}{{ else }}--{{ end }}</div>
-                                </td>
+
                                 <td style="padding: 8px;">
                                     <strong>{{ .Name }}</strong>
                                     {{ if .Note }}<br><span style="font-size:0.85em; color:var(--color-text-muted);">{{.Note}}</span>{{ end }}
                                 </td>
-                                <td style="padding: 8px; font-family: monospace; font-size: 0.9em;">
+                                <td style="padding: 8px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap;">
                                     {{ if .IP }}{{ .IP }}{{ else }}--{{ end }}
                                 </td>
                                 <td style="padding: 8px;">

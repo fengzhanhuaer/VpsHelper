@@ -65,7 +65,7 @@ func FetchLatestGitHubRelease(ctx context.Context, owner, repo, token string) (G
 	}
 	setGitHubHeaders(req, token, "application/vnd.github+json")
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		info.Note = "请求 GitHub API 失败。"
@@ -259,9 +259,17 @@ func downloadAssetToTempOnce(ctx context.Context, asset SelectedAsset, token str
 
 	// Try parallel download first for large files (public repos with browser URL).
 
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
+	transport.TLSHandshakeTimeout = 5 * time.Second
+	transport.ResponseHeaderTimeout = 10 * time.Second
 
 	client := &http.Client{
-		Timeout: 0,
+		Timeout:   0, // Unlimited duration for the actual file body stream transfer
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return errors.New("too many redirects")
@@ -364,12 +372,18 @@ func copyWithProgress(src io.Reader, dst io.Writer, initial int64, total int64, 
 	buf := make([]byte, 64*1024)
 	lastReport := time.Time{}
 
+	// Speed calculation baseline
+	startTime := time.Now()
+	startCopied := copied
+
 	report := func(force bool) {
 		if !force && !lastReport.IsZero() && time.Since(lastReport) < 200*time.Millisecond {
 			return
 		}
 		lastReport = time.Now()
-		onProgress(DownloadProgress{Received: copied, Total: total})
+		if onProgress != nil {
+			onProgress(DownloadProgress{Received: copied, Total: total})
+		}
 	}
 
 	report(true)
@@ -382,6 +396,16 @@ func copyWithProgress(src io.Reader, dst io.Writer, initial int64, total int64, 
 			copied += int64(n)
 			report(false)
 		}
+
+		// Judge speed after the initial 10-second grace period
+		elapsed := time.Since(startTime).Seconds()
+		if elapsed > 10 {
+			speed := float64(copied - startCopied) / elapsed
+			if speed < 10*1024 { // 10 KB/s
+				return errors.New("download speed too slow (< 10KB/s), switching to proxy")
+			}
+		}
+
 		if readErr != nil {
 			if errors.Is(readErr, io.EOF) {
 				report(true)

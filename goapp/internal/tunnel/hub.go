@@ -48,6 +48,9 @@ var (
 	
 	// PingBroadcast channel receives ping results from probes and broadcasts them to viewers.
 	PingBroadcast = make(chan PingStatsBroadcastMsg, 100)
+
+	// EventBroadcast channel pushes arbitrary status updates (like Upgrade Progress or Version) to dashboard.
+	EventBroadcast = make(chan map[string]interface{}, 100)
 )
 
 // PingStatsBroadcastMsg wraps the ping telemetry payload for the frontend.
@@ -74,6 +77,20 @@ func init() {
 	
 	go func() {
 		for msg := range PingBroadcast {
+			DashboardClients.Range(func(key, value interface{}) bool {
+				conn := key.(*websocket.Conn)
+				err := conn.WriteJSON(msg)
+				if err != nil {
+					conn.Close()
+					DashboardClients.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
+
+	go func() {
+		for msg := range EventBroadcast {
 			DashboardClients.Range(func(key, value interface{}) bool {
 				conn := key.(*websocket.Conn)
 				err := conn.WriteJSON(msg)

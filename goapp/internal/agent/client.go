@@ -58,6 +58,53 @@ func Start(ctx context.Context, serverHost, secret string) {
 	}()
 }
 
+func fetchOutboundIPs(ctx context.Context) string {
+	// 给出3秒超时以避免卡死探针的长链接建立
+	subCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	v4Chan := make(chan string, 1)
+	v6Chan := make(chan string, 1)
+
+	fetchIP := func(url string, ch chan string) {
+		req, err := http.NewRequestWithContext(subCtx, "GET", url, nil)
+		if err != nil {
+			ch <- ""
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			ch <- ""
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		ip := strings.TrimSpace(string(body))
+		if len(ip) > 5 && len(ip) < 50 && !strings.Contains(ip, "<") {
+			ch <- ip
+		} else {
+			ch <- ""
+		}
+	}
+
+	go fetchIP("https://v4.ident.me", v4Chan)
+	go fetchIP("https://v6.ident.me", v6Chan)
+
+	v4 := <-v4Chan
+	v6 := <-v6Chan
+
+	if v4 != "" && v6 != "" && v4 != v6 {
+		return v4 + "\n" + v6
+	}
+	if v4 != "" {
+		return v4
+	}
+	if v6 != "" {
+		return v6
+	}
+	return ""
+}
+
 func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	// 1. Discover Real Address
 	if !strings.HasPrefix(serverHost, "http") {
@@ -105,6 +152,12 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	wsHeader := http.Header{}
 	wsHeader.Set("X-Probe-Secret", secret)
 	wsHeader.Set("X-Probe-Version", version.Version)
+	
+	reportedIP := fetchOutboundIPs(ctx)
+	if reportedIP != "" {
+		wsHeader.Set("X-Probe-IP", reportedIP)
+		log.Printf("[Agent] 已自主探明外网出口IP: %s", reportedIP)
+	}
 
 	conn, _, err := dialer.DialContext(ctx, wsAddress, wsHeader)
 	if err != nil {

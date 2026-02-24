@@ -203,7 +203,13 @@
                                 {{ end }}
                                 {{ if .Note }}<span class="server-note">({{.Note}})</span>{{ end }}
                             </div>
-                            <div style="font-size: 0.8em; color: var(--color-text-muted);" id="uptime-{{ .ID }}">获取中...</div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.8em; color: var(--color-text-muted);" id="uptime-{{ .ID }}">获取中...</div>
+                                <div style="font-size: 0.7em; color: var(--color-text-muted); margin-top: 4px;" id="version-{{ .ID }}">{{ if .Version }}{{ .Version }}{{ end }}</div>
+                            </div>
+                        </div>
+                        <div id="progress-container-{{ .ID }}" style="margin-top: -10px; margin-bottom: 12px; font-size: 0.8em; color: var(--color-primary); font-weight: bold; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; {{ if not .UpgradeProgress }}display: none;{{ end }}">
+                            🛠 <span id="progress-{{ .ID }}">{{ .UpgradeProgress }}</span>
                         </div>
 
                         <div class="metric-row">
@@ -288,6 +294,27 @@
                 if (!card) return;
 
                 const dot = document.getElementById('dot-' + nodeId);
+
+                if (data.type === "probe_version") {
+                    const verEl = document.getElementById('version-' + nodeId);
+                    if (verEl) verEl.textContent = data.version;
+                    return;
+                }
+
+                if (data.type === "upgrade_progress") {
+                    const progEl = document.getElementById('progress-' + nodeId);
+                    const container = document.getElementById('progress-container-' + nodeId);
+                    if (progEl && container) {
+                        if (data.progress) {
+                            progEl.textContent = data.progress;
+                            container.style.display = 'block';
+                        } else {
+                            progEl.textContent = '';
+                            container.style.display = 'none';
+                        }
+                    }
+                    return;
+                }
 
                 // Check Online / Offline status message
                 if (data.online === false) {
