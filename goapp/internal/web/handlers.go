@@ -57,6 +57,10 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/logout", h.logout)
 	router.GET("/change_password", h.changePassword)
 	router.POST("/change_password", h.changePassword)
+	router.GET("/settings/github", h.githubSettings)
+	router.POST("/settings/github", h.githubSettings)
+	router.GET("/auth/github/login", h.githubLogin)
+	router.GET("/auth/github/callback", h.githubCallback)
 	router.GET("/tg_helper", h.tgHelper)
 	router.POST("/tg_helper", h.tgHelperToggle)
 	router.GET("/tg/settings", h.tgSettings)
@@ -224,6 +228,20 @@ func (h *Handler) login(c *gin.Context) {
 	if !hasUsers {
 		c.Redirect(http.StatusFound, "/register")
 		return
+	}
+
+	// GitHub Authentication Firewall Check
+	settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user"})
+	if strings.TrimSpace(settings["github_client_id"]) != "" &&
+		strings.TrimSpace(settings["github_client_secret"]) != "" &&
+		strings.TrimSpace(settings["github_allowed_user"]) != "" {
+		
+		sess := sessions.Default(c)
+		authFlag := sess.Get("github_authorized")
+		if authFlag == nil || authFlag.(bool) != true {
+			c.Redirect(http.StatusFound, "/auth/github/login")
+			return
+		}
 	}
 
 	if c.Request.Method == http.MethodGet {

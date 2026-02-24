@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+    <main>
+        <section class="panel panel--center">
+            <h1>GitHub 安全登录 (配置)</h1>
+            <p class="muted">配置后，任何人在到达密码登录界面前，必须先通过特定的 GitHub 账号授权验证（防黄牛/脚本/机器人爆破登录界面）。留空则关闭验证。</p>
+            {{ if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px;">{{ .Message }}</div>
+            {{ end }}
+            <form method="post" action="/settings/github">
+                <div class="field">
+                    <label for="client_id">GitHub Client ID</label>
+                    <input id="client_id" name="client_id" type="text" value="{{ .ClientID }}" placeholder="例如：Iv1.xxxxxxxxx" autocomplete="off" />
+                </div>
+                <div class="field">
+                    <label for="client_secret">GitHub Client Secret</label>
+                    <input id="client_secret" name="client_secret" type="password" value="{{ .ClientSecret }}" placeholder="例如：a1b2c3d4..." autocomplete="off" />
+                </div>
+                <div class="field">
+                    <label for="allowed_user">限制放行的 GitHub 用户名 (必填)</label>
+                    <input id="allowed_user" name="allowed_user" type="text" value="{{ .AllowedUser }}" placeholder="你的 Github ID (如 fengzhanhuaer)" autocomplete="off" />
+                </div>
+                <div class="field">
+                    <label for="session_days">免密通行证存活时间 (天)</label>
+                    <input id="session_days" name="session_days" type="number" min="0" max="365" value="{{ .SessionDays }}" placeholder="默认 0：关闭浏览器即失效" />
+                    <small style="color: var(--color-text-muted); font-size: 0.8em; margin-top: 4px;">填 0 代表只有当前浏览器未关闭时有效。</small>
+                </div>
+                
+                <div style="background: var(--color-bg); padding: 12px; font-size: 0.9em; color: var(--color-text-muted); border-radius: 4px; margin-top: 10px;">
+                    <strong>如何获取？</strong><br/>
+                    1. 访问 <a href="https://github.com/settings/developers" target="_blank" style="color:var(--color-primary)">GitHub Developer Settings</a><br/>
+                    2. 点击 New OAuth App<br/>
+                    3. Authorization callback URL 请填写此主控所在机器的: <code>https://你的面板域名/auth/github/callback</code>
+                </div>
+
+                <div style="margin-top:20px;">
+                    <button class="btn" type="submit" style="width:100%;">保存配置</button>
+                </div>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

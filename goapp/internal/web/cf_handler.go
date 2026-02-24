@@ -93,9 +93,7 @@ func (h *Handler) cfIndex(c *gin.Context) {
 	}
 
 	if c.Request.Method == http.MethodGet {
-		settings, err := store.GetSettings(h.dbConn, []string{
-			"cf_api_token", "cf_account_id", "cf_zone_id", "cf_zone_domain", "cf_policy_id",
-		})
+		settings, err := store.GetSettings(h.dbConn, []string{"cf_api_token"})
 		if err != nil {
 			c.String(http.StatusInternalServerError, "load settings failed")
 			return
@@ -104,10 +102,6 @@ func (h *Handler) cfIndex(c *gin.Context) {
 		c.HTML(http.StatusOK, "cloudflare_index.html", gin.H{
 			"Title":      "Cloudflare 管理",
 			"Token":      settings["cf_api_token"],
-			"AccountID":  settings["cf_account_id"],
-			"ZoneID":     settings["cf_zone_id"],
-			"ZoneDomain": settings["cf_zone_domain"],
-			"PolicyID":   settings["cf_policy_id"],
 			"Message":    c.Query("message"),
 			"MsgOK":      c.Query("status") == "ok",
 		})
@@ -116,16 +110,7 @@ func (h *Handler) cfIndex(c *gin.Context) {
 
 	// POST save for global credentials
 	cfToken := strings.TrimSpace(c.PostForm("cf_api_token"))
-	cfAccountID := strings.TrimSpace(c.PostForm("cf_account_id"))
-	cfZoneID := strings.TrimSpace(c.PostForm("cf_zone_id"))
-	cfZoneDomain := strings.TrimSpace(c.PostForm("cf_zone_domain"))
-	cfPolicyID := strings.TrimSpace(c.PostForm("cf_policy_id"))
-
 	_ = store.SetSetting(h.dbConn, "cf_api_token", cfToken)
-	_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
-	_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
-	_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
-	_ = store.SetSetting(h.dbConn, "cf_policy_id", cfPolicyID)
 
 	c.Redirect(http.StatusSeeOther, "/cloudflare?message=公共凭据已保存&status=ok")
 }
@@ -206,6 +191,14 @@ func (h *Handler) cfBlocklistSync(c *gin.Context) {
 	}
 
 	client := cloudflare.NewAPIClient(cfToken, cfAccountID, cfZoneID)
+
+	if cfAccountID == "" {
+		if id, err := client.FetchAccountID(); err == nil && id != "" {
+			cfAccountID = id
+			client.AccountID = cfAccountID
+			_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
+		}
+	}
 
 	if cfZoneID == "" {
 		domain := cfZoneDomain
@@ -299,6 +292,14 @@ func (h *Handler) cfWhitelistSync(c *gin.Context) {
 	}
 
 	client := cloudflare.NewAPIClient(cfToken, cfAccountID, "")
+
+	if cfAccountID == "" {
+		if id, err := client.FetchAccountID(); err == nil && id != "" {
+			cfAccountID = id
+			client.AccountID = cfAccountID
+			_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
+		}
+	}
 
 	var validIPs []string
 	for _, ip := range strings.Split(cfAllowIPs, "\n") {

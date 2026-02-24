@@ -116,6 +116,14 @@
         }
         .speed-up { color: #17a2b8; }
         .speed-down { color: #e83e8c; }
+        .last-report {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed var(--color-border);
+            font-size: 0.78em;
+            color: var(--color-text-muted);
+            text-align: right;
+        }
 
         .offline-overlay {
             position: absolute;
@@ -232,6 +240,7 @@
                                 <span class="metric-value" id="net-out-{{ .ID }}">-- KB/s</span>
                             </div>
                         </div>
+                        <div class="last-report" id="last-report-{{ .ID }}">最后汇报: --</div>
                     </div>
                     {{ end }}
                 </div>
@@ -318,6 +327,14 @@
                 
                 if (data.uptime !== undefined) {
                     document.getElementById('uptime-' + nodeId).textContent = "运行: " + data.uptime;
+                }
+
+                // Update last-report timestamp on every incoming real packet
+                const reportEl = document.getElementById('last-report-' + nodeId);
+                if (reportEl) {
+                    const now = new Date();
+                    const pad = n => String(n).padStart(2, '0');
+                    reportEl.textContent = '最后汇报: ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
                 }
             };
 

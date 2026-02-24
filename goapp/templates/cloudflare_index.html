@@ -55,35 +55,11 @@
 
             <!-- ── 公共凭据 ── -->
             <form method="post" action="/cloudflare">
-                <div class="field" style="margin-bottom:16px;">
+                <div class="field" style="margin-bottom:20px;">
                     <label for="cf_api_token">Cloudflare API Token</label>
                     <input id="cf_api_token" name="cf_api_token" value="{{ .Token }}"
                            placeholder="具有 Zone WAF Edit / Zero Trust Edit 权限的 Token" />
-                    <p class="hint">在 Cloudflare 面板 → My Profile → API Tokens 中创建</p>
-                </div>
-                <div class="field-row" style="margin-bottom:16px;">
-                    <div class="field">
-                        <label for="cf_account_id">Account ID</label>
-                        <input id="cf_account_id" name="cf_account_id" value="{{ .AccountID }}"
-                               placeholder="Cloudflare 账户 ID" />
-                        <p class="hint">用于 ZeroTrust 策略与 D1 数据库</p>
-                    </div>
-                    <div class="field">
-                        <label for="cf_zone_domain">域名（辅助查询 Zone ID）</label>
-                        <input id="cf_zone_domain" name="cf_zone_domain" value="{{ .ZoneDomain }}" placeholder="example.com" />
-                        <p class="hint">Zone ID 为空时自动通过此域名查询</p>
-                    </div>
-                </div>
-                <div class="field-row" style="margin-bottom:20px;">
-                    <div class="field">
-                        <label for="cf_zone_id">Zone ID（可留空自动获取）</label>
-                        <input id="cf_zone_id" name="cf_zone_id" value="{{ .ZoneID }}" placeholder="自动通过域名查询" />
-                    </div>
-                    <div class="field">
-                        <label for="cf_policy_id">ZeroTrust Reusable Policy ID（可留空自动查找）</label>
-                        <input id="cf_policy_id" name="cf_policy_id" value="{{ .PolicyID }}"
-                               placeholder="留空 → 自动查找名为 WhiteList 的策略" />
-                    </div>
+                    <p class="hint">在 Cloudflare 面板 → My Profile → API Tokens 中创建。所有子功能依赖的 Account ID、Zone ID 与 Policy ID 将会自动嗅探捕获，无需手动设置。</p>
                 </div>
                 <button type="submit" class="btn">保存公共凭据</button>
             </form>

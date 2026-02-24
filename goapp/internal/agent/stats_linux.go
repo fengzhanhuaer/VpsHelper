@@ -95,25 +95,105 @@ func readMem() (float64, string) {
 	return pct, usedStr
 }
 
+// pseudoFSTypes lists virtual/kernel filesystems that should never be counted as disk space.
+var pseudoFSTypes = map[string]bool{
+	"proc": true, "sysfs": true, "devtmpfs": true, "devpts": true,
+	"tmpfs": true, "cgroup": true, "cgroup2": true, "hugetlbfs": true,
+	"mqueue": true, "pstore": true, "securityfs": true, "debugfs": true,
+	"tracefs": true, "configfs": true, "fusectl": true, "bpf": true,
+	"rpc_pipefs": true, "autofs": true, "overlay": true, "squashfs": true,
+	"nsfs": true, "efivarfs": true, "binfmt_misc": true,
+}
+
 func readDisk() (float64, string) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs("/", &stat); err != nil {
-		return 0, ""
+	f, err := os.Open("/proc/mounts")
+	if err != nil {
+		// fallback to root only
+		return readDiskSingle("/")
+	}
+	defer f.Close()
+
+	seen := make(map[uint64]bool) // deduplicate by device ID
+	var totalAll, usedAll uint64
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 3 {
+			continue
+		}
+		mountPoint := fields[1]
+		fsType := fields[2]
+
+		if pseudoFSTypes[fsType] {
+			continue
+		}
+		// Skip bind mounts that point inside another mount (options contain "bind")
+		if len(fields) >= 4 && strings.Contains(fields[3], "bind") {
+			continue
+		}
+
+		var stat syscall.Statfs_t
+		if err := syscall.Statfs(mountPoint, &stat); err != nil {
+			continue
+		}
+		if stat.Blocks == 0 || stat.Bsize == 0 {
+			continue
+		}
+
+		// Use st_dev equivalent: encode via fsid (unique per backing device)
+		devKey := (uint64(stat.Fsid.X__val[0]) << 32) | uint64(uint32(stat.Fsid.X__val[1]))
+		// fallback: if fsid is zero, use the mount point string hash — still prevents double-counting
+		if devKey == 0 {
+			for _, b := range []byte(mountPoint) {
+				devKey = devKey*31 + uint64(b)
+			}
+			devKey |= 1 // ensure non-zero
+		}
+		if seen[devKey] {
+			continue
+		}
+		seen[devKey] = true
+
+		total := stat.Blocks * uint64(stat.Bsize)
+		free := stat.Bfree * uint64(stat.Bsize)
+		totalAll += total
+		usedAll += total - free
 	}
 
-	// Blocks * BlockSize
-	totalBytes := stat.Blocks * uint64(stat.Bsize)
-	freeBytes := stat.Bfree * uint64(stat.Bsize)
-
-	if totalBytes == 0 {
-		return 0, ""
+	if totalAll == 0 {
+		return readDiskSingle("/")
 	}
 
-	usedBytes := totalBytes - freeBytes
-	pct := float64(usedBytes) / float64(totalBytes) * 100
-
-	usedStr := fmt.Sprintf("%.1fG/%.1fG", float64(usedBytes)/1073741824, float64(totalBytes)/1073741824)
+	pct := float64(usedAll) / float64(totalAll) * 100
+	usedStr := formatBytes(usedAll) + "/" + formatBytes(totalAll)
 	return pct, usedStr
+}
+
+func readDiskSingle(path string) (float64, string) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0, ""
+	}
+	if stat.Blocks == 0 {
+		return 0, ""
+	}
+	total := stat.Blocks * uint64(stat.Bsize)
+	free := stat.Bfree * uint64(stat.Bsize)
+	used := total - free
+	pct := float64(used) / float64(total) * 100
+	return pct, fmt.Sprintf("%.1fG/%.1fG", float64(used)/1073741824, float64(total)/1073741824)
+}
+
+func formatBytes(b uint64) string {
+	const (
+		GB = 1 << 30
+		MB = 1 << 20
+	)
+	if b >= GB {
+		return fmt.Sprintf("%.1fG", float64(b)/GB)
+	}
+	return fmt.Sprintf("%.0fM", float64(b)/MB)
 }
 
 func readNet() (uint64, uint64) {

@@ -51,6 +51,29 @@ func (c *APIClient) doRequest(method, url string, body []byte) ([]byte, error) {
 	return respBody, nil
 }
 
+// FetchAccountID gets the first available account ID from Cloudflare
+func (c *APIClient) FetchAccountID() (string, error) {
+	respBytes, err := c.doRequest("GET", "https://api.cloudflare.com/client/v4/accounts?page=1&per_page=1", nil)
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		Success bool `json:"success"`
+		Result  []struct {
+			ID string `json:"id"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return "", fmt.Errorf("failed to parse accounts: %w", err)
+	}
+	if !result.Success || len(result.Result) == 0 || result.Result[0].ID == "" {
+		return "", fmt.Errorf("no account found or API unsuccessful")
+	}
+
+	return result.Result[0].ID, nil
+}
+
 // LookupZoneID finds the Zone ID for a given domain name.
 // Tries progressively shorter suffixes (sub.example.com → example.com)
 // since Cloudflare zones are registered at the root domain level.

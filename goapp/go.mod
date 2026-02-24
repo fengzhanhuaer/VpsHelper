@@ -9,6 +9,7 @@ require (
 	github.com/gotd/td v0.139.0
 	github.com/hashicorp/yamux v0.1.2
 	golang.org/x/crypto v0.47.0
+	golang.org/x/oauth2 v0.35.0
 	modernc.org/sqlite v1.29.0
 )
 
