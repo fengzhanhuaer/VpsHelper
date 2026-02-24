@@ -49,9 +49,16 @@ curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/instal
 ```
 
 ### 4. 交互式管理菜单
-如果你需要查看服务状态、重启、停止或呼出管理菜单（并不触发重新安装），可以使用 `menu` 参数：
+如果你需要查看服务状态、查看日志、重启、停止或呼出管理菜单（并不触发重新安装），可以使用 `menu` 参数：
+
+**针对主控端节点**：
 ```bash
 curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash -s menu
+```
+
+**针对运行探针 (Probe) 的受控子节点**：
+```bash
+curl -fsSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | sudo bash -s menu
 ```
 
 

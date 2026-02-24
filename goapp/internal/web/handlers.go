@@ -46,6 +46,8 @@ type Handler struct {
 func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	h := &Handler{cfg: cfg, dbConn: dbConn}
 
+	go h.autoDatabaseCleanup()
+
 	router.GET("/", h.index)
 	router.GET("/home", h.home)
 	router.GET("/login", h.login)
@@ -92,7 +94,6 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/cloudflare/database/pull/stream", h.databasePullStream)
 	router.GET("/cloudflare/database/tables", h.databaseTableList)
 	router.GET("/cloudflare/database/table/data", h.databaseTableData)
-	router.POST("/cloudflare/database/cleanup", h.databaseCleanup)
 	router.GET("/settings/ssh", h.sshSettings)
 	router.POST("/settings/ssh", h.sshSettings)
 	router.GET("/system/update", h.systemUpdate)
@@ -1900,19 +1901,13 @@ var obsoleteTables = []string{
 	"tg_auto_reply_rules_old", // placeholder for future retirements
 }
 
-// databaseCleanup drops any obsolete tables that still exist in the local SQLite DB,
+// autoDatabaseCleanup drops any obsolete tables that still exist in the local SQLite DB,
 // then synchronises Cloudflare D1 by dropping any tables present in D1 but absent locally.
-// Both steps are idempotent.
-func (h *Handler) databaseCleanup(c *gin.Context) {
-	if h.currentUser(c) == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "not logged in"})
-		return
-	}
-
+// Executed silently in the background on startup.
+func (h *Handler) autoDatabaseCleanup() {
 	// ── Step 1: local SQLite cleanup ─────────────────────────────
 	existing, err := localUserTables(h.dbConn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "enumerate tables: " + err.Error()})
 		return
 	}
 	existSet := make(map[string]bool, len(existing))
@@ -1920,68 +1915,30 @@ func (h *Handler) databaseCleanup(c *gin.Context) {
 		existSet[t] = true
 	}
 
-	type result struct {
-		Table   string `json:"table"`
-		Dropped bool   `json:"dropped"`
-		Skipped bool   `json:"skipped"`
-		Cloud   bool   `json:"cloud,omitempty"` // true when this was a D1-only drop
-		Error   string `json:"error,omitempty"`
-	}
-
-	var results []result
-	droppedCount := 0
-
 	for _, t := range obsoleteTables {
 		if !existSet[t] {
-			results = append(results, result{Table: t, Skipped: true})
 			continue
 		}
-		if _, err := h.dbConn.Exec("DROP TABLE IF EXISTS " + t); err != nil {
-			results = append(results, result{Table: t, Error: err.Error()})
-		} else {
-			results = append(results, result{Table: t, Dropped: true})
-			droppedCount++
-			delete(existSet, t) // no longer exists locally
+		if _, err := h.dbConn.Exec("DROP TABLE IF EXISTS " + t); err == nil {
+			delete(existSet, t)
 		}
 	}
 
-	// Re-fetch local table list after cleanup (the obsolete ones may have been dropped)
+	// Re-fetch local table list after cleanup
 	localTables, _ := localUserTables(h.dbConn)
 
 	// ── Step 2: D1 sync – drop tables that are in D1 but not local ──
-	d1Dropped := 0
-	d1Warning := ""
 	settings, _ := store.GetSettings(h.dbConn, []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"})
 	cfToken := strings.TrimSpace(settings["cf_api_token"])
 	accountID := strings.TrimSpace(settings["cf_account_id"])
 	dbID := strings.TrimSpace(settings["cf_d1_database_id"])
 
 	if cfToken != "" && accountID != "" && dbID != "" {
-		ctx := c.Request.Context()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
 		cf := d1.Client{Token: cfToken}
-		dropped, syncErr := d1.SyncDropExtraD1Tables(ctx, cf, accountID, dbID, localTables)
-		if syncErr != nil {
-			d1Warning = "D1 同步失败: " + syncErr.Error()
-		} else {
-			for _, name := range dropped {
-				results = append(results, result{Table: name, Dropped: true, Cloud: true})
-				d1Dropped++
-			}
-		}
-	} else {
-		d1Warning = "D1 未配置，跳过云端同步"
+		_, _ = d1.SyncDropExtraD1Tables(ctx, cf, accountID, dbID, localTables)
 	}
-
-	resp := gin.H{
-		"ok":         true,
-		"dropped":    droppedCount,
-		"d1_dropped": d1Dropped,
-		"results":    results,
-	}
-	if d1Warning != "" {
-		resp["d1_warning"] = d1Warning
-	}
-	c.JSON(http.StatusOK, resp)
 }
 
 // databaseTableData returns JSON-encoded rows for a given local SQLite table.

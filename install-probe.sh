@@ -7,8 +7,57 @@ INSTALL_DIR="/opt/vpsprobe"
 SERVICE_NAME="vpsprobe"
 BINARY_NAME="vpsprobe"
 
+show_menu() {
+  while true; do
+    echo "======================================"
+    echo "         VpsProbe 探针管理菜单        "
+    echo "======================================"
+    echo "1. 安装/更新 探针服务"
+    echo "2. 查看探针运行状态 (systemctl status)"
+    echo "3. 查看探针实时日志 (journalctl -f)  "
+    echo "4. 重启探针服务"
+    echo "5. 停止探针服务"
+    echo "0. 退出菜单"
+    echo "======================================"
+    if ! read -rp "请输入对应的数字 [0-5]: " choice </dev/tty; then
+      echo "无法打开交互终端，自动退出菜单。"
+      exit 0
+    fi
+    case "$choice" in
+      1)
+        echo "开始执行安装/更新流程..."
+        break
+        ;;
+      2)
+        systemctl status "${SERVICE_NAME}.service" --no-pager || true
+        ;;
+      3)
+        echo "按 Ctrl+C 退出日志查看..."
+        journalctl -u "${SERVICE_NAME}.service" -f || true
+        ;;
+      4)
+        systemctl restart "${SERVICE_NAME}.service"
+        echo "已重启探针服务。"
+        ;;
+      5)
+        systemctl stop "${SERVICE_NAME}.service"
+        echo "已停止探针服务。"
+        ;;
+      0)
+        echo "退出菜单。"
+        exit 0
+        ;;
+      *)
+        echo "无效选择，请输入 0-5 之间的数字。"
+        ;;
+    esac
+    echo ""
+  done
+}
+
 PROBE_SECRET=""
 PROBE_HOST=""
+MENU_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -16,10 +65,15 @@ while [[ $# -gt 0 ]]; do
     --host) PROBE_HOST="$2"; shift 2 ;;
     --repo) REPO_SLUG="$2"; shift 2 ;;
     --dir) INSTALL_DIR="$2"; shift 2 ;;
+    menu|--menu) MENU_ONLY=1; shift ;;
     -*) echo "未知参数: $1"; exit 1 ;;
     *) shift ;;
   esac
 done
+
+if [[ "$MENU_ONLY" == "1" ]]; then
+  show_menu
+fi
 
 REPO_SLUG="${REPO_SLUG:-$DEFAULT_REPO}"
 
@@ -193,49 +247,6 @@ if ! systemctl is-active --quiet "${SERVICE_NAME}.service"; then
 else
   echo "✅ 探针进程启动/运行健康，安装/更新完成。"
 fi
-
-show_menu() {
-  while true; do
-    echo "======================================"
-    echo "         VpsProbe 探针管理菜单        "
-    echo "======================================"
-    echo "1. 查看探针运行状态 (systemctl status)"
-    echo "2. 查看探针实时日志 (journalctl -f)  "
-    echo "3. 重启探针服务"
-    echo "4. 停止探针服务"
-    echo "0. 退出菜单"
-    echo "======================================"
-    if ! read -rp "请输入对应的数字 [0-4]: " choice </dev/tty; then
-      echo "无法打开交互终端，自动退出菜单。"
-      break
-    fi
-    case "$choice" in
-      1)
-        systemctl status "${SERVICE_NAME}.service" --no-pager || true
-        ;;
-      2)
-        echo "按 Ctrl+C 退出日志查看..."
-        journalctl -u "${SERVICE_NAME}.service" -f
-        ;;
-      3)
-        systemctl restart "${SERVICE_NAME}.service"
-        echo "已重启探针服务。"
-        ;;
-      4)
-        systemctl stop "${SERVICE_NAME}.service"
-        echo "已停止探针服务。"
-        ;;
-      0)
-        echo "退出菜单。"
-        break
-        ;;
-      *)
-        echo "无效选择，请输入 0-4 之间的数字。"
-        ;;
-    esac
-    echo ""
-  done
-}
 
 echo ""
 echo "探针安装/更新完成！程序目前由 Systemd 托管运行，已连接至 ${PROBE_HOST}。"
