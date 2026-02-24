@@ -89,16 +89,16 @@ func StartServer(ctx context.Context, dbConn *sql.DB) error {
 
 func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 	ip := c.ClientIP()
-	if security.IsBanned(ip) {
-		c.AbortWithStatus(http.StatusForbidden)
-		return
-	}
 
 	secret := c.Param("secret")
 	if secret == "" {
 		secret = c.GetHeader("X-Probe-Secret")
 	}
 	if secret == "" {
+		if security.IsBanned(ip) {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
 		security.RecordFailure(dbConn, ip)
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
@@ -106,11 +106,17 @@ func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 
 	node, err := store.GetProbeNodeBySecret(dbConn, secret)
 	if err != nil {
+		if security.IsBanned(ip) {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
 		security.RecordFailure(dbConn, ip)
 		log.Printf("[Tunnel] Unauthorized probe connection attempt: invalid secret")
 		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
+
+	security.ClearBan(ip)
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {

@@ -71,3 +71,11 @@ func RecordFailure(dbConn *sql.DB, ip string) {
 		log.Printf("[Security] IP %s exceeded failure threshold (%d). Banned temporarily in memory.", ip, maxFailures)
 	}
 }
+
+// ClearBan removes the ban and failure count for a specific IP.
+func ClearBan(ip string) {
+	banMu.Lock()
+	defer banMu.Unlock()
+	delete(failedIPs, ip)
+	delete(bannedIPs, ip)
+}
