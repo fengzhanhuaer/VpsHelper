@@ -559,7 +559,7 @@ func (h *Handler) probeInstallScript(c *gin.Context) {
 		return
 	}
 
-	const scriptURL = "https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh"
+	scriptURL := fmt.Sprintf("https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh?t=%d", time.Now().Unix())
 	
 	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", scriptURL, nil)
 	if err != nil {

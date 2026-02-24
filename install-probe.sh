@@ -147,18 +147,28 @@ download_release() {
   local url="$1"
   local dest="$2"
 
+  local auth_header=""
+  if [[ -n "${PROBE_SECRET}" && "${url}" == *"/api/probe/latest_binary"* ]]; then
+    auth_header="Authorization: Bearer ${PROBE_SECRET}"
+  fi
+
   if [[ "${DOWNLOADER}" == "curl" ]]; then
     local -a curl_opts
     curl_opts=(-fL --retry "${DOWNLOAD_RETRY}" --retry-delay 2 --connect-timeout "${DOWNLOAD_CONNECT_TIMEOUT}" --max-time "${DOWNLOAD_MAX_TIME}")
     if curl_supports "--retry-connrefused"; then curl_opts+=(--retry-connrefused); fi
     if curl_supports "--retry-all-errors"; then curl_opts+=(--retry-all-errors); fi
+    if [[ -n "$auth_header" ]]; then curl_opts+=("-H" "${auth_header}"); fi
 
     if ! curl "${curl_opts[@]}" -C - -o "${dest}" "${url}"; then
       rm -f "${dest}" || true
       curl "${curl_opts[@]}" -o "${dest}" "${url}"
     fi
   else
-    wget -c -O "${dest}" --tries="${DOWNLOAD_RETRY}" --timeout="${DOWNLOAD_CONNECT_TIMEOUT}" --waitretry=2 --retry-connrefused "${url}"
+    local -a wget_opts
+    wget_opts=(-c -O "${dest}" --tries="${DOWNLOAD_RETRY}" --timeout="${DOWNLOAD_CONNECT_TIMEOUT}" --waitretry=2 --retry-connrefused)
+    if [[ -n "$auth_header" ]]; then wget_opts+=("--header=${auth_header}"); fi
+    
+    wget "${wget_opts[@]}" "${url}"
   fi
 
   if ! is_elf_file "${dest}"; then
