@@ -191,7 +191,7 @@
                             离线 (OFFLINE)
                         </div>
                         <div class="server-header">
-                            <div class="server-name">
+                            <div class="server-name" style="flex-direction: column; align-items: flex-start; gap: 4px;">
                                 <div style="display:flex; align-items:center; flex-wrap:wrap;">
                                     <span class="status-indicator {{ if .Online }}status-online{{ else }}status-offline{{ end }}" id="dot-{{ .ID }}"></span>
                                     {{ .Name }}
@@ -205,7 +205,7 @@
                                     {{ if .Note }}<span class="server-note" style="margin-left:4px;">({{.Note}})</span>{{ end }}
                                 </div>
                                 {{ if .IPInfos }}
-                                <div style="margin-left: 14px; margin-top: 4px; display: flex; flex-direction: column; gap: 2px;">
+                                <div style="margin-left: 20px; display: flex; flex-direction: column; gap: 2px;">
                                     {{ range .IPInfos }}
                                     <span style="font-size: 0.75em; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="{{ .Geo }}">🌍 {{ .Geo }}</span>
                                     {{ end }}
