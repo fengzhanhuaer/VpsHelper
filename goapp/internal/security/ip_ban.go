@@ -14,8 +14,8 @@ var (
 	bannedIPs     = make(map[string]time.Time)
 	lastCleanup   = time.Now()
 	maxFailures   = 5
-	banDuration   = 24 * time.Hour
-	resetInterval = 1 * time.Hour
+	banDuration   = 3 * time.Minute
+	resetInterval = 1 * time.Minute
 )
 
 // IsBanned checks if an IP is currently banned in memory.
@@ -70,12 +70,4 @@ func RecordFailure(dbConn *sql.DB, ip string) {
 	if count >= maxFailures && !alreadyBanned {
 		log.Printf("[Security] IP %s exceeded failure threshold (%d). Banned temporarily in memory.", ip, maxFailures)
 	}
-}
-
-// ClearBan removes the ban and failure count for a specific IP.
-func ClearBan(ip string) {
-	banMu.Lock()
-	defer banMu.Unlock()
-	delete(failedIPs, ip)
-	delete(bannedIPs, ip)
 }

@@ -299,13 +299,13 @@ func (h *Handler) probeNodes(c *gin.Context) {
 // probeDiscover is the public API endpoint for probes to dynamically discover the WebSocket connection address.
 func (h *Handler) probeDiscover(c *gin.Context) {
 	ip := c.ClientIP()
+	if security.IsBanned(ip) {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
 
 	authHeader := c.GetHeader("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
-		if security.IsBanned(ip) {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
 		security.RecordFailure(h.dbConn, ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid authorization header"})
 		return
@@ -314,16 +314,10 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 	
 	node, err := store.GetProbeNodeBySecret(h.dbConn, secret)
 	if err != nil {
-		if security.IsBanned(ip) {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
 		security.RecordFailure(h.dbConn, ip)
 		c.JSON(http.StatusForbidden, gin.H{"error": "invalid secret"})
 		return
 	}
-
-	security.ClearBan(ip)
 
 	// 优先引入 cloudflare 的函数，确保包导入（如果不报错，意味着已经在顶层引入过了或者可以通过 goimports 自动整理，但在文件顶部可能没引用 cloudflare 包，需要在文件开头处理）
 	settings, _ := store.GetSettings(h.dbConn, []string{"probe_private_port", "probe_public_address", "probe_ddns_domain"})
