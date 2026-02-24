@@ -83,7 +83,13 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			note := strings.TrimSpace(c.PostForm("note"))
 			vendor := strings.TrimSpace(c.PostForm("vendor"))
 			vendorUrl := strings.TrimSpace(c.PostForm("vendor_url"))
-			price := strings.TrimSpace(c.PostForm("price"))
+			priceAmt := strings.TrimSpace(c.PostForm("price_amount"))
+			price := ""
+			if priceAmt != "" {
+				price = strings.TrimSpace(c.PostForm("price_currency") + priceAmt + c.PostForm("price_period"))
+			} else {
+				price = strings.TrimSpace(c.PostForm("price"))
+			}
 			expiredAt := strings.TrimSpace(c.PostForm("expired_at"))
 			intervalStr := strings.TrimSpace(c.PostForm("report_interval"))
 			

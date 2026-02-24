@@ -191,7 +191,7 @@
                                 <td style="padding: 8px;">
                                     {{ if .Vendor }}
                                         {{ if .VendorUrl }}
-                                            <a href="{{ .VendorUrl }}" target="_blank" style="color: var(--color-primary); text-decoration: none;">{{ .Vendor }}</a>
+                                            <a href="{{ .VendorUrl }}" target="_blank" title="访问：{{ .VendorUrl }}" style="color: var(--color-primary); text-decoration: none; border-bottom: 1px dashed var(--color-primary); padding-bottom: 1px; font-weight: 500;">{{ .Vendor }} ↗</a>
                                         {{ else }}
                                             {{ .Vendor }}
                                         {{ end }}
@@ -263,9 +263,30 @@
                     </div>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <div class="field" style="flex: 1;">
-                        <label>价格</label>
-                        <input type="text" name="price" id="edit-price" placeholder="如：$49.9/yr" />
+                    <div class="field" style="flex: 2;">
+                        <label>价格设置</label>
+                        <div style="display: flex; gap: 4px;">
+                            <select name="price_currency" id="edit-price-currency" style="width: auto; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit; background: var(--color-bg);">
+                                <option value="¥">¥ (CNY)</option>
+                                <option value="$">$ (USD)</option>
+                                <option value="€">€ (EUR)</option>
+                                <option value="£">£ (GBP)</option>
+                                <option value="₽">₽ (RUB)</option>
+                                <option value="HK$">HK$</option>
+                                <option value="NT$">NT$</option>
+                                <option value="">无</option>
+                            </select>
+                            <input type="number" step="0.01" name="price_amount" id="edit-price-amount" placeholder="金额" style="flex: 1; min-width: 60px; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit;" />
+                            <select name="price_period" id="edit-price-period" style="width: auto; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit; background: var(--color-bg);">
+                                <option value="/年">/ 年</option>
+                                <option value="/季">/ 季</option>
+                                <option value="/月">/ 月</option>
+                                <option value="/日">/ 日</option>
+                                <option value="/三年">/ 三年</option>
+                                <option value="/五年">/ 五年</option>
+                                <option value="">一次性</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="field" style="flex: 1;">
                         <label>到期时间</label>
@@ -307,7 +328,36 @@
             document.getElementById('edit-note').value = note;
             document.getElementById('edit-vendor').value = vendor;
             document.getElementById('edit-vendor-url').value = vendorUrl;
-            document.getElementById('edit-price').value = price;
+            
+            let currency = "¥";
+            let amount = "";
+            let period = "/年";
+            
+            if (price) {
+                let currMatch = price.match(/^(¥|\$|€|£|₽|HK\$|NT\$)/u);
+                if (currMatch) {
+                    currency = currMatch[1];
+                    price = price.substring(currency.length).trim();
+                } else {
+                    currency = "";
+                }
+                
+                let periodMatch = price.match(/(\/年|\/月|\/日|\/季|\/三年|\/五年|\/yr|\/mo|\/day)$/u);
+                if (periodMatch) {
+                    period = periodMatch[1];
+                    if (period === "/yr") period = "/年";
+                    if (period === "/mo") period = "/月";
+                    if (period === "/day") period = "/日";
+                    price = price.substring(0, price.indexOf(periodMatch[1])).trim();
+                } else {
+                    period = "";
+                }
+                amount = price;
+            }
+            
+            document.getElementById('edit-price-currency').value = currency;
+            document.getElementById('edit-price-amount').value = amount;
+            document.getElementById('edit-price-period').value = period;
             document.getElementById('edit-expired').value = expiredAt;
             document.getElementById('edit-interval').value = interval;
             
