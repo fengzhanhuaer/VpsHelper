@@ -29,6 +29,68 @@ if [[ "${1:-}" == "uninstall" ]]; then
   exit 0
 fi
 
+show_menu() {
+  while true; do
+    echo "======================================"
+    echo "         VpsHelper 管理菜单         "
+    echo "======================================"
+    echo "1. 安装/更新 VpsHelper"
+    echo "2. 卸载 VpsHelper"
+    echo "3. 查看服务状态"
+    echo "4. 查看实时日志"
+    echo "5. 重启服务"
+    echo "6. 停止服务"
+    echo "0. 退出"
+    echo "======================================"
+    if ! read -rp "请输入对应的数字 [0-6]: " choice </dev/tty; then
+      echo "无法打开交互终端，自动退出。"
+      exit 0
+    fi
+    case "$choice" in
+      1)
+        echo "开始执行安装/更新流程..."
+        break
+        ;;
+      2)
+        echo "正在卸载 ${SERVICE_NAME}..."
+        systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1 || true
+        systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1 || true
+        rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+        systemctl daemon-reload
+        rm -rf "${INSTALL_DIR}"
+        echo "卸载完成！"
+        ;;
+      3)
+        systemctl status "${SERVICE_NAME}.service" --no-pager || true
+        ;;
+      4)
+        echo "按 Ctrl+C 退出日志查看..."
+        journalctl -u "${SERVICE_NAME}.service" -f || true
+        ;;
+      5)
+        systemctl restart "${SERVICE_NAME}.service"
+        echo "已重启 ${SERVICE_NAME} 服务。"
+        ;;
+      6)
+        systemctl stop "${SERVICE_NAME}.service"
+        echo "已停止 ${SERVICE_NAME} 服务。"
+        ;;
+      0)
+        echo "退出菜单。"
+        exit 0
+        ;;
+      *)
+        echo "无效选择，请输入 0-6 之间的数字。"
+        ;;
+    esac
+    echo ""
+  done
+}
+
+if [[ "${1:-}" == "menu" ]]; then
+  show_menu
+fi
+
 ensure_command() {
   local cmd="$1"
   local hint="$2"

@@ -48,6 +48,13 @@ curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install
 curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash -s uninstall
 ```
 
+### 4. 交互式管理菜单
+如果你需要查看服务状态、重启、停止或呼出管理菜单（并不触发重新安装），可以使用 `menu` 参数：
+```bash
+curl -fsSL https://github.com/fengzhanhuaer/VpsHelper/raw/refs/heads/main/install.sh | sudo bash -s menu
+```
+
+
 ## 💻 源码调试与编译构建
 
 **针对 Windows (PowerShell 开发与测试环境)**:

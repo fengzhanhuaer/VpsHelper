@@ -11,6 +11,10 @@ import (
 var TGTables = []string{
     "tg_accounts",
     "tg_auto_send_tasks",
+    "tg_auto_reply_rules",
+    "shell_shortcuts",
+    "probe_nodes",
+    "probe_tasks",
     "app_settings",
 }
 
