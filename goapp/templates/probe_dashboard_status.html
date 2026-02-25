@@ -167,14 +167,8 @@
 
     <main style="max-width: 1200px;">
         <section class="panel panel--wide" style="max-width: 100%;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                <div>
-                    <h1 style="margin: 0; display: flex; align-items: center;">探针状态</h1>
-                    <p class="muted">实时监控所有在线节点的系统负载与网络情况</p>
-                </div>
-                <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">
-                    <span id="update-timer">连接中...</span>
-                </div>
+            <div style="text-align: right; margin-bottom: 8px; font-size: 0.9em; color: var(--color-text-muted);">
+                <span id="update-timer">连接中...</span>
             </div>
 
             {{ if eq (len .Nodes) 0 }}
