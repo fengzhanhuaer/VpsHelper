@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>节点通讯</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        body { padding: 0; background: transparent; }
+        main { max-width: 100% !important; margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+    <main>
+        <section class="panel panel--wide" style="max-width: 100%;">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+                <h1 style="margin: 0; font-size: 1.5rem;">节点通讯</h1>
+            </div>
+            <p class="muted" style="margin-top: 0;">设置探针连接主控端的网络参数。</p>
+
+            {{ if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom: 16px;">{{ .Message }}</div>
+            {{ end }}
+
+            <!-- 探针通信地址配置 -->
+            <div class="panel" style="margin-bottom: 24px; border: 1px solid #ddd;">
+                <h3 style="margin-top:0;">WebSocket 通信设置 (双端口隔离)</h3>
+                <p class="muted" style="margin-top:-5px; margin-bottom: 12px; font-size: 0.9em;">
+                    由于 CDN 会切断长连接并掩盖真实 IP，探针服务运行时会建立第二条直连底层通信隧道：
+                </p>
+                <form method="post" action="/probe/nodes/comm" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                        <div class="field" style="flex: 1; min-width: 150px; max-width: 220px;">
+                            <label>本地监听端口</label>
+                            <input name="probe_private_port" value="{{ .PrivatePort }}" placeholder="例如：15019" required />
+                            <div class="muted">用于建立直连 WS 的独立端口</div>
+                        </div>
+                        <div class="field" style="flex: 3; min-width: 450px;">
+                            <label>公网访问地址 / 域名 (可选)</label>
+                            <div style="display: flex; align-items: center; gap: 16px;">
+                                <input style="flex: 1;" name="probe_address" value="{{ .Address }}" placeholder="例如：1.2.3.4 或 probe.example.com" />
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
+                                    <input type="checkbox" name="enable_ddns" {{ if .EnableDDNS }}checked{{ end }} />
+                                    自动同步该域名到 Cloudflare (DDNS)
+                                </label>
+                            </div>
+                            <div class="muted">指定给探针拨号的高优先级地址</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
+                        <div class="field" style="flex: 1; min-width: 150px;">
+                            <label>历史数据保存天数</label>
+                            <input name="probe_history_days" value="{{ .HistoryDays }}" placeholder="默认：90" type="number" min="1" required />
+                            <div class="muted">探针的状态历史保存在本地，设置自动清理周期</div>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn" type="submit" name="action" value="save_settings">保存设置并应用 (端口更改需重启生效)</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

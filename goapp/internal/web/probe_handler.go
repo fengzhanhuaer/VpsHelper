@@ -28,6 +28,15 @@ func generateProbeSecret() (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
+func (h *Handler) probeManagement(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	c.HTML(http.StatusOK, "probe_nodes.html", gin.H{
+		"Title": "探针管理",
+	})
+}
 
 func (h *Handler) probeNodes(c *gin.Context) {
 	if h.currentUser(c) == "" {
@@ -285,7 +294,12 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	}
 	enableDDNS := ddnsDomain != ""
 
-	c.HTML(http.StatusOK, "probe_nodes.html", gin.H{
+	templateName := "probe_nodes_list.html"
+	if strings.Contains(c.Request.URL.Path, "/comm") {
+		templateName = "probe_nodes_comm.html"
+	}
+
+	c.HTML(http.StatusOK, templateName, gin.H{
 		"Title":         "探针管理",
 		"Message":       message,
 		"MsgOK":         msgOK,

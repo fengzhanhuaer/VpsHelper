@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>节点管理</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .node-card { background-color: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+        .node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; }
+        .node-title { font-size: 1.1em; font-weight: bold; }
+        .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; color: #fff; }
+        .status-online { background-color: #28a745; }
+        .status-offline { background-color: #dc3545; }
+        .node-meta { font-size: 0.9em; color: var(--color-text-muted); margin-bottom: 8px; }
+        .secret-box { background: #000; color: #0f0; padding: 8px; border-radius: 4px; font-family: monospace; word-break: break-all; margin-bottom: 12px; }
+        .install-cmd { background-color: var(--color-bg); border: 1px dashed var(--color-border); padding: 10px; font-family: monospace; border-radius: 4px; font-size: 0.9em; overflow-x: auto; white-space: pre-wrap; margin-bottom: 12px; }
+        .btn-sm { padding: 4px 8px; font-size: 0.8em; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        body { padding: 0; background: transparent; }
+        main { max-width: 100% !important; margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+    <main>
+        <section class="panel panel--wide" style="max-width: 100%;">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+                <h1 style="margin: 0; font-size: 1.5rem;">节点管理</h1>
+            </div>
+            <p class="muted" style="margin-top: 0;">添加新节点或管理已有节点。节点密钥用于建立安全的 WebSocket 隧道。</p>
+
+            {{ if .Message }}
+            <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom: 16px;">{{ .Message }}</div>
+            {{ end }}
+
+            <!-- 添加节点表单 -->
+            <div class="panel" style="margin-bottom: 24px; border: 1px solid #ddd;">
+                <h3 style="margin-top:0;">添加新节点</h3>
+                <form method="post" action="/probe/nodes/list" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
+                    <div class="field" style="flex: 1; min-width: 200px;">
+                        <label>节点名称(必填)</label>
+                        <input name="name" placeholder="例如：US-West-01" required />
+                    </div>
+                    <div style="padding-bottom: 5px;">
+                        <button class="btn" type="submit" name="action" value="add">添加节点生成密钥</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 节点列表 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 32px;">
+                <h3 style="margin-top: 0; margin-bottom: 0;">已有节点 ({{ len .Nodes }})</h3>
+                <form method="post" action="/probe/nodes/list" style="margin: 0;">
+                    <input type="hidden" name="id" value="all" />
+                    <button class="ghost btn-sm" type="submit" name="action" value="upgrade" onclick="return confirm('确认向所有在线探针下发升级指令？这会导致在线探针自动断开并重启更新。')" style="color: var(--color-primary);">🚀 一键升级所有在线探针</button>
+                </form>
+            </div>
+            
+            {{ if eq (len .Nodes) 0 }}
+                <p class="muted">尚未添加任何探针节点。</p>
+            {{ else }}
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--color-border); text-align: left;">
+                                <th style="padding: 8px;">ID</th>
+                                <th style="padding: 8px;">节点名称</th>
+                                <th style="padding: 8px;">IP</th>
+                                <th style="padding: 8px;">到期时间</th>
+                                <th style="padding: 8px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{ range .Nodes }}
+                            <tr style="border-bottom: 1px solid var(--color-border);">
+                                <td style="padding: 8px;">{{ .ID }}</td>
+
+                                <td style="padding: 8px;">
+                                    <strong>{{ .Name }}</strong>
+                                    {{ if .Note }}<br><span style="font-size:0.85em; color:var(--color-text-muted);">{{.Note}}</span>{{ end }}
+                                    {{ if .Version }}<br><span style="font-size:0.80em; color:#17a2b8; font-family:monospace;">{{.Version}}</span>{{ end }}
+                                    <div style="font-size: 0.85em; margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
+                                        {{ if .Vendor }}
+                                        <span style="background:var(--color-surface); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--color-border); color:var(--color-text-muted);">
+                                            🏢 {{ if .VendorUrl }}<a href="{{ .VendorUrl }}" target="_blank" title="访问：{{ .VendorUrl }}" style="text-decoration: none; color:inherit;">{{ .Vendor }}</a>{{ else }}{{ .Vendor }}{{ end }}
+                                        </span>
+                                        {{ end }}
+                                        {{ if .Price }}
+                                        <span style="background:var(--color-surface); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--color-border); color:var(--color-text-muted);">
+                                            💰 {{ .Price }}
+                                        </span>
+                                        {{ end }}
+                                    </div>
+                                </td>
+                                <td style="padding: 8px;">
+                                    {{ if .IPInfos }}
+                                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                                            {{ range .IPInfos }}
+                                            <span style="font-family: monospace; font-size: 0.85em; background: var(--color-surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; cursor: pointer;" title="点击复制 IP：{{.Value}}" onclick="copyText(this, '{{ .Value }}')">{{ .Value }}</span>
+                                            {{ end }}
+                                        </div>
+                                    {{ else }}
+                                        <span class="muted">--</span>
+                                    {{ end }}
+                                </td>
+                                <td style="padding: 8px;">
+                                    {{ if .ExpiredAt }}
+                                        {{ .ExpiredAt }}
+                                        {{ if .ExpireDaysStr }}
+                                        <br><span style="font-size:0.85em; color:var(--color-text-muted);">({{.ExpireDaysStr}})</span>
+                                        {{ end }}
+                                    {{ else }}
+                                        --
+                                    {{ end }}
+                                </td>
+                                <td style="padding: 8px;">
+                                    <!-- 隐藏一键安装命令用于复制 -->
+                                    <div id="cmd-github-{{.ID}}" style="display:none;">curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
+                                    <div id="cmd-proxy-{{.ID}}" style="display:none;">curl -sSL "{{ $.BaseURL }}/api/probe/install?secret={{ .Secret }}" | bash -s -- --secret {{ .Secret }} --host {{ $.BaseURL }}</div>
+                                    
+                                    <div class="actions" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                            <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.VendorUrl}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}')">⚙️ 设置</button>
+                                            <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-github-{{.ID}}')" title="从 GitHub 下载脚本">命令(直连)</button>
+                                            <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-proxy-{{.ID}}')" title="从主控端代理下载脚本，解决 GitHub 污染问题">命令(代理)</button>
+                                        </div>
+                                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                            <form method="post" action="/probe/nodes/list" style="margin:0;">
+                                                <input type="hidden" name="id" value="{{ .ID }}" />
+                                                <input type="hidden" name="secret_for_upgrade" value="{{ .Secret }}" />
+                                                <button class="ghost btn-sm" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')" style="color: #2563eb;">🚀 升级探针</button>
+                                            </form>
+                                            <form method="post" action="/probe/nodes/list" style="margin:0;">
+                                                <input type="hidden" name="id" value="{{ .ID }}" />
+                                                <button class="ghost btn-sm" type="submit" name="action" value="delete" onclick="return confirm('确认删除该节点吗？')" style="color:var(--color-error);">🗑️ 删除节点</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {{ end }}
+                        </tbody>
+                    </table>
+                </div>
+            {{ end }}
+
+        </section>
+    </main>
+
+    <!-- Modal for Settings -->
+    <div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+        <div class="panel" style="width:500px; max-width:90%; padding:24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <h3 style="margin-top:0;">节点设置</h3>
+            <form method="post" action="/probe/nodes/list" style="display: flex; flex-direction: column; gap: 12px;">
+                <input type="hidden" name="id" id="edit-id" value="" />
+                
+                <div class="field">
+                    <label>节点名称(必填)</label>
+                    <input type="text" name="name" id="edit-name" required />
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="field" style="flex: 1;">
+                        <label>厂商</label>
+                        <input type="text" name="vendor" id="edit-vendor" placeholder="如：搬瓦工" />
+                    </div>
+                    <div class="field" style="flex: 1;">
+                        <label>厂商链接</label>
+                        <input type="url" name="vendor_url" id="edit-vendor-url" placeholder="可选：包含 http://" />
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="field" style="flex: 2;">
+                        <label>价格设置</label>
+                        <div style="display: flex; gap: 4px;">
+                            <select name="price_currency" id="edit-price-currency" style="width: auto; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit; background: var(--color-bg);">
+                                <option value="¥">¥ (CNY)</option>
+                                <option value="$">$ (USD)</option>
+                                <option value="€">€ (EUR)</option>
+                                <option value="£">£ (GBP)</option>
+                                <option value="₽">₽ (RUB)</option>
+                                <option value="HK$">HK$</option>
+                                <option value="NT$">NT$</option>
+                                <option value="">无</option>
+                            </select>
+                            <input type="number" step="0.01" name="price_amount" id="edit-price-amount" placeholder="金额" style="flex: 1; min-width: 60px; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit;" />
+                            <select name="price_period" id="edit-price-period" style="width: auto; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit; background: var(--color-bg);">
+                                <option value="/年">/ 年</option>
+                                <option value="/季">/ 季</option>
+                                <option value="/月">/ 月</option>
+                                <option value="/日">/ 日</option>
+                                <option value="/三年">/ 三年</option>
+                                <option value="/五年">/ 五年</option>
+                                <option value="">一次性</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field" style="flex: 1;">
+                        <label>到期时间</label>
+                        <input type="date" name="expired_at" id="edit-expired" />
+                    </div>
+                </div>
+                <div class="field">
+                    <label>汇报周期(秒)</label>
+                    <input type="number" name="report_interval" id="edit-interval" min="1" max="3600" required />
+                </div>
+                <div class="field">
+                    <label>备注名</label>
+                    <input type="text" name="note" id="edit-note" />
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                    <button type="button" class="ghost" onclick="closeEditModal()">取消</button>
+                    <button class="btn" type="submit" name="action" value="edit">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function copyCmd(elementId) {
+            const elm = document.getElementById(elementId);
+            if (!elm) return;
+            const text = elm.innerText || elm.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert("安装命令已复制到剪贴板。");
+            }).catch(err => {
+                prompt("请手动复制以下命令：", text);
+            });
+        }
+
+        function copyText(el, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const oldColor = el.style.backgroundColor;
+                const oldText = el.innerText;
+                el.style.backgroundColor = '#28a745';
+                el.style.color = '#fff';
+                el.innerText = '已复制!';
+                setTimeout(() => {
+                    el.style.backgroundColor = oldColor;
+                    el.style.color = '';
+                    el.innerText = oldText;
+                }, 1000);
+            }).catch(err => {
+                prompt("请手动复制：", text);
+            });
+        }
+
+        function openEditModal(id, name, note, vendor, vendorUrl, price, expiredAt, interval) {
+            document.getElementById('edit-id').value = id;
+            document.getElementById('edit-name').value = name;
+            document.getElementById('edit-note').value = note;
+            document.getElementById('edit-vendor').value = vendor;
+            document.getElementById('edit-vendor-url').value = vendorUrl;
+            
+            let currency = "¥";
+            let amount = "";
+            let period = "/年";
+            
+            if (price) {
+                let currMatch = price.match(/^(¥|\$|€|£|₽|HK\$|NT\$)/u);
+                if (currMatch) {
+                    currency = currMatch[1];
+                    price = price.substring(currency.length).trim();
+                } else {
+                    currency = "";
+                }
+                
+                let periodMatch = price.match(/(\/年|\/月|\/日|\/季|\/三年|\/五年|\/yr|\/mo|\/day)$/u);
+                if (periodMatch) {
+                    period = periodMatch[1];
+                    if (period === "/yr") period = "/年";
+                    if (period === "/mo") period = "/月";
+                    if (period === "/day") period = "/日";
+                    price = price.substring(0, price.indexOf(periodMatch[1])).trim();
+                } else {
+                    period = "";
+                }
+                amount = price;
+            }
+            
+            document.getElementById('edit-price-currency').value = currency;
+            document.getElementById('edit-price-amount').value = amount;
+            document.getElementById('edit-price-period').value = period;
+            document.getElementById('edit-expired').value = expiredAt;
+            document.getElementById('edit-interval').value = interval;
+            
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

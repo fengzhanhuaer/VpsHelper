@@ -40,7 +40,7 @@
         <strong>VpsHelper</strong>
         <nav>
             <a class="ghost" href="/probe/nodes">探针节点</a>
-            <a class="ghost" href="/probe/tasks" style="color:var(--color-primary); font-weight:bold;">拨测任务</a>
+
             <a class="ghost" href="/probe/dashboard/status">探针监视</a>
             <a class="ghost" href="/home">返回主菜单</a>
             <a class="ghost" href="/logout">退出登录</a>
@@ -59,7 +59,7 @@
             <!-- Add Task Form -->
             <div class="panel" style="margin-bottom: 24px; border: 1px solid #ddd;">
                 <h3 style="margin-top:0;">添加新任务 (<a href="https://github.com/fengzhanhuaer/VpsHelper/wiki/PingTask" target="_blank" style="font-size:0.8em; font-weight:normal; text-decoration:none;">什么是拨测任务？</a>)</h3>
-                <form method="post" action="/probe/tasks">
+                <form method="post" action="/probe/nodes/tasks">
                     <input type="hidden" name="action" value="add" />
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
                         <div class="field" style="flex: 1; min-width: 200px;">
@@ -130,7 +130,7 @@
                                     <td style="padding: 8px;">
                                         <div class="actions">
                                             <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Target}}', '{{.NodeIDs}}', '{{.ReportInterval}}')">⚙️ 设置</button>
-                                            <form method="post" action="/probe/tasks" style="display:inline;">
+                                            <form method="post" action="/probe/nodes/tasks" style="display:inline;">
                                                 <input type="hidden" name="id" value="{{ .ID }}" />
                                                 <button class="ghost btn-sm" type="submit" name="action" value="delete" onclick="return confirm('确认删除该拨测任务吗？')" style="color:var(--color-error);">删除</button>
                                             </form>
@@ -150,7 +150,7 @@
     <div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
         <div class="panel" style="width:500px; max-width:90%; padding:24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
             <h3 style="margin-top:0;">修改任务设置</h3>
-            <form method="post" action="/probe/tasks" style="display: flex; flex-direction: column; gap: 12px;">
+            <form method="post" action="/probe/nodes/tasks" style="display: flex; flex-direction: column; gap: 12px;">
                 <input type="hidden" name="action" value="edit" />
                 <input type="hidden" name="id" id="edit-id" value="" />
                 
@@ -228,6 +228,17 @@
 
         function closeEditModal() {
             document.getElementById('editModal').style.display = 'none';
+        }
+
+        if (window.self !== window.top) {
+            var header = document.querySelector('header');
+            if (header) header.style.display = 'none';
+            var main = document.querySelector('main');
+            if (main) {
+                main.style.maxWidth = '100%';
+                main.style.margin = '0';
+                main.style.padding = '0';
+            }
         }
     </script>
 </body>
