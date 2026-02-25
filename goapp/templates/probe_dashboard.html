@@ -159,8 +159,7 @@
         <nav>
             <a class="ghost" href="/probe/nodes">探针节点</a>
             <a class="ghost" href="/probe/tasks">拨测任务</a>
-            <a class="ghost" href="/probe/dashboard" style="color:var(--color-primary); font-weight:bold;">探针状态</a>
-            <a class="ghost" href="/probe/pings">拨测监控</a>
+            <a class="ghost" href="/probe/dashboard" style="color:var(--color-primary); font-weight:bold;">探针监视</a>
             <a class="ghost" href="/home">返回主菜单</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
@@ -170,7 +169,12 @@
         <section class="panel panel--wide" style="max-width: 100%;">
             <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                 <div>
-                    <h1>探针状态</h1>
+                    <h1 style="margin: 0; display: flex; align-items: center;">
+                        <select onchange="window.location.href=this.value" style="font-family: inherit; font-size: inherit; font-weight: inherit; border: none; background: transparent; cursor: pointer; outline: none; padding: 0; color: inherit; appearance: auto;">
+                            <option value="/probe/dashboard" selected>探针状态</option>
+                            <option value="/probe/pings">拨测监控</option>
+                        </select>
+                    </h1>
                     <p class="muted">实时监控所有在线节点的系统负载与网络情况</p>
                 </div>
                 <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">
