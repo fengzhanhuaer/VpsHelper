@@ -20,25 +20,32 @@ var TGTables = []string{
 
 func EnsureSchema(ctx context.Context, cf Client, accountID, dbID string, local *sql.DB) (bool, string) {
     for _, table := range TGTables {
+        // 取本地建表 SQL
         var createSQL string
         err := local.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name = ?", table).Scan(&createSQL)
         if err != nil || createSQL == "" {
             continue
         }
 
+        // 先尝试 CREATE TABLE
         ok, _, msg := cf.D1Query(ctx, accountID, dbID, createSQL, nil)
-        if !ok {
-            lower := msg
-            if lower != "" {
-                // best-effort match
-                if containsInsensitive(lower, "already exists") {
-                    if table == "tg_accounts" {
-                        cf.D1Query(ctx, accountID, dbID, "ALTER TABLE tg_accounts ADD COLUMN tg_user_id INTEGER DEFAULT 0;", nil)
-                    }
-                    continue
-                }
-            }
+        if ok {
+            // 新建成功，直接进入下一张表
+            continue
+        }
+
+        if !containsInsensitive(msg, "already exists") {
+            // 真正的建表失败（非"已存在"错误）
             return false, fmt.Sprintf("创建云端表失败(%s)：%s", table, msg)
+        }
+
+        // 表已存在 → DROP 后重建，确保 schema 与本地一致
+        // BackupLocalToD1 随后会 DELETE 全部行再写入，DROP 无额外数据损失。
+        if dropOk, _, dropMsg := cf.D1Query(ctx, accountID, dbID, "DROP TABLE IF EXISTS "+table, nil); !dropOk {
+            return false, fmt.Sprintf("重置云端表失败(%s)：%s", table, dropMsg)
+        }
+        if recreateOk, _, recreateMsg := cf.D1Query(ctx, accountID, dbID, createSQL, nil); !recreateOk {
+            return false, fmt.Sprintf("重建云端表失败(%s)：%s", table, recreateMsg)
         }
     }
 
