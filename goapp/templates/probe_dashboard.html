@@ -6,44 +6,12 @@
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
     <style>
-        .layout-container {
-            display: flex;
-            gap: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-            margin-top: 16px;
-        }
-        .sidebar {
-            width: 200px;
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .sidebar a {
-            display: block;
-            padding: 12px 16px;
-            background: var(--color-bg-alt);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius);
-            text-decoration: none;
-            color: var(--color-text);
-            font-weight: bold;
-            transition: all 0.2s;
-        }
-        .sidebar a:hover {
-             border-color: var(--color-primary);
-        }
-        .sidebar a.active {
-            background: var(--color-primary);
-            color: #fff;
-            border-color: var(--color-primary);
-        }
         .content-frame {
-            flex: 1;
+            width: 100%;
             border: none;
             background: transparent;
             min-height: 85vh;
+            display: block;
         }
     </style>
 </head>
@@ -57,39 +25,60 @@
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
-    
-    <main class="layout-container">
-        <div class="sidebar">
+
+    <main style="max-width: 1200px;">
+        <section class="panel panel--wide" style="max-width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <h1 style="margin: 0; display: flex; align-items: center;">
+                        <select id="view-switcher" onchange="switchView(this.value)"
+                            style="font-family: inherit; font-size: inherit; font-weight: inherit; border: none; background: transparent; cursor: pointer; outline: none; padding: 0; color: inherit; appearance: auto;">
+                            {{ $isNet := eq .Tab "netstatus" }}
+                            <option value="status" {{ if not $isNet }}selected{{ end }}>探针状态</option>
+                            <option value="netstatus" {{ if $isNet }}selected{{ end }}>网络状态</option>
+                        </select>
+                    </h1>
+                    <p class="muted" id="view-desc">{{ if eq .Tab "netstatus" }}实时监控各探针执行 Ping 任务的网络丢包与延迟曲线{{ else }}实时监控所有在线节点的系统负载与网络情况{{ end }}</p>
+                </div>
+                <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">
+                    <span id="update-timer-outer"></span>
+                </div>
+            </div>
+
             {{ $isNet := eq .Tab "netstatus" }}
-            <a href="/probe/dashboard?content=status" target="dashboard_frame" id="tab-status" {{ if not $isNet }}class="active"{{ end }} onclick="switchTab('tab-status')">探针状态</a>
-            <a href="/probe/dashboard?content=netstatus" target="dashboard_frame" id="tab-netstatus" {{ if $isNet }}class="active"{{ end }} onclick="switchTab('tab-netstatus')">网络状态</a>
-        </div>
-        {{ if $isNet }}
-        <iframe name="dashboard_frame" src="/probe/dashboard?content=netstatus" class="content-frame" onload="resizeIframe(this)"></iframe>
-        {{ else }}
-        <iframe name="dashboard_frame" src="/probe/dashboard?content=status" class="content-frame" onload="resizeIframe(this)"></iframe>
-        {{ end }}
+            <iframe id="content-frame" name="dashboard_frame" class="content-frame"
+                src="/probe/dashboard?content={{ if $isNet }}netstatus{{ else }}status{{ end }}"
+                onload="onFrameLoad(this)">
+            </iframe>
+        </section>
     </main>
 
     <script>
-        function switchTab(tabId) {
-            document.querySelectorAll('.sidebar a').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
+        const descriptions = {
+            'status': '实时监控所有在线节点的系统负载与网络情况',
+            'netstatus': '实时监控各探针执行 Ping 任务的网络丢包与延迟曲线'
+        };
+
+        function switchView(value) {
+            const frame = document.getElementById('content-frame');
+            frame.src = '/probe/dashboard?content=' + value;
+            document.getElementById('view-desc').textContent = descriptions[value] || '';
+            // Update URL without reload so browser history is correct
+            history.replaceState(null, '', '/probe/dashboard?tab=' + value);
         }
 
-        function resizeIframe(obj) {
+        function onFrameLoad(obj) {
             try {
                 const frameBody = obj.contentWindow.document.body;
-                if(frameBody) {
+                if (frameBody) {
                     obj.style.height = (frameBody.scrollHeight + 50) + 'px';
                 }
-            } catch(e) {}
+            } catch (e) {}
         }
-        window.setInterval(function() {
-            var iframe = document.querySelector('iframe[name="dashboard_frame"]');
-            if (iframe) {
-                 resizeIframe(iframe);
-            }
+
+        // Periodically resize iframe to fit content
+        window.setInterval(function () {
+            onFrameLoad(document.getElementById('content-frame'));
         }, 1000);
     </script>
 </body>
