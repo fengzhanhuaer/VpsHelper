@@ -37,14 +37,18 @@
                         </div>
                         <div class="field" style="flex: 3; min-width: 450px;">
                             <label>公网访问地址 / 域名 (可选)</label>
-                            <div style="display: flex; align-items: center; gap: 16px;">
-                                <input style="flex: 1;" name="probe_address" value="{{ .Address }}" placeholder="例如：1.2.3.4 或 probe.example.com" />
+                            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                                <input style="flex: 1; min-width: 200px;" name="probe_address" value="{{ .Address }}" placeholder="例如：1.2.3.4 或 probe.example.com" />
                                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
                                     <input type="checkbox" name="enable_ddns" {{ if .EnableDDNS }}checked{{ end }} />
-                                    自动同步该域名到 Cloudflare (DDNS)
+                                    自动同步域名到 Cloudflare (DDNS)
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;" title="调用 Cloudflare API 进行 Let's Encrypt DNS-01 验证，自动颁发公网受信任的 TLS 证书。支持任意子域名（包含非 CF 代理状态），且无需占用 :80 端口。私有端口将启用 WSS 加密连接（需重启生效）">
+                                    <input type="checkbox" name="enable_auto_tls" id="enable_auto_tls" {{ if .EnableAutoTLS }}checked{{ end }} />
+                                    🔒 自动申请 TLS 证书 (Let's Encrypt DNS-01)
                                 </label>
                             </div>
-                            <div class="muted">指定给探针拨号的高优先级地址</div>
+                            <div class="muted">指定给探针拨号的高优先级地址；若填域名并勾选自动 TLS，私有端口将以 WSS 加密运行</div>
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
@@ -54,6 +58,45 @@
                             <div class="muted">探针的状态历史保存在本地，设置自动清理周期</div>
                         </div>
                     </div>
+                    {{ if .CertInfo }}
+                    {{ if .CertInfo.IsValid }}
+                    {{ $days := .CertInfo.DaysLeft }}
+                    <div style="
+                        padding: 12px 16px;
+                        border-radius: 8px;
+                        border: 1px solid {{ if lt $days 15 }}rgba(220,53,69,0.4){{ else if lt $days 30 }}rgba(255,193,7,0.5){{ else }}rgba(40,167,69,0.35){{ end }};
+                        background: {{ if lt $days 15 }}rgba(220,53,69,0.08){{ else if lt $days 30 }}rgba(255,193,7,0.08){{ else }}rgba(40,167,69,0.07){{ end }};
+                        font-size: 0.88em; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+                    ">
+                        <span style="font-size:1.2em;">{{ if lt $days 15 }}🔴{{ else if lt $days 30 }}🟡{{ else }}🔒{{ end }}</span>
+                        <span style="font-weight:600;">TLS 证书有效</span>
+                        <span style="color:var(--color-text-muted);">域名：<strong>{{ .CertInfo.Domain }}</strong></span>
+                        <span style="color:var(--color-text-muted);">签发：{{ .CertInfo.NotBefore.Format "2006-01-02" }}</span>
+                        <span style="color:var(--color-text-muted);">到期：{{ .CertInfo.NotAfter.Format "2006-01-02" }}</span>
+                        <span style="
+                            padding: 2px 10px; border-radius: 20px; font-weight: 600;
+                            background: {{ if lt $days 15 }}rgba(220,53,69,0.2){{ else if lt $days 30 }}rgba(255,193,7,0.2){{ else }}rgba(40,167,69,0.2){{ end }};
+                            color: {{ if lt $days 15 }}#dc3545{{ else if lt $days 30 }}#e0a800{{ else }}#28a745{{ end }};
+                        ">
+                            剩余 {{ $days }} 天
+                        </span>
+                        {{ if lt $days 30 }}
+                        <span style="color: #e0a800;">⚠️ 证书临期，将自动续期</span>
+                        {{ else }}
+                        <span style="color: var(--color-text-muted); font-size:0.9em;">✅ 自动续期已启用（≤30天触发）</span>
+                        {{ end }}
+                    </div>
+                    {{ else }}
+                    <!-- cert exists but is expired or not-yet-valid -->
+                    <div style="padding: 10px 14px; background: rgba(220,53,69,0.08); border: 1px solid rgba(220,53,69,0.4); border-radius: 8px; font-size: 0.88em;">
+                        🔴 证书已过期（到期：{{ .CertInfo.NotAfter.Format "2006-01-02" }}），系统将自动重新申请
+                    </div>
+                    {{ end }}
+                    {{ else if .EnableAutoTLS }}
+                    <div style="padding: 10px 14px; background: rgba(255,193,7,0.08); border: 1px solid rgba(255,193,7,0.4); border-radius: 8px; font-size: 0.88em;">
+                        ⏳ 证书申请中 / 待生效 —— 确保 <strong>:80</strong> 端口公网可访问（HTTP-01 验证），稍后刷新查看状态
+                    </div>
+                    {{ end }}
                     <div>
                         <button class="btn" type="submit" name="action" value="save_settings">保存设置并应用 (端口更改需重启生效)</button>
                     </div>

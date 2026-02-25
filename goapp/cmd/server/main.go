@@ -66,6 +66,7 @@ func main() {
 	if err := tunnel.StartServer(context.Background(), database); err != nil {
 		log.Printf("[warn] tunnel server start failed: %v", err)
 	}
+	tunnel.StartRenewalWatcher(context.Background(), database)
 	d1.StartAutoBackup(context.Background(), database)
 	tg.StartAutoSend(context.Background(), database)
 	tg.StartAutoReply(context.Background(), database)

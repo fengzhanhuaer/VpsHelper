@@ -35,7 +35,7 @@ var (
 // 这个隔离出来的服务专门用于响应探针的长链接请求握手，
 // 以便后续下发指令并建立 Yamux 代理网络隧道。不在此处提供常规 API。
 func StartServer(ctx context.Context, dbConn *sql.DB) error {
-	settings, err := store.GetSettings(dbConn, []string{"probe_private_port"})
+	settings, err := store.GetSettings(dbConn, []string{"probe_private_port", "probe_auto_tls"})
 	if err != nil {
 		return fmt.Errorf("read settings: %w", err)
 	}
@@ -44,10 +44,10 @@ func StartServer(ctx context.Context, dbConn *sql.DB) error {
 	if port == "" {
 		port = "15019"
 	}
+	autoTLS := settings["probe_auto_tls"] == "true"
 
 	r := gin.New()
 	r.Use(gin.Recovery())
-
 	r.GET("/tunnel/:secret", func(c *gin.Context) {
 		handleTunnelConnect(c, dbConn)
 	})
@@ -58,12 +58,34 @@ func StartServer(ctx context.Context, dbConn *sql.DB) error {
 		Handler: r,
 	}
 
-	go func() {
-		log.Printf("[Tunnel] Listening for probe connections on %s", addr)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("[Tunnel] server error: %v", err)
+	if autoTLS {
+		tlsCfg := GetTLSConfig(dbConn)
+		if tlsCfg != nil {
+			server.TLSConfig = tlsCfg
+			go func() {
+				log.Printf("[Tunnel] Listening (WSS/TLS) on %s", addr)
+				// Empty strings: TLS config is set via server.TLSConfig (autocert)
+				if err := server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+					log.Printf("[Tunnel] TLS server error: %v", err)
+				}
+			}()
+		} else {
+			// TLS requested but no cert yet — fall back to plain WS and log a warning.
+			log.Printf("[Tunnel] auto_tls enabled but TLS config unavailable (cert pending?), starting plain WS on %s", addr)
+			go func() {
+				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					log.Printf("[Tunnel] server error: %v", err)
+				}
+			}()
 		}
-	}()
+	} else {
+		go func() {
+			log.Printf("[Tunnel] Listening (WS) on %s", addr)
+			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("[Tunnel] server error: %v", err)
+			}
+		}()
+	}
 
 	go func() {
 		<-ctx.Done()

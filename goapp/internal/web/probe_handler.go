@@ -206,7 +206,8 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			privatePort := strings.TrimSpace(c.PostForm("probe_private_port"))
 			addressIn := strings.TrimSpace(c.PostForm("probe_address"))
 			enableDDNS := c.PostForm("enable_ddns") == "on" || c.PostForm("enable_ddns") == "true"
-			
+			enableAutoTLS := c.PostForm("enable_auto_tls") == "on" || c.PostForm("enable_auto_tls") == "true"
+
 			if privatePort == "" {
 				privatePort = "15019"
 			}
@@ -216,17 +217,26 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			} else {
 				publicAddress = addressIn
 			}
-			
+
 			historyDays := strings.TrimSpace(c.PostForm("probe_history_days"))
 			if historyDays == "" {
 				historyDays = "90"
+			}
+
+			// 如果关闭了自动 TLS，清除已存的证书路径
+			if !enableAutoTLS {
+				_ = store.SetSetting(h.dbConn, "probe_auto_tls", "false")
+				_ = store.SetSetting(h.dbConn, "probe_tls_cert_path", "")
+				_ = store.SetSetting(h.dbConn, "probe_tls_key_path", "")
+			} else {
+				_ = store.SetSetting(h.dbConn, "probe_auto_tls", "true")
 			}
 
 			_ = store.SetSetting(h.dbConn, "probe_private_port", privatePort)
 			_ = store.SetSetting(h.dbConn, "probe_public_address", publicAddress)
 			_ = store.SetSetting(h.dbConn, "probe_ddns_domain", ddnsDomain)
 			_ = store.SetSetting(h.dbConn, "probe_history_days", historyDays)
-			
+
 			message = "设置已保存，端口更改需重启服务生效。"
 			msgOK = true
 
@@ -243,10 +253,9 @@ func (h *Handler) probeNodes(c *gin.Context) {
 					}
 				}
 			}
-			
+
 			// If a DDNS domain is configured, immediately push the current IP to Cloudflare.
 			if ddnsDomain != "" {
-				// Run a synchronous trigger so the user sees the result immediately.
 				if errMsg := cloudflare.TriggerProbeDDNS(h.dbConn); errMsg != "" {
 					message = message + " | DDNS 更新失败：" + errMsg
 					msgOK = false
@@ -254,10 +263,19 @@ func (h *Handler) probeNodes(c *gin.Context) {
 					message = message + " | DDNS 已成功触发更新。"
 				}
 			}
+
+			// 如果启用了自动 TLS 且填写了域名，立即触发证书申请
+			if enableAutoTLS && addressIn != "" && !isIPAddress(addressIn) {
+				go tunnel.RequestCertificate(h.dbConn, addressIn)
+				message += " | 正在后台申请 TLS 证书，请稍后刷新查看状态。"
+			}
 		}
 	}
 
-	settings, err := store.GetSettings(h.dbConn, []string{"probe_private_port", "probe_public_address", "probe_ddns_domain", "probe_history_days"})
+	settings, err := store.GetSettings(h.dbConn, []string{
+		"probe_private_port", "probe_public_address", "probe_ddns_domain",
+		"probe_history_days", "probe_auto_tls",
+	})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "加载设置失败")
 		return
@@ -272,6 +290,10 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	if historyDays == "" {
 		historyDays = "90"
 	}
+	enableAutoTLS := settings["probe_auto_tls"] == "true"
+
+	// 读取证书详细状态
+	certInfo := tunnel.GetCertInfo(h.dbConn)
 
 	nodes, err := store.ListProbeNodes(h.dbConn)
 	if err != nil {
@@ -308,6 +330,8 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"PrivatePort":   privatePort,
 		"Address":       combinedAddress,
 		"EnableDDNS":    enableDDNS,
+		"EnableAutoTLS": enableAutoTLS,
+		"CertInfo":      certInfo,
 		"HistoryDays":   historyDays,
 	})
 }
@@ -335,12 +359,18 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		return
 	}
 
-	// 优先引入 cloudflare 的函数，确保包导入（如果不报错，意味着已经在顶层引入过了或者可以通过 goimports 自动整理，但在文件顶部可能没引用 cloudflare 包，需要在文件开头处理）
-	settings, _ := store.GetSettings(h.dbConn, []string{"probe_private_port", "probe_public_address", "probe_ddns_domain"})
-	
+	settings, _ := store.GetSettings(h.dbConn, []string{"probe_private_port", "probe_public_address", "probe_ddns_domain", "probe_auto_tls"})
+
 	port := settings["probe_private_port"]
 	if port == "" {
 		port = "15019"
+	}
+	autoTLS := settings["probe_auto_tls"] == "true"
+	wsScheme := "ws"
+	if autoTLS {
+		if certInfo := tunnel.GetCertInfo(h.dbConn); certInfo != nil && certInfo.IsValid {
+			wsScheme = "wss"
+		}
 	}
 
 	address := ""
@@ -349,36 +379,35 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 
 	// 1. 如果有域名优先使用域名
 	if ddns != "" {
-		address = fmt.Sprintf("ws://%s:%s/tunnel", ddns, port)
+		address = fmt.Sprintf("%s://%s:%s/tunnel", wsScheme, ddns, port)
 	} else if publicAddr != "" {
 		// 2. 没有域名则使用写死的公网IP/地址
 		address = publicAddr
 	} else {
-		// 3. 都没有，则自动探测公网IP并下发（优先送 IPv4，后备 IPv6。或者如果探测不到就用 c.ClientIP() 回退）
+		// 3. 都没有，则自动探测公网IP并下发
 		ips := cloudflare.GetPublicIPs()
 		if ips.IPv4 != "" {
-			address = fmt.Sprintf("ws://%s:%s/tunnel", ips.IPv4, port)
+			address = fmt.Sprintf("%s://%s:%s/tunnel", wsScheme, ips.IPv4, port)
 		} else if ips.IPv6 != "" {
-			address = fmt.Sprintf("ws://[%s]:%s/tunnel", ips.IPv6, port)
+			address = fmt.Sprintf("%s://[%s]:%s/tunnel", wsScheme, ips.IPv6, port)
 		} else {
 			clientIP := c.ClientIP()
 			if strings.Contains(clientIP, ":") {
-				address = fmt.Sprintf("ws://[%s]:%s/tunnel", clientIP, port)
+				address = fmt.Sprintf("%s://[%s]:%s/tunnel", wsScheme, clientIP, port)
 			} else {
-				address = fmt.Sprintf("ws://%s:%s/tunnel", clientIP, port)
+				address = fmt.Sprintf("%s://%s:%s/tunnel", wsScheme, clientIP, port)
 			}
 		}
 	}
 
-	// 统一针对没写协议头的 address 做标准化修饰（如果是从 publicAddr 拿出来的纯粹 ip:port，或者裸域名）
+	// 统一针对没写协议头的 address 做标准化修饰
 	if !strings.HasPrefix(address, "ws") && !strings.HasPrefix(address, "http") {
-		// none scheme
 		if !strings.Contains(address, ":") || net.ParseIP(address) != nil || (strings.Contains(address, ":") && strings.HasPrefix(address, "[")) {
 			// pure domain or IP without port
-			address = fmt.Sprintf("ws://%s:%s/tunnel", address, port)
+			address = fmt.Sprintf("%s://%s:%s/tunnel", wsScheme, address, port)
 		} else {
 			// has port attached, just add scheme
-			address = "ws://" + address
+			address = wsScheme + "://" + address
 		}
 	} else {
 		// Normalizes http/https to ws/wss
@@ -593,3 +622,11 @@ func (h *Handler) probeInstallScript(c *gin.Context) {
 	c.DataFromReader(resp.StatusCode, resp.ContentLength, "text/plain; charset=utf-8", resp.Body, nil)
 }
 
+// isIPAddress returns true if addr is a raw IPv4/IPv6 address (not a domain name).
+func isIPAddress(addr string) bool {
+	host := addr
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
+	}
+	return net.ParseIP(host) != nil
+}
