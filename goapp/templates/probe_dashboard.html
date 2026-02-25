@@ -60,10 +60,15 @@
     
     <main class="layout-container">
         <div class="sidebar">
-            <a href="/probe/dashboard?content=status" target="dashboard_frame" id="tab-status" class="{{ if ne .Tab "netstatus" }}active{{ end }}" onclick="switchTab('tab-status')">探针状态</a>
-            <a href="/probe/dashboard?content=netstatus" target="dashboard_frame" id="tab-netstatus" class="{{ if eq .Tab "netstatus" }}active{{ end }}" onclick="switchTab('tab-netstatus')">网络状态</a>
+            {{ $isNet := eq .Tab "netstatus" }}
+            <a href="/probe/dashboard?content=status" target="dashboard_frame" id="tab-status" {{ if not $isNet }}class="active"{{ end }} onclick="switchTab('tab-status')">探针状态</a>
+            <a href="/probe/dashboard?content=netstatus" target="dashboard_frame" id="tab-netstatus" {{ if $isNet }}class="active"{{ end }} onclick="switchTab('tab-netstatus')">网络状态</a>
         </div>
-        <iframe name="dashboard_frame" src="/probe/dashboard?content={{ if eq .Tab "netstatus" }}netstatus{{ else }}status{{ end }}" class="content-frame" onload="resizeIframe(this)"></iframe>
+        {{ if $isNet }}
+        <iframe name="dashboard_frame" src="/probe/dashboard?content=netstatus" class="content-frame" onload="resizeIframe(this)"></iframe>
+        {{ else }}
+        <iframe name="dashboard_frame" src="/probe/dashboard?content=status" class="content-frame" onload="resizeIframe(this)"></iframe>
+        {{ end }}
     </main>
 
     <script>
