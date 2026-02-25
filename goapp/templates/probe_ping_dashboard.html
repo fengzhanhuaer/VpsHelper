@@ -51,7 +51,7 @@
     <script>
         const tasksMap = {};
         {{ range .Tasks }}
-            tasksMap["{{ .ID }}"] = "{{ .Name }} ({{ .Target }})";
+            tasksMap["{{ .ID }}"] = "{{ .Name }}";
         {{ end }}
 
         const nodesList = [];
