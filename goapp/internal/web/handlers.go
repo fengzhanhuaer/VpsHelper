@@ -132,8 +132,8 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/probe/nodes/tasks", h.probeTasks)
 	router.GET("/probe/dashboard", h.probeDashboard)
 	// Add backward compatibility for cached 301 redirects from older code
-	router.GET("/probe/dashboard/status", func(c *gin.Context) { c.Redirect(http.StatusFound, "/probe/dashboard?content=status") })
-	router.GET("/probe/dashboard/netstatus", func(c *gin.Context) { c.Redirect(http.StatusFound, "/probe/dashboard?content=netstatus") })
+	router.GET("/probe/dashboard/status", func(c *gin.Context) { c.Redirect(http.StatusFound, "/probe/dashboard") })
+	router.GET("/probe/dashboard/netstatus", func(c *gin.Context) { c.Redirect(http.StatusFound, "/probe/dashboard?tab=netstatus") })
 	router.GET("/probe/ws", h.probeDashboardWS)
 	router.GET("/api/probe/discover", h.probeDiscover)
 	router.GET("/api/probe/ping_history", h.probePingHistory)

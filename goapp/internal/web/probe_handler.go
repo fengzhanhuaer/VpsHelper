@@ -424,6 +424,7 @@ func (h *Handler) probeDashboard(c *gin.Context) {
 	if content == "" {
 		c.HTML(http.StatusOK, "probe_dashboard.html", gin.H{
 			"Title": "探针监视",
+			"Tab":   c.Query("tab"),
 		})
 		return
 	}
