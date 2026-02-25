@@ -35,21 +35,29 @@ func (h *Handler) probeDashboardWS(c *gin.Context) {
 
 	tunnel.AddDashboardClient(conn)
 
+	mode := c.Query("mode")
+
 	// User wants rapid updates (5s) for 5 minutes when a dashboard is opened
 	go func() {
-		log.Printf("[Web] Dashboard opened. Rapid 5s refresh mode enabled for 5 minutes.")
+		log.Printf("[Web] Dashboard opened (mode=%s). Rapid 5s refresh mode enabled for 5 minutes.", mode)
+		
+		changeKey := "report_interval"
+		if mode == "netstatus" {
+			changeKey = "ping_report_interval"
+		}
+
 		tunnel.PushConfigToAllNodes("config", map[string]interface{}{
-			"report_interval": 5,
+			changeKey: 5,
 		})
 
 		time.Sleep(5 * time.Minute)
 
-		log.Printf("[Web] Rapid refresh mode elapsed. Restoring original node intervals.")
+		log.Printf("[Web] Rapid refresh mode elapsed (mode=%s). Restoring original node intervals.", mode)
 		nodes, err := store.ListProbeNodes(h.dbConn)
 		if err == nil {
 			for _, n := range nodes {
 				go tunnel.PushConfigToNode(n.ID, "config", map[string]interface{}{
-					"report_interval": n.ReportInterval,
+					changeKey: n.ReportInterval,
 				})
 			}
 		}

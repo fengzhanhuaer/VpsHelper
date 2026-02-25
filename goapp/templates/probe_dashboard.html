@@ -298,7 +298,7 @@
 
         function connectWS() {
             const wsScheme = window.location.protocol === "https:" ? "wss://" : "ws://";
-            const wsUrl = wsScheme + window.location.host + "/probe/ws";
+            const wsUrl = wsScheme + window.location.host + "/probe/ws?mode=status";
             const ws = new WebSocket(wsUrl);
             const statusBox = document.getElementById('update-timer');
 

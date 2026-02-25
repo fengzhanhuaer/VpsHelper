@@ -223,7 +223,7 @@
                 currentWs.close(); 
             }
             const wsScheme = window.location.protocol === "https:" ? "wss://" : "ws://";
-            const wsUrl = wsScheme + window.location.host + "/probe/ws";
+            const wsUrl = wsScheme + window.location.host + "/probe/ws?mode=netstatus";
             const ws = new WebSocket(wsUrl);
             currentWs = ws;
             const statusBox = document.getElementById('update-timer');

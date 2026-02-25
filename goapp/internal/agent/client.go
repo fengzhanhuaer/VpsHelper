@@ -259,17 +259,23 @@ func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, i
 	switch msg.Type {
 	case "config":
 		var cfg struct {
-			ReportInterval int `json:"report_interval"`
+			ReportInterval     *int `json:"report_interval"`
+			PingReportInterval *int `json:"ping_report_interval"`
 		}
-		if err := json.Unmarshal(msg.Payload, &cfg); err == nil && cfg.ReportInterval > 0 {
-			log.Printf("[Agent] 服务端推送新汇报周期: %ds", cfg.ReportInterval)
-			select {
-			case intervalCh <- cfg.ReportInterval:
-			default:
+		if err := json.Unmarshal(msg.Payload, &cfg); err == nil {
+			if cfg.ReportInterval != nil && *cfg.ReportInterval > 0 {
+				log.Printf("[Agent] 服务端推送新系统状态汇报周期: %ds", *cfg.ReportInterval)
+				select {
+				case intervalCh <- *cfg.ReportInterval:
+				default:
+				}
 			}
-			select {
-			case pingIntervalCh <- cfg.ReportInterval:
-			default:
+			if cfg.PingReportInterval != nil && *cfg.PingReportInterval > 0 {
+				log.Printf("[Agent] 服务端推送新网络拨测汇报周期: %ds", *cfg.PingReportInterval)
+				select {
+				case pingIntervalCh <- *cfg.PingReportInterval:
+				default:
+				}
 			}
 		}
 
