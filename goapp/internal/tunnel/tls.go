@@ -105,7 +105,7 @@ func (u *acmeUser) GetEmail() string                              { return u.Ema
 func (u *acmeUser) GetRegistration() *registration.Resource        { return u.Registration }
 func (u *acmeUser) GetPrivateKey() crypto.PrivateKey               { return u.key }
 
-func loadOrCreateUser(cacheDir string) (*acmeUser, error) {
+func loadOrCreateUser(cacheDir, domain string) (*acmeUser, error) {
 	keyPath := filepath.Join(cacheDir, "account.key")
 	regPath := filepath.Join(cacheDir, "account.json")
 
@@ -134,8 +134,10 @@ func loadOrCreateUser(cacheDir string) (*acmeUser, error) {
 		os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o600)
 	}
 
+	email := "admin@" + domain
+
 	u := &acmeUser{
-		Email: "admin@vpshelper.local",
+		Email: email,
 		key:   key,
 	}
 
@@ -149,6 +151,7 @@ func loadOrCreateUser(cacheDir string) (*acmeUser, error) {
 
 	return u, nil
 }
+
 
 func saveUserReg(cacheDir string, u *acmeUser) {
 	if u.Registration != nil {
@@ -187,7 +190,7 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 		return
 	}
 
-	user, err := loadOrCreateUser(cacheDir)
+	user, err := loadOrCreateUser(cacheDir, domain)
 	if err != nil {
 		msg := fmt.Sprintf("ACME 账号创建失败: %v", err)
 		log.Printf("[TLS] %s", msg)
