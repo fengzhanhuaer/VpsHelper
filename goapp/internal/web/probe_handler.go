@@ -286,7 +286,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	enableDDNS := ddnsDomain != ""
 
 	c.HTML(http.StatusOK, "probe_nodes.html", gin.H{
-		"Title":         "探针节点管理",
+		"Title":         "探针管理",
 		"Message":       message,
 		"MsgOK":         msgOK,
 		"Nodes":         nodes,
