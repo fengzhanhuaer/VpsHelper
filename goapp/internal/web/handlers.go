@@ -127,6 +127,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/probe/nodes", h.probeNodes)
 	router.GET("/probe/tasks", h.probeTasks)
 	router.POST("/probe/tasks", h.probeTasks)
+	router.GET("/probe/dashboard", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/probe/dashboard/status") })
 	router.GET("/probe/dashboard/status", h.probeDashboard)
 	router.GET("/probe/dashboard/netstatus", h.probePingDashboard)
 	router.GET("/probe/ws", h.probeDashboardWS)
