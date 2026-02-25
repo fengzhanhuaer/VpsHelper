@@ -14,6 +14,7 @@ var TGTables = []string{
     "tg_auto_reply_rules",
     "shell_shortcuts",
     "probe_nodes",
+    "probe_nodes_deleted",
     "probe_tasks",
     "app_settings",
 }

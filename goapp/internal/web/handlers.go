@@ -128,6 +128,8 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/probe/nodes/list", h.probeNodes)
 	router.GET("/probe/nodes/comm", h.probeNodes)
 	router.POST("/probe/nodes/comm", h.probeNodes)
+	router.GET("/probe/nodes/deleted", h.probeNodesDeleted)
+	router.POST("/probe/nodes/deleted", h.probeNodesDeleted)
 	router.GET("/probe/nodes/tasks", h.probeTasks)
 	router.POST("/probe/nodes/tasks", h.probeTasks)
 	router.GET("/probe/dashboard", h.probeDashboard)

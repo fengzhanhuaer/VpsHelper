@@ -103,6 +103,21 @@ func Migrate(dbConn *sql.DB) error {
 	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN price TEXT NOT NULL DEFAULT '';")
 	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN expired_at TEXT NOT NULL DEFAULT '';")
 
+	// v6: probe_nodes_deleted for soft-delete
+	_, _ = dbConn.Exec(`CREATE TABLE IF NOT EXISTS probe_nodes_deleted (
+		id              INTEGER PRIMARY KEY AUTOINCREMENT,
+		name            TEXT    NOT NULL,
+		note            TEXT    NOT NULL DEFAULT '',
+		secret          TEXT    NOT NULL UNIQUE,
+		created_at      TEXT    NOT NULL DEFAULT '',
+		report_interval INTEGER NOT NULL DEFAULT 60,
+		vendor          TEXT    NOT NULL DEFAULT '',
+		vendor_url      TEXT    NOT NULL DEFAULT '',
+		price           TEXT    NOT NULL DEFAULT '',
+		expired_at      TEXT    NOT NULL DEFAULT '',
+		deleted_at      TEXT    NOT NULL DEFAULT ''
+	)`)
+
 	// v4: probe tasks
 	_, _ = dbConn.Exec(`CREATE TABLE IF NOT EXISTS probe_tasks (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,

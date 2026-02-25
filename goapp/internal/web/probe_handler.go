@@ -637,3 +637,47 @@ func isIPAddress(addr string) bool {
 	}
 	return net.ParseIP(host) != nil
 }
+
+// probeNodesDeleted handles the recycle bin page for deleted nodes.
+func (h *Handler) probeNodesDeleted(c *gin.Context) {
+	message := ""
+	msgOK := false
+
+	if c.Request.Method == http.MethodPost {
+		action := strings.TrimSpace(c.PostForm("action"))
+		idStr := strings.TrimSpace(c.PostForm("id"))
+		id, err := strconv.ParseInt(idStr, 10, 64)
+
+		if err == nil && id > 0 {
+			switch action {
+			case "restore":
+				if err := store.RestoreDeletedProbeNode(h.dbConn, id); err != nil {
+					message = "恢复失败：" + err.Error()
+				} else {
+					message = "节点已成功恢复。"
+					msgOK = true
+				}
+			case "hard_delete":
+				if err := store.HardDeleteProbeNode(h.dbConn, id); err != nil {
+					message = "永久删除失败：" + err.Error()
+				} else {
+					message = "节点记录已永久抹除。"
+					msgOK = true
+				}
+			}
+		}
+	}
+
+	nodes, err := store.ListDeletedProbeNodes(h.dbConn)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "加载已删除节点列表失败")
+		return
+	}
+
+	c.HTML(http.StatusOK, "probe_nodes_deleted.html", gin.H{
+		"Title":   "已删除节点",
+		"Message": message,
+		"MsgOK":   msgOK,
+		"Nodes":   nodes,
+	})
+}

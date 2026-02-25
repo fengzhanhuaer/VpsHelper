@@ -235,15 +235,102 @@ func CreateProbeNode(dbConn *sql.DB, name, note, secret string) (int64, error) {
 	return res.LastInsertId()
 }
 
-// DeleteProbeNode removes a node from the main DB and its status from local DB.
+// DeleteProbeNode moves a node from probe_nodes to probe_nodes_deleted.
 func DeleteProbeNode(dbConn *sql.DB, id int64) error {
-	if _, err := dbConn.Exec(`DELETE FROM probe_nodes WHERE id = ?`, id); err != nil {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	tx, err := dbConn.Begin()
+	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`
+		INSERT INTO probe_nodes_deleted (name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, deleted_at)
+		SELECT name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, ?
+		FROM probe_nodes WHERE id = ?
+	`, now, id)
+	if err != nil {
+		return fmt.Errorf("archive node: %w", err)
+	}
+
+	if _, err := tx.Exec(`DELETE FROM probe_nodes WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete node: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
 	if probeDB != nil {
 		_, _ = probeDB.Exec(`DELETE FROM probe_node_status WHERE node_id = ?`, id)
 	}
 	return nil
+}
+
+// DeletedProbeNode represents a soft-deleted probe node.
+type DeletedProbeNode struct {
+	ID             int64
+	Name           string
+	Note           string
+	Secret         string
+	CreatedAt      string
+	ReportInterval int
+	Vendor         string
+	VendorUrl      string
+	Price          string
+	ExpiredAt      string
+	DeletedAt      string
+}
+
+// ListDeletedProbeNodes returns all soft-deleted nodes.
+func ListDeletedProbeNodes(dbConn *sql.DB) ([]DeletedProbeNode, error) {
+	rows, err := dbConn.Query(
+		`SELECT id, name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, deleted_at FROM probe_nodes_deleted ORDER BY deleted_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list deleted nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var nodes []DeletedProbeNode
+	for rows.Next() {
+		var n DeletedProbeNode
+		if err := rows.Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt, &n.DeletedAt); err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, rows.Err()
+}
+
+// RestoreDeletedProbeNode moves the node back from probe_nodes_deleted to probe_nodes.
+func RestoreDeletedProbeNode(dbConn *sql.DB, id int64) error {
+	tx, err := dbConn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`
+		INSERT INTO probe_nodes (name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at)
+		SELECT name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at
+		FROM probe_nodes_deleted WHERE id = ?
+	`, id)
+	if err != nil {
+		return fmt.Errorf("restore node: %w", err)
+	}
+
+	if _, err := tx.Exec(`DELETE FROM probe_nodes_deleted WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("cleanup deleted node: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// HardDeleteProbeNode removes a node permanently.
+func HardDeleteProbeNode(dbConn *sql.DB, id int64) error {
+	_, err := dbConn.Exec(`DELETE FROM probe_nodes_deleted WHERE id = ?`, id)
+	return err
 }
 
 // UpdateProbeNodeDetails updates editable properties in the main DB.
