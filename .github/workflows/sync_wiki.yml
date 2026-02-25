@@ -1,0 +1,43 @@
+name: Sync Wiki to GitHub
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'wiki/**' # 只在 wiki 目录变化时触发
+
+jobs:
+  sync_wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Push to GitHub Wiki
+        run: |
+          echo "Setting up Wiki sync..."
+          git clone "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" /tmp/wiki || { echo "Wiki repository not found. Please create the first Wiki page on GitHub UI manually."; exit 1; }
+          
+          echo "Copying local wiki files to cloned wiki repository..."
+          # Remove all existing files in the wiki clone EXCEPT .git
+          find /tmp/wiki -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
+          
+          # Copy everything from local 'wiki/' to the clone
+          cp -r wiki/* /tmp/wiki/
+          
+          cd /tmp/wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if there are changes
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "No changes to commit to Wiki."
+            exit 0
+          fi
+          
+          git add .
+          git commit -m "docs: auto-sync wiki from main repository [skip ci]"
+          git push origin master
