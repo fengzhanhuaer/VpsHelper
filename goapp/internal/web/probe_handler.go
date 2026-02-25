@@ -223,11 +223,11 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				historyDays = "90"
 			}
 
-			// 如果关闭了自动 TLS，清除已存的证书路径
+			// 如果关闭了自动 TLS，清除已存的证书状态
 			if !enableAutoTLS {
 				_ = store.SetSetting(h.dbConn, "probe_auto_tls", "false")
-				_ = store.SetSetting(h.dbConn, "probe_tls_cert_path", "")
-				_ = store.SetSetting(h.dbConn, "probe_tls_key_path", "")
+				_ = store.SetSetting(h.dbConn, "probe_tls_cert_pem", "")
+				_ = store.SetSetting(h.dbConn, "probe_tls_key_pem", "")
 			} else {
 				_ = store.SetSetting(h.dbConn, "probe_auto_tls", "true")
 			}
@@ -275,6 +275,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	settings, err := store.GetSettings(h.dbConn, []string{
 		"probe_private_port", "probe_public_address", "probe_ddns_domain",
 		"probe_history_days", "probe_auto_tls",
+		"probe_tls_cert_status", "probe_tls_cert_error", "probe_tls_cert_updated_at",
 	})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "加载设置失败")
@@ -291,6 +292,9 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		historyDays = "90"
 	}
 	enableAutoTLS := settings["probe_auto_tls"] == "true"
+	certReqStatus := settings["probe_tls_cert_status"]   // "", "running", "success", "error"
+	certReqError  := settings["probe_tls_cert_error"]
+	certReqAt     := settings["probe_tls_cert_updated_at"]
 
 	// 读取证书详细状态
 	certInfo := tunnel.GetCertInfo(h.dbConn)
@@ -332,6 +336,9 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"EnableDDNS":    enableDDNS,
 		"EnableAutoTLS": enableAutoTLS,
 		"CertInfo":      certInfo,
+		"CertReqStatus": certReqStatus,
+		"CertReqError":  certReqError,
+		"CertReqAt":     certReqAt,
 		"HistoryDays":   historyDays,
 	})
 }

@@ -58,26 +58,21 @@
                             <div class="muted">探针的状态历史保存在本地，设置自动清理周期</div>
                         </div>
                     </div>
+                    {{/* ── TLS 证书状态面板 ── */}}
                     {{ if .CertInfo }}
                     {{ if .CertInfo.IsValid }}
                     {{ $days := .CertInfo.DaysLeft }}
-                    <div style="
-                        padding: 12px 16px;
-                        border-radius: 8px;
-                        border: 1px solid {{ if lt $days 15 }}rgba(220,53,69,0.4){{ else if lt $days 30 }}rgba(255,193,7,0.5){{ else }}rgba(40,167,69,0.35){{ end }};
-                        background: {{ if lt $days 15 }}rgba(220,53,69,0.08){{ else if lt $days 30 }}rgba(255,193,7,0.08){{ else }}rgba(40,167,69,0.07){{ end }};
-                        font-size: 0.88em; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-                    ">
+                    <div style="padding: 12px 16px; border-radius: 8px; font-size: 0.88em; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+                         border: 1px solid {{ if lt $days 15 }}rgba(220,53,69,0.4){{ else if lt $days 30 }}rgba(255,193,7,0.5){{ else }}rgba(40,167,69,0.35){{ end }};
+                         background: {{ if lt $days 15 }}rgba(220,53,69,0.08){{ else if lt $days 30 }}rgba(255,193,7,0.08){{ else }}rgba(40,167,69,0.07){{ end }};">
                         <span style="font-size:1.2em;">{{ if lt $days 15 }}🔴{{ else if lt $days 30 }}🟡{{ else }}🔒{{ end }}</span>
                         <span style="font-weight:600;">TLS 证书有效</span>
                         <span style="color:var(--color-text-muted);">域名：<strong>{{ .CertInfo.Domain }}</strong></span>
                         <span style="color:var(--color-text-muted);">签发：{{ .CertInfo.NotBefore.Format "2006-01-02" }}</span>
                         <span style="color:var(--color-text-muted);">到期：{{ .CertInfo.NotAfter.Format "2006-01-02" }}</span>
-                        <span style="
-                            padding: 2px 10px; border-radius: 20px; font-weight: 600;
-                            background: {{ if lt $days 15 }}rgba(220,53,69,0.2){{ else if lt $days 30 }}rgba(255,193,7,0.2){{ else }}rgba(40,167,69,0.2){{ end }};
-                            color: {{ if lt $days 15 }}#dc3545{{ else if lt $days 30 }}#e0a800{{ else }}#28a745{{ end }};
-                        ">
+                        <span style="padding: 2px 10px; border-radius: 20px; font-weight: 600;
+                             background: {{ if lt $days 15 }}rgba(220,53,69,0.2){{ else if lt $days 30 }}rgba(255,193,7,0.2){{ else }}rgba(40,167,69,0.2){{ end }};
+                             color: {{ if lt $days 15 }}#dc3545{{ else if lt $days 30 }}#e0a800{{ else }}#28a745{{ end }};">
                             剩余 {{ $days }} 天
                         </span>
                         {{ if lt $days 30 }}
@@ -87,16 +82,39 @@
                         {{ end }}
                     </div>
                     {{ else }}
-                    <!-- cert exists but is expired or not-yet-valid -->
+                    {{/* 证书过期 */}}
                     <div style="padding: 10px 14px; background: rgba(220,53,69,0.08); border: 1px solid rgba(220,53,69,0.4); border-radius: 8px; font-size: 0.88em;">
-                        🔴 证书已过期（到期：{{ .CertInfo.NotAfter.Format "2006-01-02" }}），系统将自动重新申请
+                        🔴 证书已过期（{{ .CertInfo.NotAfter.Format "2006-01-02" }}），系统将自动重新申请
                     </div>
                     {{ end }}
                     {{ else if .EnableAutoTLS }}
-                    <div style="padding: 10px 14px; background: rgba(255,193,7,0.08); border: 1px solid rgba(255,193,7,0.4); border-radius: 8px; font-size: 0.88em;">
-                        ⏳ 证书申请中 / 待生效 —— 确保 <strong>:80</strong> 端口公网可访问（HTTP-01 验证），稍后刷新查看状态
+                    {{/* 勾选了TLS但还没有有效证书 — 根据申请状态细分 */}}
+                    {{ if eq .CertReqStatus "running" }}
+                    <div style="padding: 10px 14px; background: rgba(13,110,253,0.07); border: 1px solid rgba(13,110,253,0.35); border-radius: 8px; font-size: 0.88em; display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:1.1em;">⏳</span>
+                        <span><strong>证书申请中</strong>，Let's Encrypt DNS-01 验证正在进行，稍后刷新查看结果…</span>
+                        {{ if .CertReqAt }}<span style="color:var(--color-text-muted); margin-left:auto; font-size:0.9em;">{{ .CertReqAt }}</span>{{ end }}
+                    </div>
+                    {{ else if eq .CertReqStatus "error" }}
+                    <div style="padding: 12px 16px; background: rgba(220,53,69,0.07); border: 1px solid rgba(220,53,69,0.4); border-radius: 8px; font-size: 0.88em;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                            <span style="font-size:1.1em;">❌</span>
+                            <strong>证书申请失败</strong>
+                            {{ if .CertReqAt }}<span style="color:var(--color-text-muted); margin-left:auto; font-size:0.9em;">{{ .CertReqAt }}</span>{{ end }}
+                        </div>
+                        <div style="background:rgba(0,0,0,0.06); border-radius:5px; padding:7px 10px; font-family:monospace; font-size:0.88em; word-break:break-all; color:#c0392b;">
+                            {{ .CertReqError }}
+                        </div>
+                        <div style="margin-top:7px; color:var(--color-text-muted);">常见原因：CF API Token 无 DNS 编辑权限 / 域名未在 CF 下管理 / Let's Encrypt 频率限制（同域名每周5次）</div>
+                    </div>
+                    {{ else }}
+                    {{/* 尚未触发过申请 */}}
+                    <div style="padding: 10px 14px; background: rgba(255,193,7,0.07); border: 1px solid rgba(255,193,7,0.4); border-radius: 8px; font-size: 0.88em;">
+                        ⏳ 证书尚未申请 —— 保存后将自动在后台发起申请，刷新本页查看进度
                     </div>
                     {{ end }}
+                    {{ end }}
+
                     <div>
                         <button class="btn" type="submit" name="action" value="save_settings">保存设置并应用 (端口更改需重启生效)</button>
                     </div>

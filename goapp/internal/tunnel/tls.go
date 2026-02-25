@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"math/big"
 	"os"
@@ -47,10 +48,10 @@ func certCacheDir() string {
 	return filepath.Join(dataDir, "autocert_dns01")
 }
 
-// GetCertInfo reads the stored certificate file and returns parsed status info.
+// GetCertInfo reads the stored certificate from DB and returns parsed status info.
 func GetCertInfo(dbConn *sql.DB) *CertInfo {
 	settings, err := store.GetSettings(dbConn, []string{
-		"probe_auto_tls", "probe_tls_cert_path",
+		"probe_auto_tls", "probe_tls_cert_pem",
 		"probe_ddns_domain", "probe_public_address",
 	})
 	if err != nil || settings["probe_auto_tls"] != "true" {
@@ -62,27 +63,24 @@ func GetCertInfo(dbConn *sql.DB) *CertInfo {
 		domain = settings["probe_public_address"]
 	}
 
-	info := &CertInfo{Domain: domain}
-
-	certPath := settings["probe_tls_cert_path"]
-	if certPath == "" {
-		return info // TLS enabled but no cert yet
+	certPEMStr := settings["probe_tls_cert_pem"]
+	if certPEMStr == "" {
+		return nil // TLS enabled but no cert yet -> template shows pending
 	}
 
-	certPEM, err := os.ReadFile(certPath)
-	if err != nil {
-		return info
-	}
+	certPEM := []byte(certPEMStr)
 
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
-		return info
+		return nil
 	}
 
 	leaf, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return info
+		return nil
 	}
+
+	info := &CertInfo{Domain: domain}
 
 	now := time.Now()
 	info.NotBefore = leaf.NotBefore
@@ -164,22 +162,37 @@ func saveUserReg(cacheDir string, u *acmeUser) {
 func RequestCertificate(dbConn *sql.DB, domain string) {
 	log.Printf("[TLS] Requesting Let's Encrypt certificate via DNS-01 for domain: %s", domain)
 
-	settings, err := store.GetSettings(dbConn, []string{"cf_api_token", "probe_tls_cert_path", "probe_tls_key_path"})
+	// Mark as running in DB
+	now := time.Now().Format("2006-01-02 15:04:05")
+	_ = store.SetSetting(dbConn, "probe_tls_cert_status", "running")
+	_ = store.SetSetting(dbConn, "probe_tls_cert_error", "")
+	_ = store.SetSetting(dbConn, "probe_tls_cert_updated_at", now)
+
+	settings, err := store.GetSettings(dbConn, []string{"cf_api_token"})
 	if err != nil || strings.TrimSpace(settings["cf_api_token"]) == "" {
-		log.Printf("[TLS] cf_api_token not configured — cannot request certificate via DNS-01")
+		msg := "cf_api_token 未配置，无法使用 DNS-01 申请证书"
+		log.Printf("[TLS] %s", msg)
+		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
+		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
 		return
 	}
 	cfToken := strings.TrimSpace(settings["cf_api_token"])
 
 	cacheDir := certCacheDir()
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-		log.Printf("[TLS] Failed to create cert cache dir: %v", err)
+		msg := fmt.Sprintf("创建缓存目录失败: %v", err)
+		log.Printf("[TLS] %s", msg)
+		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
+		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
 		return
 	}
 
 	user, err := loadOrCreateUser(cacheDir)
 	if err != nil {
-		log.Printf("[TLS] ACME User error: %v", err)
+		msg := fmt.Sprintf("ACME 账号创建失败: %v", err)
+		log.Printf("[TLS] %s", msg)
+		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
+		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
 		return
 	}
 
@@ -190,7 +203,10 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 
 	client, err := lego.NewClient(config)
 	if err != nil {
-		log.Printf("[TLS] lego Client error: %v", err)
+		msg := fmt.Sprintf("ACME 客户端创建失败: %v", err)
+		log.Printf("[TLS] %s", msg)
+		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
+		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
 		return
 	}
 
@@ -199,7 +215,10 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 	cfConfig.AuthToken = cfToken
 	provider, err := cf_provider.NewDNSProviderConfig(cfConfig)
 	if err != nil {
-		log.Printf("[TLS] DNS Provider error: %v", err)
+		msg := fmt.Sprintf("Cloudflare DNS Provider 创建失败（请检查 CF API Token 权限）: %v", err)
+		log.Printf("[TLS] %s", msg)
+		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
+		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
 		return
 	}
 	client.Challenge.SetDNS01Provider(provider)
@@ -208,7 +227,10 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 	if user.Registration == nil {
 		reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 		if err != nil {
-			log.Printf("[TLS] ACME Register error: %v", err)
+			msg := fmt.Sprintf("Let's Encrypt 账号注册失败: %v", err)
+			log.Printf("[TLS] %s", msg)
+			_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
+			_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
 			return
 		}
 		user.Registration = reg
@@ -216,36 +238,28 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 		log.Printf("[TLS] Registered ACME account")
 	}
 
-	// 4. Check if we are really renewing or obtaining fresh
-	certPath := filepath.Join(cacheDir, domain+".crt")
-	keyPath := filepath.Join(cacheDir, domain+".key")
-
-	var certRes *certificate.Resource
-	
-	// Obtain new cert via DNS-01
+	// 4. Obtain new cert via DNS-01
 	request := certificate.ObtainRequest{
 		Domains: []string{domain},
 		Bundle:  true,
 	}
-	certRes, err = client.Certificate.Obtain(request)
+	certRes, err := client.Certificate.Obtain(request)
 	if err != nil {
-		log.Printf("[TLS] Failed to obtain cert: %v", err)
+		msg := fmt.Sprintf("DNS-01 验证或证书申请失败: %v", err)
+		log.Printf("[TLS] %s", msg)
+		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
+		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
 		return
 	}
 
-	// 5. Save the obtained certificate & key
-	if err := os.WriteFile(certPath, certRes.Certificate, 0o644); err != nil {
-		log.Printf("[TLS] Write cert file failed: %v", err)
-		return
-	}
-	if err := os.WriteFile(keyPath, certRes.PrivateKey, 0o600); err != nil {
-		log.Printf("[TLS] Write key file failed: %v", err)
-		return
-	}
+	// 5. Save the obtained certificate & key straight to DB
+	_ = store.SetSetting(dbConn, "probe_tls_cert_pem", string(certRes.Certificate))
+	_ = store.SetSetting(dbConn, "probe_tls_key_pem", string(certRes.PrivateKey))
+	_ = store.SetSetting(dbConn, "probe_tls_cert_status", "success")
+	_ = store.SetSetting(dbConn, "probe_tls_cert_error", "")
+	_ = store.SetSetting(dbConn, "probe_tls_cert_updated_at", time.Now().Format("2006-01-02 15:04:05"))
 
-	_ = store.SetSetting(dbConn, "probe_tls_cert_path", certPath)
-	_ = store.SetSetting(dbConn, "probe_tls_key_path", keyPath)
-	log.Printf("[TLS] Certificate for %s successfully issued and stored at %s", domain, certPath)
+	log.Printf("[TLS] Certificate for %s successfully issued and stored in database", domain)
 }
 
 // StartRenewalWatcher starts a background goroutine that checks the certificate
@@ -298,24 +312,24 @@ func checkAndRenew(dbConn *sql.DB) {
 	}
 }
 
-// GetTLSConfig returns a *tls.Config that loads the stored cert/key files.
+// GetTLSConfig returns a *tls.Config that loads the stored cert/key from the DB.
 func GetTLSConfig(dbConn *sql.DB) *tls.Config {
 	settings, err := store.GetSettings(dbConn, []string{
-		"probe_auto_tls", "probe_tls_cert_path", "probe_tls_key_path",
+		"probe_auto_tls", "probe_tls_cert_pem", "probe_tls_key_pem",
 	})
 	if err != nil || settings["probe_auto_tls"] != "true" {
 		return nil
 	}
 
-	certPath := settings["probe_tls_cert_path"]
-	keyPath := settings["probe_tls_key_path"]
-	if certPath == "" || keyPath == "" {
+	certPEM := settings["probe_tls_cert_pem"]
+	keyPEM := settings["probe_tls_key_pem"]
+	if certPEM == "" || keyPEM == "" {
 		return nil
 	}
 
-	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
 	if err != nil {
-		log.Printf("[TLS] Failed to load cert/key pair: %v", err)
+		log.Printf("[TLS] Failed to load cert/key pair from DB: %v", err)
 		return nil
 	}
 

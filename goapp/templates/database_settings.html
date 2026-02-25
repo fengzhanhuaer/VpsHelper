@@ -53,10 +53,19 @@
             <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
 
             <h2 style="margin:0 0 10px; font-size:16px;">手动备份 / 拉取</h2>
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                 <button id="db-backup-btn" class="ghost" type="button">备份本地 → 云端 D1</button>
                 <button id="db-pull-btn" class="ghost" type="button">云端 D1 → 拉取到本地</button>
+                <button id="db-overwrite-btn" type="button" style="
+                    padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(220,53,69,0.5);
+                    background: rgba(220,53,69,0.07); color: #c0392b; cursor: pointer;
+                    font: inherit; font-weight: 600; transition: background .15s;
+                " onmouseover="this.style.background='rgba(220,53,69,0.15)'"
+                   onmouseout="this.style.background='rgba(220,53,69,0.07)'">
+                    ⚠️ 全量覆写 D1（用本地覆盖云端）
+                </button>
             </div>
+            <p class="muted" style="margin: 6px 0 0; font-size: 0.82em;">⚠️ 全量覆写：先清空云端所有同名表数据，再将本地数据全量写入，操作不可逆。</p>
 
             <div id="db-progress-card" class="progress-card">
                 <div id="db-progress-text" class="muted">准备中...</div>
@@ -120,8 +129,9 @@
         var fillEl    = document.getElementById('db-progress-fill');
         var pctEl     = document.getElementById('db-progress-percent');
         var logEl     = document.getElementById('db-progress-log');
-        var backupBtn = document.getElementById('db-backup-btn');
-        var pullBtn   = document.getElementById('db-pull-btn');
+        var backupBtn    = document.getElementById('db-backup-btn');
+        var pullBtn      = document.getElementById('db-pull-btn');
+        var overwriteBtn = document.getElementById('db-overwrite-btn');
 
         function setProgress(pct, msg) {
             var p = Math.max(0, Math.min(100, Number(pct) || 0));
@@ -138,10 +148,12 @@
         }
 
         function setBusy(busy) {
-            backupBtn.disabled = busy;
-            pullBtn.disabled   = busy;
-            backupBtn.textContent = busy ? '操作中...' : '备份本地 → 云端 D1';
-            pullBtn.textContent   = busy ? '操作中...' : '云端 D1 → 拉取到本地';
+            backupBtn.disabled    = busy;
+            pullBtn.disabled      = busy;
+            overwriteBtn.disabled = busy;
+            backupBtn.textContent    = busy ? '操作中...' : '备份本地 → 云端 D1';
+            pullBtn.textContent      = busy ? '操作中...' : '云端 D1 → 拉取到本地';
+            overwriteBtn.textContent = busy ? '操作中...' : '⚠️ 全量覆写 D1（用本地覆盖云端）';
         }
 
         async function runStream(url, startLabel) {
@@ -201,6 +213,10 @@
         });
         pullBtn.addEventListener('click', function () {
             runStream('/cloudflare/database/pull/stream', '开始从云端 D1 拉取...');
+        });
+        overwriteBtn.addEventListener('click', function () {
+            if (!confirm('⚠️ 全量覆写确认\n\n此操作将：\n1. 清空云端 D1 中所有同名表的数据\n2. 将本地数据库全量写入云端\n\n操作不可逆，确定继续？')) return;
+            runStream('/cloudflare/database/backup/stream', '🔴 全量覆写 D1：正在清空云端并写入本地数据...');
         });
 
         /* ── 查看表数据 ───────────────────────────────────────── */
