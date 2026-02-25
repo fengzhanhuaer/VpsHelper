@@ -11,9 +11,9 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/probe/nodes">探针节点</a>
+            <a class="ghost" href="/probe/nodes">探针管理</a>
 
-            <a class="ghost" href="/probe/dashboard/status" style="color:var(--color-primary); font-weight:bold;">探针监视</a>
+            <a class="ghost" href="/probe/dashboard" style="color:var(--color-primary); font-weight:bold;">探针监视</a>
             <a class="ghost" href="/home">返回主菜单</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
@@ -23,12 +23,7 @@
         <section class="panel panel--wide" style="max-width: 100%;">
             <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                 <div>
-                    <h1 style="margin: 0; display: flex; align-items: center;">
-                        <select onchange="window.location.href=this.value" style="font-family: inherit; font-size: inherit; font-weight: inherit; border: none; background: transparent; cursor: pointer; outline: none; padding: 0; color: inherit; appearance: auto;">
-                            <option value="/probe/dashboard/status">探针状态</option>
-                            <option value="/probe/dashboard/netstatus" selected>网络状态</option>
-                        </select>
-                    </h1>
+                    <h1 style="margin: 0; display: flex; align-items: center;">网络状态</h1>
                     <p class="muted">实时监控各探针执行 Ping 任务的网络丢包与延迟曲线</p>
                 </div>
                 <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">
@@ -285,6 +280,17 @@
 
         // Initialize on load
         document.addEventListener('DOMContentLoaded', initDashboard);
+
+        if (window.self !== window.top) {
+            var header = document.querySelector('header');
+            if (header) header.style.display = 'none';
+            var main = document.querySelector('main');
+            if (main) {
+                main.style.maxWidth = '100%';
+                main.style.margin = '0';
+                main.style.padding = '0';
+            }
+        }
     </script>
 </body>
 </html>

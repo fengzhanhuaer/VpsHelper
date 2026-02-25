@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 24px;
+        }
+
+        .server-card {
+            background-color: var(--color-bg-alt);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .server-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .server-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+
+        .server-name {
+            font-size: 1.25em;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .server-note {
+            font-size: 0.8em;
+            color: var(--color-text-muted);
+            font-weight: normal;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-online {
+            background-color: #28a745;
+            box-shadow: 0 0 8px #28a745;
+        }
+        .status-offline {
+            background-color: #dc3545;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+        .metric-label {
+            color: var(--color-text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .metric-value {
+            font-weight: 500;
+        }
+
+        .progress-bar-bg {
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            height: 6px;
+            width: 100%;
+            overflow: hidden;
+            margin-top: 4px;
+            margin-bottom: 12px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--color-primary);
+            transition: width 1s ease-in-out, background-color 0.3s;
+        }
+
+        .net-speed {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--color-border);
+        }
+        
+        .speed-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85em;
+        }
+        .speed-up { color: #17a2b8; }
+        .speed-down { color: #e83e8c; }
+        .last-report {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed var(--color-border);
+            font-size: 0.78em;
+            color: var(--color-text-muted);
+            text-align: right;
+        }
+
+        .offline-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(2px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #ff4444;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 10;
+        }
+
+        .card-offline .offline-overlay {
+            opacity: 1;
+        }
+        .card-offline {
+            border-color: #555;
+        }
+
+        .metric-high { background-color: #dc3545 !important; }
+        .metric-warn { background-color: #ffc107 !important; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/probe/nodes">探针管理</a>
+
+            <a class="ghost" href="/probe/dashboard" style="color:var(--color-primary); font-weight:bold;">探针监视</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main style="max-width: 1200px;">
+        <section class="panel panel--wide" style="max-width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <h1 style="margin: 0; display: flex; align-items: center;">探针状态</h1>
+                    <p class="muted">实时监控所有在线节点的系统负载与网络情况</p>
+                </div>
+                <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">
+                    <span id="update-timer">连接中...</span>
+                </div>
+            </div>
+
+            {{ if eq (len .Nodes) 0 }}
+                <div class="panel" style="text-align: center; padding: 40px; border: 1px solid #ddd;">
+                    <p class="muted" style="margin-bottom: 20px;">系统目前没有任何探针节点。</p>
+                    <a href="/probe/nodes" class="btn">去添加探针</a>
+                </div>
+            {{ else }}
+                <div class="dashboard-grid">
+                    {{ range .Nodes }}
+                    <div class="server-card {{ if not .Online }}card-offline{{ end }}" id="node-{{ .ID }}">
+                        <div class="offline-overlay">
+                            离线 (OFFLINE)
+                        </div>
+                        <div class="server-header">
+                            <div class="server-name" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                                <div style="display:flex; align-items:center; flex-wrap:wrap;">
+                                    <span class="status-indicator {{ if .Online }}status-online{{ else }}status-offline{{ end }}" id="dot-{{ .ID }}"></span>
+                                    {{ .Name }}
+                                    {{ if .Vendor }}
+                                        {{ if .VendorUrl }}
+                                            <span style="font-size: 0.9em; margin-left:4px;">(<a href="{{ .VendorUrl }}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">{{ .Vendor }}</a>)</span>
+                                        {{ else }}
+                                            <span style="font-size: 0.9em; margin-left:4px;">({{ .Vendor }})</span>
+                                        {{ end }}
+                                    {{ end }}
+                                    {{ if .Note }}<span class="server-note" style="margin-left:4px;">({{.Note}})</span>{{ end }}
+                                </div>
+                                {{ if .IPInfos }}
+                                <div style="margin-left: 20px; display: flex; flex-direction: column; gap: 2px;">
+                                    {{ range .IPInfos }}
+                                    <span style="font-size: 0.75em; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="{{ .Geo }}">🌍 {{ .Geo }}</span>
+                                    {{ end }}
+                                </div>
+                                {{ end }}
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.8em; color: var(--color-text-muted);" id="uptime-{{ .ID }}">获取中...</div>
+                                <div style="font-size: 0.7em; color: var(--color-text-muted); margin-top: 4px;" id="version-{{ .ID }}">{{ if .Version }}{{ .Version }}{{ end }}</div>
+                            </div>
+                        </div>
+                        <div id="progress-container-{{ .ID }}" style="margin-top: -10px; margin-bottom: 12px; font-size: 0.8em; color: var(--color-primary); font-weight: bold; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; {{ if not .UpgradeProgress }}display: none;{{ end }}">
+                            🛠 <span id="progress-{{ .ID }}">{{ .UpgradeProgress }}</span>
+                        </div>
+
+                        <div class="metric-row">
+                            <div class="metric-label">💻 CPU</div>
+                            <div class="metric-value"><span id="cpu-val-{{ .ID }}">--</span>%</div>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="cpu-bar-{{ .ID }}" style="width: 0%;"></div>
+                        </div>
+
+                        <div class="metric-row">
+                            <div class="metric-label">🧠 内存</div>
+                            <div class="metric-value"><span id="mem-val-{{ .ID }}">--</span></div>
+                        </div>
+                        <div class="progress-bar-bg" style="margin-bottom: 8px;">
+                            <div class="progress-bar-fill" id="mem-bar-{{ .ID }}" style="width: 0%;"></div>
+                        </div>
+						
+                        <div class="metric-row">
+                            <div class="metric-label">🔄 Swap</div>
+                            <div class="metric-value"><span id="swap-val-{{ .ID }}">--</span></div>
+                        </div>
+                        <div class="progress-bar-bg" style="margin-bottom: 12px;">
+                            <div class="progress-bar-fill" id="swap-bar-{{ .ID }}" style="background-color: #17a2b8; width: 0%;"></div>
+                        </div>
+
+                        <div class="metric-row">
+                            <div class="metric-label">💾 存储</div>
+                            <div class="metric-value"><span id="disk-val-{{ .ID }}">--</span></div>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="background-color: #6c757d; width: 0%;" id="disk-bar-{{ .ID }}"></div>
+                        </div>
+
+                        <div class="net-speed">
+                            <div class="speed-item">
+                                <span class="metric-label speed-down">⬇️ 入网</span>
+                                <span class="metric-value" id="net-in-{{ .ID }}">-- KB/s</span>
+                            </div>
+                            <div class="speed-item">
+                                <span class="metric-label speed-up">⬆️ 出网</span>
+                                <span class="metric-value" id="net-out-{{ .ID }}">-- KB/s</span>
+                            </div>
+                        </div>
+                        <div class="last-report" id="last-report-{{ .ID }}">最后汇报: --</div>
+                    </div>
+                    {{ end }}
+                </div>
+            {{ end }}
+        </section>
+    </main>
+
+    <script>
+        function updateBarColor(barId, percentage) {
+            const el = document.getElementById(barId);
+            if (!el) return;
+            el.style.width = percentage + '%';
+            
+            el.classList.remove('metric-warn', 'metric-high');
+            if (percentage >= 90) {
+                el.classList.add('metric-high');
+            } else if (percentage >= 75) {
+                el.classList.add('metric-warn');
+            }
+        }
+
+        function formatSpeed(bytesPerSec) {
+            if (bytesPerSec < 1024) return bytesPerSec + ' B/s';
+            if (bytesPerSec < 1024 * 1024) return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
+            if (bytesPerSec < 1024 * 1024 * 1024) return (bytesPerSec / (1024 * 1024)).toFixed(1) + ' MB/s';
+            return (bytesPerSec / (1024 * 1024 * 1024)).toFixed(2) + ' GB/s';
+        }
+
+        function connectWS() {
+            const wsScheme = window.location.protocol === "https:" ? "wss://" : "ws://";
+            const wsUrl = wsScheme + window.location.host + "/probe/ws?mode=status";
+            const ws = new WebSocket(wsUrl);
+            const statusBox = document.getElementById('update-timer');
+
+            ws.onopen = () => {
+                statusBox.textContent = "🟢 实时数据通道连接成功";
+                statusBox.style.color = "#28a745";
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const nodeId = data.node_id;
+
+                const card = document.getElementById('node-' + nodeId);
+                if (!card) return;
+
+                const dot = document.getElementById('dot-' + nodeId);
+
+                if (data.type === "probe_version") {
+                    const verEl = document.getElementById('version-' + nodeId);
+                    if (verEl) verEl.textContent = data.version;
+                    return;
+                }
+
+                if (data.type === "upgrade_progress") {
+                    const progEl = document.getElementById('progress-' + nodeId);
+                    const container = document.getElementById('progress-container-' + nodeId);
+                    if (progEl && container) {
+                        if (data.progress) {
+                            progEl.textContent = data.progress;
+                            container.style.display = 'block';
+                        } else {
+                            progEl.textContent = '';
+                            container.style.display = 'none';
+                        }
+                    }
+                    return;
+                }
+
+                // Check Online / Offline status message
+                if (data.online === false) {
+                    card.classList.add('card-offline');
+                    if (dot) {
+                        dot.classList.remove('status-online');
+                        dot.classList.add('status-offline');
+                    }
+                    return;
+                } else {
+                    card.classList.remove('card-offline');
+                    if (dot) {
+                        dot.classList.remove('status-offline');
+                        dot.classList.add('status-online');
+                    }
+                }
+
+                if (data.cpu !== undefined) {
+                    document.getElementById('cpu-val-' + nodeId).textContent = data.cpu.toFixed(1);
+                    updateBarColor('cpu-bar-' + nodeId, data.cpu);
+                }
+
+                if (data.mem_pct !== undefined) {
+                    document.getElementById('mem-val-' + nodeId).textContent = data.mem_used + " (" + data.mem_pct.toFixed(1) + "%)";
+                    updateBarColor('mem-bar-' + nodeId, data.mem_pct);
+                }
+
+                if (data.swap_pct !== undefined) {
+                    document.getElementById('swap-val-' + nodeId).textContent = data.swap_used + " (" + data.swap_pct.toFixed(1) + "%)";
+                    updateBarColor('swap-bar-' + nodeId, data.swap_pct);
+                }
+
+                if (data.disk_pct !== undefined) {
+                    document.getElementById('disk-val-' + nodeId).textContent = data.disk_used + " (" + data.disk_pct.toFixed(1) + "%)";
+                    updateBarColor('disk-bar-' + nodeId, data.disk_pct);
+                }
+
+                if (data.net_in !== undefined) {
+                    document.getElementById('net-in-' + nodeId).textContent = formatSpeed(data.net_in);
+                    document.getElementById('net-out-' + nodeId).textContent = formatSpeed(data.net_out);
+                }
+                
+                if (data.uptime !== undefined) {
+                    document.getElementById('uptime-' + nodeId).textContent = "运行: " + data.uptime;
+                }
+
+                // Update last-report timestamp on every incoming real packet
+                const reportEl = document.getElementById('last-report-' + nodeId);
+                if (reportEl) {
+                    const now = new Date();
+                    const pad = n => String(n).padStart(2, '0');
+                    reportEl.textContent = '最后汇报: ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+                }
+            };
+
+            ws.onclose = () => {
+                statusBox.textContent = "🔴 连接已断开，正在重连...";
+                statusBox.style.color = "#dc3545";
+                setTimeout(connectWS, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error("WS error:", err);
+            };
+        }
+
+        window.onload = connectWS;
+
+        if (window.self !== window.top) {
+            var header = document.querySelector('header');
+            if (header) header.style.display = 'none';
+            var main = document.querySelector('main');
+            if (main) {
+                main.style.maxWidth = '100%';
+                main.style.margin = '0';
+                main.style.padding = '0';
+            }
+        }
+    </script>
+</body>
+</html>

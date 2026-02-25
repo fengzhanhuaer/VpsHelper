@@ -413,14 +413,21 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		"ping_tasks":      tasksRes,
 	})
 }
-
-// probeDashboard renders the live status dashboard for all probe nodes.
+// probeDashboard renders either the wrapper layout or the specific iframe content
 func (h *Handler) probeDashboard(c *gin.Context) {
 	if h.currentUser(c) == "" {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
 
+	content := c.Query("content")
+	if content == "" {
+		c.HTML(http.StatusOK, "probe_dashboard.html", gin.H{
+			"Title": "探针监视",
+		})
+		return
+	}
+
 	nodes, err := store.ListProbeNodes(h.dbConn)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "加载节点列表失败")
@@ -429,30 +436,18 @@ func (h *Handler) probeDashboard(c *gin.Context) {
 
 	tasks, _ := store.ListProbeTasks(h.dbConn)
 
-	c.HTML(http.StatusOK, "probe_dashboard.html", gin.H{
+	if content == "netstatus" {
+		c.HTML(http.StatusOK, "probe_dashboard_netstatus.html", gin.H{
+			"Title": "网络状态",
+			"Nodes": nodes,
+			"Tasks": tasks,
+		})
+		return
+	}
+
+	// Default to status
+	c.HTML(http.StatusOK, "probe_dashboard_status.html", gin.H{
 		"Title": "探针状态",
-		"Nodes": nodes,
-		"Tasks": tasks,
-	})
-}
-
-// probePingDashboard renders the live ping dashboard for probe tasks.
-func (h *Handler) probePingDashboard(c *gin.Context) {
-	if h.currentUser(c) == "" {
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
-
-	nodes, err := store.ListProbeNodes(h.dbConn)
-	if err != nil {
-		c.String(http.StatusInternalServerError, "加载节点列表失败")
-		return
-	}
-
-	tasks, _ := store.ListProbeTasks(h.dbConn)
-
-	c.HTML(http.StatusOK, "probe_ping_dashboard.html", gin.H{
-		"Title": "网络状态",
 		"Nodes": nodes,
 		"Tasks": tasks,
 	})
