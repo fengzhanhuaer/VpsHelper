@@ -56,7 +56,6 @@ func TriggerProbeDDNS(dbConn *sql.DB) string {
 	}
 
 	accountID := strings.TrimSpace(settings["cf_account_id"])
-	zoneID := strings.TrimSpace(settings["cf_zone_id"])
 	zoneDomain := strings.TrimSpace(settings["cf_zone_domain"])
 
 	tempClient := NewAPIClient(cfToken, accountID, "")
@@ -65,8 +64,6 @@ func TriggerProbeDDNS(dbConn *sql.DB) string {
 	// 优先尝试从 DDNS 域名本身获取对应的 Zone ID (避免使用了全局的其他域名 Zone)
 	if id, err := tempClient.LookupZoneID(probeDDNSDomain); err == nil && id != "" {
 		ddnsZoneID = id
-	} else if zoneID != "" {
-		ddnsZoneID = zoneID
 	} else if zoneDomain != "" {
 		if id, err := tempClient.LookupZoneID(zoneDomain); err == nil && id != "" {
 			ddnsZoneID = id
@@ -175,11 +172,18 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 
 	client := NewAPIClient(cfToken, accountID, zoneID)
 
+	// Actively ensure Account ID is correct, as old ones may become stale
+	if id, err := client.FetchAccountID(); err == nil && id != "" {
+		accountID = id
+		client.AccountID = accountID
+	}
+
 	// ── 1. ZeroTrust WhiteList ─────────────────────────────
 	if allowIPs != "" && accountID != "" {
 		currentAllowKey := domainIPKey(splitLines(allowIPs))
 		if currentAllowKey != lastAllowKey {
-			newPolicyID, err := client.SyncReusablePolicy(policyID, splitLines(allowIPs))
+			// Pass "" to force it to lookup the correct policy by name instead of trusting a potentially stale policyID cache
+			newPolicyID, err := client.SyncReusablePolicy("", splitLines(allowIPs))
 			if err != nil {
 				log.Printf("[ddns-watch] SyncReusablePolicy failed: %v", err)
 			} else {
@@ -194,18 +198,18 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 
 	// ── 2. Firewall BlockList ──────────────────────────────
 	if blockIPs != "" && blockURIs != "" {
-		// Resolve zone ID if missing
-		if zoneID == "" {
-			domain := zoneDomain
-			if domain == "" {
-				// Can't auto-detect domain from background goroutine; skip
-				log.Printf("[ddns-watch] zone ID missing and no zone domain configured, skipping BlockList sync")
+		// Actively resolve zone ID unconditionally to prevent stale cache issues
+		domain := zoneDomain
+		if domain == "" {
+			log.Printf("[ddns-watch] no zone domain configured, skipping BlockList sync")
+		} else {
+			if id, err := client.LookupZoneID(domain); err == nil && id != "" {
+				zoneID = id
+				_ = store.SetSetting(dbConn, "cf_zone_id", zoneID)
+				client = NewAPIClient(cfToken, accountID, zoneID)
 			} else {
-				if id, err := client.LookupZoneID(domain); err == nil && id != "" {
-					zoneID = id
-					_ = store.SetSetting(dbConn, "cf_zone_id", zoneID)
-					client = NewAPIClient(cfToken, accountID, zoneID)
-				}
+				// If Lookup failed, at least clear the cached zoneID to avoid performing operations on the wrong zone
+				zoneID = ""
 			}
 		}
 
@@ -229,11 +233,9 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 		ddnsZoneID := ""
 		tempClient := NewAPIClient(cfToken, accountID, "")
 
-		// 优先取 DDNS 域名自己的 Zone ID 以避免跨 Zone 提交被追加后缀
+		// 优先取 DDNS 域名自己的 Zone ID
 		if id, err := tempClient.LookupZoneID(probeDDNSDomain); err == nil && id != "" {
 			ddnsZoneID = id
-		} else if zoneID != "" {
-			ddnsZoneID = zoneID
 		} else if zoneDomain != "" {
 			if id, err := tempClient.LookupZoneID(zoneDomain); err == nil && id != "" {
 				ddnsZoneID = id

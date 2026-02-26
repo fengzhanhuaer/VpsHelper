@@ -562,11 +562,17 @@ func (c *APIClient) SyncDDNSRecord(domain string, ips PublicIPs) error {
 			// CREATE
 			postURL := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records", c.ZoneID)
 			_, err := c.doRequest("POST", postURL, bodyBytes)
+			if err != nil && strings.Contains(err.Error(), "81058") {
+				return nil
+			}
 			return err
 		}
 		// UPDATE
 		patchURL := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", c.ZoneID, id)
 		_, err := c.doRequest("PUT", patchURL, bodyBytes)
+		if err != nil && strings.Contains(err.Error(), "81058") {
+			return nil
+		}
 		return err
 	}
 

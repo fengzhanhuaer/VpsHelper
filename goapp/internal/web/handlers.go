@@ -130,6 +130,9 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/probe/nodes/comm", h.probeNodes)
 	router.GET("/probe/nodes/deleted", h.probeNodesDeleted)
 	router.POST("/probe/nodes/deleted", h.probeNodesDeleted)
+	router.GET("/probe/node/manage", h.probeNodeManage)
+	router.GET("/probe/node/detail", h.probeNodeDetail)
+	router.GET("/probe/node/shell", h.probeNodeShell)
 	router.GET("/probe/nodes/tasks", h.probeTasks)
 	router.POST("/probe/nodes/tasks", h.probeTasks)
 	router.GET("/probe/dashboard", h.probeDashboard)
@@ -1955,18 +1958,36 @@ func (h *Handler) databaseTableList(c *gin.Context) {
 
 	source := c.Query("source")
 	if source == "d1" {
-		settings, _ := store.GetSettings(h.dbConn, []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"})
+		settings, _ := store.GetSettings(h.dbConn, []string{"cf_api_token", "cf_account_id", "cf_d1_database_id", "cf_d1_database_name"})
 		cfToken := strings.TrimSpace(settings["cf_api_token"])
 		accountID := strings.TrimSpace(settings["cf_account_id"])
 		dbID := strings.TrimSpace(settings["cf_d1_database_id"])
+		d1Name := strings.TrimSpace(settings["cf_d1_database_name"])
+		if d1Name == "" {
+			d1Name = config.UnifiedD1DBName
+		}
+		
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+		defer cancel()
+		cf := d1.Client{Token: cfToken}
+
+		// Actively look up current AccountID and DB ID
+		if ok, _, acc := cf.TestToken(ctx); ok && acc != "" {
+			accountID = acc
+			_ = store.SetSetting(h.dbConn, "cf_account_id", accountID)
+		}
+		if accountID != "" {
+			if ok, _, foundID := cf.FindD1ByName(ctx, accountID, d1Name); ok && foundID != "" {
+				dbID = foundID
+				_ = store.SetSetting(h.dbConn, "cf_d1_database_id", dbID)
+			}
+		}
+
 		if cfToken == "" || accountID == "" || dbID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "请先绑定并配置 D1 数据库"})
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
-		defer cancel()
-		cf := d1.Client{Token: cfToken}
 		ok, rows, msg := cf.D1Query(ctx, accountID, dbID, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", nil)
 		if !ok {
 			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": msg})
@@ -2239,7 +2260,7 @@ func (h *Handler) databaseBackupStream(c *gin.Context) {
 	}
 	fail := func(msg string) { _ = send(0, msg, true, false) }
 
-	keys := []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"}
+	keys := []string{"cf_api_token", "cf_account_id", "cf_d1_database_id", "cf_d1_database_name"}
 	settings, err := store.GetSettings(h.dbConn, keys)
 	if err != nil {
 		fail("读取配置失败：" + err.Error())
@@ -2248,22 +2269,43 @@ func (h *Handler) databaseBackupStream(c *gin.Context) {
 	cfToken := settings["cf_api_token"]
 	accountID := settings["cf_account_id"]
 	dbID := settings["cf_d1_database_id"]
+	d1Name := settings["cf_d1_database_name"]
+	if d1Name == "" {
+		d1Name = config.UnifiedD1DBName
+	}
 
 	if !send(5, "正在验证配置...", false, false) {
 		return
 	}
-	if cfToken == "" || accountID == "" || dbID == "" {
-		fail("请先保存 Token 并执行「自动创建/绑定」数据库。")
-		return
-	}
-
-	if !send(10, "开始备份，正在同步表结构...", false, false) {
+	if cfToken == "" {
+		fail("请先保存 API Token。")
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
 	cf := d1.Client{Token: cfToken}
+
+	// Actively look up current AccountID and D1 Database ID to ignore stale caches
+	if ok, _, acc := cf.TestToken(ctx); ok && acc != "" {
+		accountID = acc
+		_ = store.SetSetting(h.dbConn, "cf_account_id", accountID)
+	}
+	if accountID != "" {
+		if ok, _, foundID := cf.FindD1ByName(ctx, accountID, d1Name); ok && foundID != "" {
+			dbID = foundID
+			_ = store.SetSetting(h.dbConn, "cf_d1_database_id", dbID)
+		}
+	}
+
+	if accountID == "" || dbID == "" {
+		fail("请先执行「自动创建/绑定」数据库。")
+		return
+	}
+
+	if !send(10, "开始备份，正在同步表结构...", false, false) {
+		return
+	}
 
 	// progress callback — called after every table, keeps SSE alive
 	progFn := d1.ProgressFunc(func(pct int, msg string) {
@@ -2295,7 +2337,7 @@ func (h *Handler) databasePullStream(c *gin.Context) {
 	}
 	fail := func(msg string) { _ = send(0, msg, true, false) }
 
-	keys := []string{"cf_api_token", "cf_account_id", "cf_d1_database_id"}
+	keys := []string{"cf_api_token", "cf_account_id", "cf_d1_database_id", "cf_d1_database_name"}
 	settings, err := store.GetSettings(h.dbConn, keys)
 	if err != nil {
 		fail("读取配置失败：" + err.Error())
@@ -2304,22 +2346,43 @@ func (h *Handler) databasePullStream(c *gin.Context) {
 	cfToken := settings["cf_api_token"]
 	accountID := settings["cf_account_id"]
 	dbID := settings["cf_d1_database_id"]
+	d1Name := settings["cf_d1_database_name"]
+	if d1Name == "" {
+		d1Name = config.UnifiedD1DBName
+	}
 
 	if !send(5, "正在验证配置...", false, false) {
 		return
 	}
-	if cfToken == "" || accountID == "" || dbID == "" {
-		fail("请先保存 Token 并执行「自动创建/绑定」数据库。")
-		return
-	}
-
-	if !send(10, "开始从云端拉取数据...", false, false) {
+	if cfToken == "" {
+		fail("请先保存 API Token。")
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
 	cf := d1.Client{Token: cfToken}
+
+	// Actively look up current AccountID and D1 Database ID to ignore stale caches
+	if ok, _, acc := cf.TestToken(ctx); ok && acc != "" {
+		accountID = acc
+		_ = store.SetSetting(h.dbConn, "cf_account_id", accountID)
+	}
+	if accountID != "" {
+		if ok, _, foundID := cf.FindD1ByName(ctx, accountID, d1Name); ok && foundID != "" {
+			dbID = foundID
+			_ = store.SetSetting(h.dbConn, "cf_d1_database_id", dbID)
+		}
+	}
+
+	if accountID == "" || dbID == "" {
+		fail("请先执行「自动创建/绑定」数据库。")
+		return
+	}
+
+	if !send(10, "开始从云端拉取数据...", false, false) {
+		return
+	}
 
 	// progress callback — called after every table, keeps SSE alive
 	progFn := d1.ProgressFunc(func(pct int, msg string) {

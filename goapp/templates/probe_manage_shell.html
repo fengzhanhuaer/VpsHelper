@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        body {
+            background-color: transparent;
+            padding: 0;
+            margin: 0;
+        }
+        .shell-panel {
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            padding: 24px;
+            text-align: center;
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--color-text-muted);
+        }
+        .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="shell-panel">
+        <div class="icon">🖥️</div>
+        <h2 style="margin: 0 0 8px 0; color: var(--color-text);">远程 Shell (开发中)</h2>
+        <p>基于 Yamux 私有通讯隧道的原生 PTY 终端正准备实现中...</p>
+        <p style="font-size: 0.9em;">探测目标: {{ .Node.Name }} (ID: {{ .Node.ID }})</p>
+    </div>
+</body>
+</html>

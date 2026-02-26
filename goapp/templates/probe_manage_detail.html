@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        body {
+            background-color: transparent;
+            padding: 0;
+            margin: 0;
+        }
+        .detail-panel {
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            padding: 24px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 100px 1fr;
+            gap: 12px;
+            font-size: 14px;
+        }
+        .info-label {
+            color: var(--color-text-muted);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="detail-panel">
+        <h2 style="margin-top: 0; margin-bottom: 20px;">节点详细信息</h2>
+        <div class="info-grid">
+            <div class="info-label">探针名:</div>
+            <div>{{ .Node.Name }}</div>
+            
+            <div class="info-label">状态:</div>
+            <div>
+                {{ if .Node.Online }}
+                    <span style="color:var(--color-success); font-weight:bold;">🟢 在线</span>
+                {{ else }}
+                    <span style="color:var(--color-error); font-weight:bold;">🔴 离线</span>
+                {{ end }}
+            </div>
+
+            <div class="info-label">节点ID:</div>
+            <div>#{{ .Node.ID }}</div>
+
+            <div class="info-label">版本:</div>
+            <div>{{ if .Node.Version }}{{ .Node.Version }}{{ else }}未知{{ end }}</div>
+
+            <div class="info-label">外网IP:</div>
+            <div>{{ if .Node.IP }}{{ .Node.IP }}{{ else }}未知{{ end }}</div>
+
+            <div class="info-label">访问密钥:</div>
+            <div style="font-family: monospace; background: var(--color-bg-alt); padding: 4px 8px; border-radius: 4px; display: inline-block;">{{ .Node.Secret }}</div>
+
+            <div class="info-label">备注:</div>
+            <div>{{ if .Node.Note }}{{ .Node.Note }}{{ else }}无{{ end }}</div>
+
+            <div class="info-label">厂商:</div>
+            <div>
+                {{ if .Node.VendorUrl }}
+                    <a href="{{ .Node.VendorUrl }}" target="_blank" style="color: var(--color-primary);">{{ .Node.Vendor }}</a>
+                {{ else }}
+                    {{ if .Node.Vendor }}{{ .Node.Vendor }}{{ else }}无{{ end }}
+                {{ end }}
+            </div>
+
+            <div class="info-label">续费周期等:</div>
+            <div>{{ if .Node.Price }}{{ .Node.Price }}{{ else }}无{{ end }}</div>
+
+            <div class="info-label">到期时间:</div>
+            <div>{{ if .Node.ExpiredAt }}{{ .Node.ExpiredAt }}{{ else }}无{{ end }}</div>
+
+            <div class="info-label">网络监视:</div>
+            <div>{{ .Node.ReportInterval }} 秒/次</div>
+        </div>
+    </div>
+</body>
+</html>

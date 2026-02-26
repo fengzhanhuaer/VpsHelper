@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .layout-container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            margin-top: 16px;
+        }
+        .sidebar {
+            width: 200px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .sidebar a {
+            display: block;
+            padding: 12px 16px;
+            background: var(--color-bg-alt);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            text-decoration: none;
+            color: var(--color-text);
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .sidebar a:hover {
+             border-color: var(--color-primary);
+        }
+        .sidebar a.active {
+            background: var(--color-primary);
+            color: #fff;
+            border-color: var(--color-primary);
+        }
+        .content-frame {
+            flex: 1;
+            border: none;
+            background: transparent;
+            min-height: 80vh;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/probe/nodes" style="color:var(--color-primary); font-weight:bold;">探针管理</a>
+            <a class="ghost" href="/probe/dashboard">探针监视</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+    
+    <main class="layout-container">
+        <div class="sidebar">
+            <h3 style="margin: 0 0 10px 0; padding: 0 10px;">{{ .Node.Name }}</h3>
+            {{ $isShell := eq .Tab "shell" }}
+            {{ $isDetail := not $isShell }}
+            <a href="/probe/node/detail?id={{ .Node.ID }}" target="manage_frame" id="tab-detail" class="{{ if $isDetail }}active{{ end }}" onclick="switchTab('tab-detail')">详情页</a>
+            <a href="/probe/node/shell?id={{ .Node.ID }}" target="manage_frame" id="tab-shell" class="{{ if $isShell }}active{{ end }}" onclick="switchTab('tab-shell')">远程 Shell</a>
+            
+            <a href="/probe/nodes" style="margin-top: 20px; background: transparent; color: var(--color-text-muted); border-color: transparent;">&larr; 返回列表</a>
+        </div>
+        
+        <iframe name="manage_frame" src="/probe/node/{{ if $isShell }}shell{{ else }}detail{{ end }}?id={{ .Node.ID }}" class="content-frame" onload="resizeIframe(this)"></iframe>
+    </main>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.sidebar a[id^="tab-"]').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            
+            // Rewrite URL context so that refresh stays on same tab
+            let newTab = tabId.replace('tab-', '');
+            history.replaceState(null, '', '/probe/node/manage?id={{ .Node.ID }}&tab=' + newTab);
+        }
+
+        function resizeIframe(obj) {
+            try {
+                const frameBody = obj.contentWindow.document.body;
+                if(frameBody) {
+                    obj.style.height = (frameBody.scrollHeight + 50) + 'px';
+                }
+            } catch(e) {}
+        }
+        window.setInterval(function() {
+            var iframe = document.querySelector('iframe[name="manage_frame"]');
+            if (iframe) {
+                 resizeIframe(iframe);
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

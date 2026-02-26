@@ -303,6 +303,17 @@ func ListDeletedProbeNodes(dbConn *sql.DB) ([]DeletedProbeNode, error) {
 	return nodes, rows.Err()
 }
 
+// GetProbeNodeByID retrieves a probe node by its ID.
+func GetProbeNodeByID(dbConn *sql.DB, id int64) (ProbeNode, error) {
+	var node ProbeNode
+	row := dbConn.QueryRow("SELECT id, name, note, vendor, vendor_url, price, expired_at, secret, online, version, ip, report_interval, created_at FROM probe_nodes WHERE id = ?", id)
+	err := row.Scan(&node.ID, &node.Name, &node.Note, &node.Vendor, &node.VendorUrl, &node.Price, &node.ExpiredAt, &node.Secret, &node.Online, &node.Version, &node.IP, &node.ReportInterval, &node.CreatedAt)
+	if err != nil {
+		return ProbeNode{}, err
+	}
+	return node, nil
+}
+
 // RestoreDeletedProbeNode moves the node back from probe_nodes_deleted to probe_nodes.
 func RestoreDeletedProbeNode(dbConn *sql.DB, id int64) error {
 	tx, err := dbConn.Begin()

@@ -192,33 +192,31 @@ func (h *Handler) cfBlocklistSync(c *gin.Context) {
 
 	client := cloudflare.NewAPIClient(cfToken, cfAccountID, cfZoneID)
 
-	if cfAccountID == "" {
-		if id, err := client.FetchAccountID(); err == nil && id != "" {
-			cfAccountID = id
-			client.AccountID = cfAccountID
-			_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
-		}
+	// Always actively query the current Account ID
+	if id, err := client.FetchAccountID(); err == nil && id != "" {
+		cfAccountID = id
+		client.AccountID = cfAccountID
+		_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
 	}
 
-	if cfZoneID == "" {
-		domain := cfZoneDomain
-		if domain == "" {
-			host := c.Request.Host
-			if idx := strings.LastIndex(host, ":"); idx != -1 {
-				host = host[:idx]
-			}
-			domain = host
+	// Actively resolve zone ID every time to avoid using cached ID when domain changes
+	domain := cfZoneDomain
+	if domain == "" {
+		host := c.Request.Host
+		if idx := strings.LastIndex(host, ":"); idx != -1 {
+			host = host[:idx]
 		}
-		if domain != "" {
-			if id, err := client.LookupZoneID(domain); err == nil && id != "" {
-				cfZoneID = id
-				if cfZoneDomain == "" {
-					cfZoneDomain = domain
-				}
-				client = cloudflare.NewAPIClient(cfToken, cfAccountID, cfZoneID)
-				_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
-				_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
+		domain = host
+	}
+	if domain != "" {
+		if id, err := client.LookupZoneID(domain); err == nil && id != "" {
+			cfZoneID = id
+			if cfZoneDomain == "" {
+				cfZoneDomain = domain
 			}
+			client = cloudflare.NewAPIClient(cfToken, cfAccountID, cfZoneID)
+			_ = store.SetSetting(h.dbConn, "cf_zone_id", cfZoneID)
+			_ = store.SetSetting(h.dbConn, "cf_zone_domain", cfZoneDomain)
 		}
 	}
 
@@ -293,12 +291,11 @@ func (h *Handler) cfWhitelistSync(c *gin.Context) {
 
 	client := cloudflare.NewAPIClient(cfToken, cfAccountID, "")
 
-	if cfAccountID == "" {
-		if id, err := client.FetchAccountID(); err == nil && id != "" {
-			cfAccountID = id
-			client.AccountID = cfAccountID
-			_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
-		}
+	// Always actively query the current Account ID
+	if id, err := client.FetchAccountID(); err == nil && id != "" {
+		cfAccountID = id
+		client.AccountID = cfAccountID
+		_ = store.SetSetting(h.dbConn, "cf_account_id", cfAccountID)
 	}
 
 	var validIPs []string
@@ -308,7 +305,7 @@ func (h *Handler) cfWhitelistSync(c *gin.Context) {
 		}
 	}
 
-	if newPolicyID, err := client.SyncReusablePolicy(cfPolicyID, validIPs); err != nil {
+	if newPolicyID, err := client.SyncReusablePolicy("", validIPs); err != nil {
 		c.Redirect(http.StatusSeeOther, "/cloudflare/whitelist?error=推送失败:"+err.Error())
 	} else {
 		if cfPolicyID == "" && newPolicyID != "" {

@@ -701,3 +701,73 @@ func (h *Handler) probeNodesDeleted(c *gin.Context) {
 		"Nodes":   nodes,
 	})
 }
+
+// probeNodeManage wraps the individual node management with tabs (details, shell, etc.).
+func (h *Handler) probeNodeManage(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	nodeIDStr := c.Query("id")
+	nodeID, err := strconv.ParseInt(nodeIDStr, 10, 64)
+	if err != nil || nodeID <= 0 {
+		c.String(http.StatusBadRequest, "invalid node id")
+		return
+	}
+	node, err := store.GetProbeNodeByID(h.dbConn, nodeID)
+	if err != nil {
+		c.String(http.StatusNotFound, "node not found")
+		return
+	}
+
+	tab := c.Query("tab")
+	if tab == "" {
+		tab = "detail"
+	}
+
+	c.HTML(http.StatusOK, "probe_manage_layout.html", gin.H{
+		"Title": "单探针管理 - " + node.Name,
+		"Node":  node,
+		"Tab":   tab,
+	})
+}
+
+// probeNodeDetail renders the details specific to one node.
+func (h *Handler) probeNodeDetail(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	nodeIDStr := c.Query("id")
+	nodeID, _ := strconv.ParseInt(nodeIDStr, 10, 64)
+	node, err := store.GetProbeNodeByID(h.dbConn, nodeID)
+	if err != nil {
+		c.String(http.StatusNotFound, "node not found")
+		return
+	}
+
+	c.HTML(http.StatusOK, "probe_manage_detail.html", gin.H{
+		"Title": "探针详情 - " + node.Name,
+		"Node":  node,
+	})
+}
+
+// probeNodeShell renders a placeholder for remote shell of the probe.
+func (h *Handler) probeNodeShell(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	nodeIDStr := c.Query("id")
+	nodeID, _ := strconv.ParseInt(nodeIDStr, 10, 64)
+	node, err := store.GetProbeNodeByID(h.dbConn, nodeID)
+	if err != nil {
+		c.String(http.StatusNotFound, "node not found")
+		return
+	}
+
+	c.HTML(http.StatusOK, "probe_manage_shell.html", gin.H{
+		"Title": "远程 Shell - " + node.Name,
+		"Node":  node,
+	})
+}
