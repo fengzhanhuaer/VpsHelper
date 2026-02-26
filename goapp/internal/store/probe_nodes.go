@@ -305,13 +305,57 @@ func ListDeletedProbeNodes(dbConn *sql.DB) ([]DeletedProbeNode, error) {
 
 // GetProbeNodeByID retrieves a probe node by its ID.
 func GetProbeNodeByID(dbConn *sql.DB, id int64) (ProbeNode, error) {
-	var node ProbeNode
-	row := dbConn.QueryRow("SELECT id, name, note, vendor, vendor_url, price, expired_at, secret, online, version, ip, report_interval, created_at FROM probe_nodes WHERE id = ?", id)
-	err := row.Scan(&node.ID, &node.Name, &node.Note, &node.Vendor, &node.VendorUrl, &node.Price, &node.ExpiredAt, &node.Secret, &node.Online, &node.Version, &node.IP, &node.ReportInterval, &node.CreatedAt)
+	var n ProbeNode
+	err := dbConn.QueryRow(
+		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 60), COALESCE(vendor, ''), COALESCE(vendor_url, ''), COALESCE(price, ''), COALESCE(expired_at, '') FROM probe_nodes WHERE id = ?`, id,
+	).Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt)
 	if err != nil {
-		return ProbeNode{}, err
+		return ProbeNode{}, fmt.Errorf("get probe node by id: %w", err)
 	}
-	return node, nil
+
+	if n.ExpiredAt != "" {
+		if t, err := time.Parse("2006-01-02", n.ExpiredAt); err == nil {
+			now := time.Now()
+			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+			target := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
+			days := int(target.Sub(today).Hours() / 24)
+			if days > 0 {
+				n.ExpireDaysStr = fmt.Sprintf("剩 %d 天", days)
+			} else if days == 0 {
+				n.ExpireDaysStr = "今天到期"
+			} else {
+				n.ExpireDaysStr = fmt.Sprintf("超期 %d 天", -days)
+			}
+		}
+	}
+
+	// Merge runtime status.
+	if probeDB != nil {
+		var online int
+		var versionStr, ipStr, upStr string
+		_ = probeDB.QueryRow(
+			`SELECT online, last_ping, version, ip, upgrade_progress FROM probe_node_status WHERE node_id = ?`, n.ID,
+		).Scan(&online, &n.LastPing, &versionStr, &ipStr, &upStr)
+		n.Online = online == 1
+		n.Version = versionStr
+		n.IP = ipStr
+		if ipStr != "" {
+			n.IPs = strings.FieldsFunc(ipStr, func(r rune) bool {
+				return r == '\n' || r == ','
+			})
+			for _, rawIP := range n.IPs {
+				geo := getGeoForIP(rawIP)
+				n.IPInfos = append(n.IPInfos, NodeIPInfo{Raw: rawIP, Value: rawIP, Geo: geo})
+			}
+		}
+		n.UpgradeProgress = upStr
+		if n.LastPing > 0 {
+			n.LastPingStr = time.Unix(n.LastPing, 0).Format("2006-01-02 15:04:05")
+		} else {
+			n.LastPingStr = "--"
+		}
+	}
+	return n, nil
 }
 
 // RestoreDeletedProbeNode moves the node back from probe_nodes_deleted to probe_nodes.

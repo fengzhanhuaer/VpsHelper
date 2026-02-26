@@ -252,12 +252,18 @@ func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, i
 	defer stream.Close()
 
 	var msg tunnel.ControlMsg
-	if err := json.NewDecoder(stream).Decode(&msg); err != nil {
+	decoder := json.NewDecoder(stream)
+	if err := decoder.Decode(&msg); err != nil {
 		log.Printf("[Agent] control stream decode error: %v", err)
 		return
 	}
 
 	switch msg.Type {
+	case "shell":
+		// Hijack the stream for raw PTY shell interaction.
+		// decoder.Buffered() contains any bytes the JSON decoder consumed past the first JSON message.
+		handleAgentShell(stream, decoder.Buffered())
+		return
 	case "config":
 		var cfg struct {
 			ReportInterval     *int `json:"report_interval"`

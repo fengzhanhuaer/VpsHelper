@@ -5,37 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.css" />
     <style>
         body {
             background-color: transparent;
             padding: 0;
             margin: 0;
+            font-family: var(--font-stack, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif);
         }
         .shell-panel {
-            background: var(--color-bg);
+            background: #1e1e1e;
             border: 1px solid var(--color-border);
             border-radius: var(--radius);
-            padding: 24px;
-            text-align: center;
-            min-height: 400px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: var(--color-text-muted);
+            height: 100%;
+            min-height: 500px;
+            overflow: hidden;
         }
-        .icon {
-            font-size: 48px;
-            margin-bottom: 16px;
+        .shell-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ddd;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        #terminal {
+            flex-grow: 1;
+            width: 100%;
+            height: calc(100% - 30px);
+            background: #000;
         }
     </style>
 </head>
 <body>
     <div class="shell-panel">
-        <div class="icon">🖥️</div>
-        <h2 style="margin: 0 0 8px 0; color: var(--color-text);">远程 Shell (开发中)</h2>
-        <p>基于 Yamux 私有通讯隧道的原生 PTY 终端正准备实现中...</p>
-        <p style="font-size: 0.9em;">探测目标: {{ .Node.Name }} (ID: {{ .Node.ID }})</p>
+        <div class="shell-header">
+            <span>💻 {{ .Node.Name }} - 原生反向 PTY 终端</span>
+            <span id="status" style="color: #bbb;">断开连接</span>
+        </div>
+        <div id="terminal"></div>
     </div>
+
+    <!-- xterm.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.8.0/lib/addon-fit.js"></script>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const term = new Terminal({
+            cursorBlink: true,
+            theme: {
+                background: '#000000',
+                foreground: '#ffffff'
+            }
+        });
+
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById('terminal'));
+        fitAddon.fit();
+
+        window.addEventListener('resize', () => {
+            fitAddon.fit();
+        });
+
+        const loc = window.location;
+        let wsProto = "ws:";
+        if (loc.protocol === "https:") {
+            wsProto = "wss:";
+        }
+        const wsUrl = `${wsProto}//${loc.host}/probe/node/shell/ws?id={{ .Node.ID }}`;
+
+        statusEl.textContent = "正在连接...";
+        statusEl.style.color = "#bbbb00";
+        term.write('正在通过主控请求建立反向 Yamux 终端网络...\r\n');
+
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            statusEl.textContent = "已连接";
+            statusEl.style.color = "#00bb00";
+            
+            term.onData(data => {
+                socket.send(data);
+            });
+        };
+
+        socket.onmessage = (event) => {
+            if (typeof event.data === 'string') {
+                term.write(event.data);
+            } else {
+                event.data.arrayBuffer().then((buffer) => {
+                    const bytes = new Uint8Array(buffer);
+                    term.write(bytes);
+                });
+            }
+        };
+
+        socket.onclose = () => {
+            statusEl.textContent = "已断开";
+            statusEl.style.color = "#bb0000";
+            term.write('\r\n[连接已断开]\r\n');
+        };
+
+        socket.onerror = (err) => {
+            statusEl.textContent = "连接错误";
+            statusEl.style.color = "#bb0000";
+        };
+    </script>
 </body>
 </html>

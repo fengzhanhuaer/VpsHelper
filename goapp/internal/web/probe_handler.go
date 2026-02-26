@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 
 	"vpshelper-go/internal/cloudflare"
 	"vpshelper-go/internal/firewall"
@@ -770,4 +771,60 @@ func (h *Handler) probeNodeShell(c *gin.Context) {
 		"Title": "远程 Shell - " + node.Name,
 		"Node":  node,
 	})
+}
+
+// probeNodeShellWS bridges a WebSocket from the browser to the Yamux shell stream on the probe.
+func (h *Handler) probeNodeShellWS(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	nodeIDStr := c.Query("id")
+	nodeID, _ := strconv.ParseInt(nodeIDStr, 10, 64)
+
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+	wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	defer wsConn.Close()
+
+	stream, err := tunnel.OpenShellStream(nodeID)
+	if err != nil {
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte("\r\n[无法连接探针 Shell: "+err.Error()+"]\r\n"))
+		return
+	}
+	defer stream.Close()
+
+	// Notify frontend that shell is ready
+	_ = wsConn.WriteMessage(websocket.TextMessage, []byte("\r\n[已成功建立到节点的 PTY 终端连接]\r\n"))
+
+	// Copy from Yamux to WebSocket
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := stream.Read(buf)
+			if err != nil {
+				return
+			}
+			if n > 0 {
+				if err := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	// Copy from WebSocket to Yamux
+	for {
+		_, msg, err := wsConn.ReadMessage()
+		if err != nil {
+			return
+		}
+		if _, err := stream.Write(msg); err != nil {
+			return
+		}
+	}
 }

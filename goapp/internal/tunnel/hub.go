@@ -179,3 +179,29 @@ func PushConfigToAllNodes(msgType string, payload interface{}) {
 		return true
 	})
 }
+
+// OpenShellStream requests a shell stream from the connected node.
+// It sends the 'shell' control message and returns the open stream for bidirectional communication.
+func OpenShellStream(nodeID int64) (*yamux.Stream, error) {
+	sessVal, ok := ActiveSessions.Load(nodeID)
+	if !ok {
+		return nil, fmt.Errorf("node %d is not currently connected", nodeID)
+	}
+	sess := sessVal.(*yamux.Session)
+	stream, err := sess.OpenStream()
+	if err != nil {
+		return nil, fmt.Errorf("open shell stream: %w", err)
+	}
+
+	msg := ControlMsg{
+		Type:    "shell",
+		Payload: []byte("{}"),
+	}
+	enc := json.NewEncoder(stream)
+	if err := enc.Encode(msg); err != nil {
+		stream.Close()
+		return nil, fmt.Errorf("send shell control msg: %w", err)
+	}
+
+	return stream, nil
+}
