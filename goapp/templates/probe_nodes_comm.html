@@ -36,7 +36,7 @@
                             <div class="muted">用于建立直连 WS 的独立端口</div>
                         </div>
                         <div class="field" style="flex: 3; min-width: 450px;">
-                            <label>公网访问地址 / 域名 (可选)</label>
+                            <label>探针控制链路地址</label>
                             <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
                                 <input style="flex: 1; min-width: 200px;" name="probe_address" value="{{ .Address }}" placeholder="例如：1.2.3.4 或 probe.example.com" />
                                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
@@ -52,9 +52,9 @@
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
-                        <div class="field" style="flex: 2; min-width: 250px;">
-                            <label>主控连接地址</label>
-                            <input name="probe_master_address" value="{{ .MasterAddress }}" placeholder="例如：https://panel.example.com" />
+                        <div class="field" style="flex: 2; min-width: 300px;">
+                            <label>主控地址</label>
+                            <input name="controller_admin_address" value="{{ .ControllerAdminAddress }}" placeholder="例如：https://panel.example.com (留空则默认采用当前访问地址)" />
                             <div class="muted">留空则默认采用当前浏览的域名。将在控制台中用作探针服务端的 host 参数</div>
                         </div>
                         <div class="field" style="flex: 1; min-width: 150px;">
