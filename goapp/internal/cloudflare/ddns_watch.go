@@ -56,18 +56,13 @@ func TriggerProbeDDNS(dbConn *sql.DB) string {
 	}
 
 	accountID := strings.TrimSpace(settings["cf_account_id"])
-	zoneDomain := strings.TrimSpace(settings["cf_zone_domain"])
 
 	tempClient := NewAPIClient(cfToken, accountID, "")
 	ddnsZoneID := ""
 
-	// 优先尝试从 DDNS 域名本身获取对应的 Zone ID (避免使用了全局的其他域名 Zone)
+	// 优先尝试从 DDNS 域名本身获取对应的 Zone ID
 	if id, err := tempClient.LookupZoneID(probeDDNSDomain); err == nil && id != "" {
 		ddnsZoneID = id
-	} else if zoneDomain != "" {
-		if id, err := tempClient.LookupZoneID(zoneDomain); err == nil && id != "" {
-			ddnsZoneID = id
-		}
 	}
 
 	if ddnsZoneID == "" {
@@ -233,13 +228,9 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 		ddnsZoneID := ""
 		tempClient := NewAPIClient(cfToken, accountID, "")
 
-		// 优先取 DDNS 域名自己的 Zone ID
+		// 取 DDNS 域名自己的 Zone ID
 		if id, err := tempClient.LookupZoneID(probeDDNSDomain); err == nil && id != "" {
 			ddnsZoneID = id
-		} else if zoneDomain != "" {
-			if id, err := tempClient.LookupZoneID(zoneDomain); err == nil && id != "" {
-				ddnsZoneID = id
-			}
 		}
 
 		if ddnsZoneID != "" {
