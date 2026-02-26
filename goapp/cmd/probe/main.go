@@ -34,8 +34,17 @@ func main() {
 		return
 	}
 
-	if serverHost == "" || secret == "" {
-		log.Fatalf("错误: 必须提供 --host 和 --secret 参数")
+	cfg, err := agent.LoadConfig()
+	if err == nil && cfg.Host != "" && cfg.Secret != "" {
+		serverHost = cfg.Host
+		secret = cfg.Secret
+		log.Printf("[Agent] 已从本地配置文件读取启动参数: %s", agent.GetConfigPath())
+	} else {
+		if serverHost == "" || secret == "" {
+			log.Fatalf("错误: 必须提供 --host 和 --secret 参数，或者在可执行文件目录存放 vpsprobe.json")
+		}
+		agent.SaveConfig(agent.Config{Host: serverHost, Secret: secret})
+		log.Printf("[Agent] 已将启动参数持久化至本地配置文件: %s", agent.GetConfigPath())
 	}
 
 	log.Printf("VpsProbe 启动 - 目标中心: %s", serverHost)

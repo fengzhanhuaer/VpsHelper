@@ -156,6 +156,11 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			}
 			host := c.Request.Host
 			baseURL := fmt.Sprintf("%s://%s", scheme, host)
+			
+			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address"})
+			if settings["probe_master_address"] != "" {
+				baseURL = settings["probe_master_address"]
+			}
 
 			if idStr == "all" {
 				nodes, err := store.ListProbeNodes(h.dbConn)
@@ -205,6 +210,8 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		case "save_settings":
 			privatePort := strings.TrimSpace(c.PostForm("probe_private_port"))
 			addressIn := strings.TrimSpace(c.PostForm("probe_address"))
+			masterAddress := strings.TrimSpace(c.PostForm("probe_master_address"))
+			masterAddress = strings.TrimRight(masterAddress, "/") // 清理末尾反斜杠
 			enableDDNS := c.PostForm("enable_ddns") == "on" || c.PostForm("enable_ddns") == "true"
 			enableAutoTLS := c.PostForm("enable_auto_tls") == "on" || c.PostForm("enable_auto_tls") == "true"
 
@@ -236,9 +243,16 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			_ = store.SetSetting(h.dbConn, "probe_public_address", publicAddress)
 			_ = store.SetSetting(h.dbConn, "probe_ddns_domain", ddnsDomain)
 			_ = store.SetSetting(h.dbConn, "probe_history_days", historyDays)
+			_ = store.SetSetting(h.dbConn, "probe_master_address", masterAddress)
 
 			message = "设置已保存，端口更改需重启服务生效。"
 			msgOK = true
+
+			// 向所有仍在线的探针热推送新的主控地址配置
+			if masterAddress != "" {
+				tunnel.PushConfigToAllNodes("update_master_address", map[string]string{"host": masterAddress})
+				message += "（已向在线探针下发新主控地址。）"
+			}
 
 			// 自动协助放行专属通讯端口
 			pPortInt, _ := strconv.Atoi(privatePort)
@@ -276,6 +290,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"probe_private_port", "probe_public_address", "probe_ddns_domain",
 		"probe_history_days", "probe_auto_tls",
 		"probe_tls_cert_status", "probe_tls_cert_error", "probe_tls_cert_updated_at",
+		"probe_master_address",
 	})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "加载设置失败")
@@ -295,6 +310,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	certReqStatus := settings["probe_tls_cert_status"]   // "", "running", "success", "error"
 	certReqError  := settings["probe_tls_cert_error"]
 	certReqAt     := settings["probe_tls_cert_updated_at"]
+	masterAddress := settings["probe_master_address"]
 
 	// 读取证书详细状态
 	certInfo := tunnel.GetCertInfo(h.dbConn)
@@ -312,6 +328,9 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	}
 	host := c.Request.Host
 	baseURL := fmt.Sprintf("%s://%s", scheme, host)
+	if masterAddress != "" {
+		baseURL = masterAddress
+	}
 
 	// Consolidate for frontend
 	combinedAddress := publicAddress
@@ -340,6 +359,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"CertReqError":  certReqError,
 		"CertReqAt":     certReqAt,
 		"HistoryDays":   historyDays,
+		"MasterAddress": masterAddress,
 	})
 }
 

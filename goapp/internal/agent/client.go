@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -226,7 +227,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 				}
 				return
 			}
-			go handleIncomingControlStream(stream, session, intervalCh, pingIntervalCh, pingTasksCh)
+			go handleIncomingControlStream(stream, session, intervalCh, pingIntervalCh, pingTasksCh, secret)
 		}
 	}()
 
@@ -247,7 +248,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 // handleIncomingControlStream processes streams opened by the control center.
 // It decodes a generic JSON ControlMsg and dispatches to the correct handler.
 // New control types can be added by extending the switch below.
-func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, intervalCh chan int, pingIntervalCh chan int, pingTasksCh chan []PingTaskInfo) {
+func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, intervalCh chan int, pingIntervalCh chan int, pingTasksCh chan []PingTaskInfo, currentSecret string) {
 	defer stream.Close()
 
 	var msg tunnel.ControlMsg
@@ -296,6 +297,28 @@ func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, i
 		}
 		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.Secret != "" {
 			handleAgentUpgradeTrigger(payload.Secret, payload.Host, session)
+		}
+
+	case "update_master_address":
+		var payload struct {
+			Host string `json:"host"`
+		}
+		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.Host != "" {
+			log.Printf("[Agent] 服务端推送了新的主控地址: %s, 正在更新本地配置文件...", payload.Host)
+			cfg, _ := LoadConfig()
+			cfg.Host = payload.Host
+			if cfg.Secret == "" {
+				cfg.Secret = currentSecret
+			}
+			if err := SaveConfig(cfg); err != nil {
+				log.Printf("[Agent] 报错：无法保存主控地址到配置文件: %v", err)
+			} else {
+				log.Printf("[Agent] 配置文件更新成功，准备重启探针以应用配置...")
+				go func() {
+					time.Sleep(2 * time.Second)
+					os.Exit(0)
+				}()
+			}
 		}
 
 	default:

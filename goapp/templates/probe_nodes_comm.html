@@ -52,6 +52,11 @@
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
+                        <div class="field" style="flex: 2; min-width: 250px;">
+                            <label>主控连接地址 (一键安装或升级时使用)</label>
+                            <input name="probe_master_address" value="{{ .MasterAddress }}" placeholder="例如：https://panel.example.com" />
+                            <div class="muted">留空则默认采用当前浏览的域名。将在控制台中用作探针服务端的 host 参数</div>
+                        </div>
                         <div class="field" style="flex: 1; min-width: 150px;">
                             <label>历史数据保存天数</label>
                             <input name="probe_history_days" value="{{ .HistoryDays }}" placeholder="默认：90" type="number" min="1" required />
