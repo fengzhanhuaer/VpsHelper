@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .layout-container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            margin-top: 16px;
+        }
+        .sidebar {
+            width: 200px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .sidebar a {
+            display: block;
+            padding: 12px 16px;
+            background: var(--color-bg-alt);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            text-decoration: none;
+            color: var(--color-text);
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .sidebar a:hover {
+             border-color: var(--color-primary);
+        }
+        .sidebar a.active {
+            background: var(--color-primary);
+            color: #fff;
+            border-color: var(--color-primary);
+        }
+        .content-frame {
+            flex: 1;
+            border: none;
+            background: transparent;
+            min-height: 80vh;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/system/settings" style="color:var(--color-primary); font-weight:bold;">⚙️ 系统设置</a>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+    
+    <main class="layout-container">
+        <div class="sidebar">
+            <h3 style="margin: 0 0 10px 0; padding: 0 10px;">系统设置</h3>
+            {{ $tab := .Tab }}
+            <a href="/system/update" target="settings_frame" id="tab-update" class="{{ if eq $tab "update" }}active{{ end }}" onclick="switchTab('tab-update')">程序更新</a>
+            <a href="/settings/github" target="settings_frame" id="tab-github" class="{{ if eq $tab "github" }}active{{ end }}" onclick="switchTab('tab-github')">GitHub 鉴权防护</a>
+            <a href="/change_password" target="settings_frame" id="tab-password" class="{{ if eq $tab "password" }}active{{ end }}" onclick="switchTab('tab-password')">修改密码</a>
+        </div>
+        
+        <iframe name="settings_frame" src="/{{ if eq $tab "update" }}system/update{{ else if eq $tab "github" }}settings/github{{ else }}change_password{{ end }}" class="content-frame" onload="resizeIframe(this)"></iframe>
+    </main>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.sidebar a[id^="tab-"]').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            
+            let newTab = tabId.replace('tab-', '');
+            history.replaceState(null, '', '/system/settings?tab=' + newTab);
+        }
+
+        function resizeIframe(obj) {
+            try {
+                const frameBody = obj.contentWindow.document.body;
+                if(frameBody) {
+                    obj.style.height = (frameBody.scrollHeight + 50) + 'px';
+                }
+            } catch(e) {}
+        }
+        window.setInterval(function() {
+            var iframe = document.querySelector('iframe[name="settings_frame"]');
+            if (iframe) {
+                 resizeIframe(iframe);
+            }
+        }, 800);
+    </script>
+</body>
+</html>

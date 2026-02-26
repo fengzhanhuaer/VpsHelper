@@ -52,17 +52,12 @@
             word-break: break-word;
             color: #3a3028;
         }
-        .progress-idle { color: #b0a090; font-style: italic; }
+        /* Extra styles for iframe use */
+        body { background: transparent; padding: 0; margin: 0; }
+        .panel { margin-top: 10px; }
     </style>
 </head>
 <body>
-    <header>
-        <strong>VpsHelper</strong>
-        <nav>
-            <a class="ghost" href="/home">返回主页</a>
-            <a class="ghost" href="/logout">退出登录</a>
-        </nav>
-    </header>
 
     <main>
         <section class="panel">
@@ -188,7 +183,7 @@
                                 finished = true;
                                 if (ev.ok) {
                                     appendLog("更新完成，4 秒后自动刷新...");
-                                    setTimeout(function () { window.location.reload(); }, 4500);
+                                    setTimeout(function () { window.parent.location.reload(); }, 4500);
                                 } else {
                                     appendLog("更新失败，请检查配置或网络。");
                                 }

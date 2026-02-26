@@ -100,6 +100,8 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/cloudflare/database/table/data", h.databaseTableData)
 	router.GET("/settings/ssh", h.sshSettings)
 	router.POST("/settings/ssh", h.sshSettings)
+	// System Settings
+	router.GET("/system/settings", h.systemSettings)
 	router.GET("/system/update", h.systemUpdate)
 	router.POST("/system/update", h.systemUpdate)
 	router.POST("/system/update/stream", h.systemUpdateStream)
@@ -2395,6 +2397,22 @@ func (h *Handler) databasePullStream(c *gin.Context) {
 		return
 	}
 	_ = send(100, pullMsg, true, true)
+}
+
+// systemSettings renders the layout container containing the system settings tabs.
+func (h *Handler) systemSettings(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	tab := c.Query("tab")
+	if tab == "" {
+		tab = "update" // default tab
+	}
+	c.HTML(http.StatusOK, "system_settings_layout.html", gin.H{
+		"Title": "系统设置",
+		"Tab":   tab,
+	})
 }
 
 func (h *Handler) systemUpdate(c *gin.Context) {
