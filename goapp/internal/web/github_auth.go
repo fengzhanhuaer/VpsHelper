@@ -45,7 +45,7 @@ func (h *Handler) githubSettings(c *gin.Context) {
 	}
 
 	if c.Request.Method == http.MethodGet {
-		settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_session_days", "github_auth_enabled"})
+		settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_session_days", "github_auth_enabled", "github_whitelist"})
 		
 		sessionDays := settings["github_session_days"]
 		if sessionDays == "" {
@@ -57,6 +57,7 @@ func (h *Handler) githubSettings(c *gin.Context) {
 			"ClientID":     settings["github_client_id"],
 			"ClientSecret": settings["github_client_secret"],
 			"AllowedUser":  settings["github_allowed_user"],
+			"Whitelist":    settings["github_whitelist"],
 			"SessionDays":  sessionDays,
 			"AuthEnabled":  settings["github_auth_enabled"] == "true",
 			"TestSuccess":  c.Query("test") == "success",
@@ -69,12 +70,14 @@ func (h *Handler) githubSettings(c *gin.Context) {
 	clientID := strings.TrimSpace(c.PostForm("client_id"))
 	clientSecret := strings.TrimSpace(c.PostForm("client_secret"))
 	allowedUser := strings.TrimSpace(c.PostForm("allowed_user"))
+	whitelist := strings.TrimSpace(c.PostForm("whitelist"))
 	sessionDays := strings.TrimSpace(c.PostForm("session_days"))
 	authEnabled := c.PostForm("auth_enabled") == "on" || c.PostForm("auth_enabled") == "true"
 
 	_ = store.SetSetting(h.dbConn, "github_client_id", clientID)
 	_ = store.SetSetting(h.dbConn, "github_client_secret", clientSecret)
 	_ = store.SetSetting(h.dbConn, "github_allowed_user", allowedUser)
+	_ = store.SetSetting(h.dbConn, "github_whitelist", whitelist)
 	_ = store.SetSetting(h.dbConn, "github_session_days", sessionDays)
 	_ = store.SetSetting(h.dbConn, "github_auth_enabled", fmt.Sprintf("%v", authEnabled))
 
@@ -99,6 +102,7 @@ func (h *Handler) githubSettings(c *gin.Context) {
 		"ClientID":     clientID,
 		"ClientSecret": clientSecret,
 		"AllowedUser":  allowedUser,
+		"Whitelist":    whitelist,
 		"SessionDays":  sessionDays,
 		"AuthEnabled":  authEnabled,
 		"Message":      msg,

@@ -38,6 +38,11 @@
                     <input id="allowed_user" name="allowed_user" type="text" value="{{ .AllowedUser }}" placeholder="你的 Github ID (如 fengzhanhuaer)" autocomplete="off" />
                 </div>
                 <div class="field">
+                    <label for="whitelist">免校验白名单 (选填，IP或DDNS域名，多项用逗号或换行分隔)</label>
+                    <textarea id="whitelist" name="whitelist" rows="3" placeholder="例如：1.2.3.4, myhome.ddns.net">{{ .Whitelist }}</textarea>
+                    <small style="color: var(--color-text-muted); font-size: 0.8em; margin-top: 4px;">来源IP位于白名单时，将可直接跳过 GitHub 验证进入密码环节。</small>
+                </div>
+                <div class="field">
                     <label for="session_days">免密通行证存活时间 (天)</label>
                     <input id="session_days" name="session_days" type="number" min="0" max="365" value="{{ .SessionDays }}" placeholder="默认 0：关闭浏览器即失效" />
                     <small style="color: var(--color-text-muted); font-size: 0.8em; margin-top: 4px;">填 0 代表只有当前浏览器未关闭时有效。</small>

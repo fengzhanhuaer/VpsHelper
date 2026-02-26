@@ -227,6 +227,42 @@ func (h *Handler) register(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/home")
 }
 
+func isIPInWhitelist(clientIP, whitelistStr string) bool {
+	if whitelistStr == "" {
+		return false
+	}
+	clientIPAddr := net.ParseIP(clientIP)
+	if clientIPAddr == nil {
+		return false
+	}
+
+	entries := strings.FieldsFunc(whitelistStr, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r' || r == ';'
+	})
+	
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if ip := net.ParseIP(entry); ip != nil {
+			if ip.Equal(clientIPAddr) {
+				return true
+			}
+		} else {
+			ips, err := net.LookupIP(entry)
+			if err == nil {
+				for _, ip := range ips {
+					if ip.Equal(clientIPAddr) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 func (h *Handler) login(c *gin.Context) {
 	hasUsers, err := store.HasUsers(h.dbConn)
 	if err != nil {
@@ -239,17 +275,22 @@ func (h *Handler) login(c *gin.Context) {
 	}
 
 	// GitHub Authentication Firewall Check
-	settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_auth_enabled"})
+	settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_auth_enabled", "github_whitelist"})
 	if settings["github_auth_enabled"] == "true" && 
 		strings.TrimSpace(settings["github_client_id"]) != "" &&
 		strings.TrimSpace(settings["github_client_secret"]) != "" &&
 		strings.TrimSpace(settings["github_allowed_user"]) != "" {
 		
-		sess := sessions.Default(c)
-		authFlag := sess.Get("github_authorized")
-		if authFlag == nil || authFlag.(bool) != true {
-			c.Redirect(http.StatusFound, "/auth/github/login")
-			return
+		clientIP := c.ClientIP()
+		isWhitelisted := isIPInWhitelist(clientIP, settings["github_whitelist"])
+
+		if !isWhitelisted {
+			sess := sessions.Default(c)
+			authFlag := sess.Get("github_authorized")
+			if authFlag == nil || authFlag.(bool) != true {
+				c.Redirect(http.StatusFound, "/auth/github/login")
+				return
+			}
 		}
 	}
 
