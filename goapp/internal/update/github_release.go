@@ -295,8 +295,8 @@ func downloadAssetToTempOnce(ctx context.Context, asset SelectedAsset, token str
 		Timeout:   5 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}).DialContext
-	transport.TLSHandshakeTimeout = 5 * time.Second
-	transport.ResponseHeaderTimeout = 10 * time.Second
+	transport.TLSHandshakeTimeout = 10 * time.Second
+	transport.ResponseHeaderTimeout = 30 * time.Second
 
 	client := &http.Client{
 		Timeout:   0, // Unlimited duration for the actual file body stream transfer
@@ -379,7 +379,8 @@ func downloadAssetToTempOnce(ctx context.Context, asset SelectedAsset, token str
 		if onProgress == nil {
 			_, cpErr = io.Copy(f, resp.Body)
 		} else {
-			cpErr = copyWithProgress(resp.Body, f, start, total, onProgress)
+			// Only apply minimum speed check for direct (no token) downloads.
+			cpErr = copyWithProgress(resp.Body, f, start, total, onProgress, token == "")
 		}
 
 		bodyCloseErr := resp.Body.Close()
@@ -398,7 +399,7 @@ func downloadAssetToTempOnce(ctx context.Context, asset SelectedAsset, token str
 	}
 }
 
-func copyWithProgress(src io.Reader, dst io.Writer, initial int64, total int64, onProgress ProgressCallback) error {
+func copyWithProgress(src io.Reader, dst io.Writer, initial int64, total int64, onProgress ProgressCallback, enforceSpeedCheck bool) error {
 	copied := initial
 	buf := make([]byte, 64*1024)
 	lastReport := time.Time{}
@@ -428,12 +429,14 @@ func copyWithProgress(src io.Reader, dst io.Writer, initial int64, total int64, 
 			report(false)
 		}
 
-		// Judge speed after the initial 10-second grace period
-		elapsed := time.Since(startTime).Seconds()
-		if elapsed > 10 {
-			speed := float64(copied-startCopied) / elapsed
-			if speed < 10*1024 { // 10 KB/s
-				return errors.New("download speed too slow (< 10KB/s), switching to proxy")
+		if enforceSpeedCheck {
+			// Judge speed after the initial 10-second grace period
+			elapsed := time.Since(startTime).Seconds()
+			if elapsed > 10 {
+				speed := float64(copied-startCopied) / elapsed
+				if speed < 10*1024 { // 10 KB/s
+					return errors.New("download speed too slow (< 10KB/s), switching to proxy")
+				}
 			}
 		}
 
