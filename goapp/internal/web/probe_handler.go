@@ -828,3 +828,41 @@ func (h *Handler) probeNodeShellWS(c *gin.Context) {
 		}
 	}
 }
+
+// probeNodeLog renders the log interface for a specific probe node.
+func (h *Handler) probeNodeLog(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	nodeIDStr := c.Query("id")
+	nodeID, _ := strconv.ParseInt(nodeIDStr, 10, 64)
+	node, err := store.GetProbeNodeByID(h.dbConn, nodeID)
+	if err != nil {
+		c.String(http.StatusNotFound, "node not found")
+		return
+	}
+
+	c.HTML(http.StatusOK, "probe_manage_log.html", gin.H{
+		"Title": "探针日志 - " + node.Name,
+		"Node":  node,
+	})
+}
+
+// probeNodeLogData fetches the latest logs from the remote probe.
+func (h *Handler) probeNodeLogData(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	nodeIDStr := c.Query("id")
+	nodeID, _ := strconv.ParseInt(nodeIDStr, 10, 64)
+
+	output, err := tunnel.OpenLogStream(nodeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "data": output})
+}

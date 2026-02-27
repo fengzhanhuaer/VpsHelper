@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -263,6 +264,25 @@ func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, i
 		// Hijack the stream for raw PTY shell interaction.
 		// decoder.Buffered() contains any bytes the JSON decoder consumed past the first JSON message.
 		handleAgentShell(stream, decoder.Buffered())
+		return
+	case "log":
+		output, err := exec.Command("journalctl", "-u", "vpsprobe", "-n", "200", "--no-pager").CombinedOutput()
+		if err != nil || len(output) == 0 {
+			output, _ = exec.Command("journalctl", "-u", "vpshelper", "-n", "200", "--no-pager").CombinedOutput()
+		}
+		if len(output) == 0 {
+			if data, err := os.ReadFile("/var/log/vpsprobe.log"); err == nil {
+				if len(data) > 8000 {
+					output = []byte("...[truncated]...\n" + string(data[len(data)-8000:]))
+				} else {
+					output = data
+				}
+			}
+		}
+		if len(output) == 0 {
+			output = []byte("暂无日志 / No log output found")
+		}
+		stream.Write(output)
 		return
 	case "config":
 		var cfg struct {

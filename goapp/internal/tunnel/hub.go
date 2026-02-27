@@ -3,6 +3,7 @@ package tunnel
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -204,4 +205,33 @@ func OpenShellStream(nodeID int64) (*yamux.Stream, error) {
 	}
 
 	return stream, nil
+}
+
+// OpenLogStream requests the probe to execute and return its operational logs.
+func OpenLogStream(nodeID int64) (string, error) {
+	sessVal, ok := ActiveSessions.Load(nodeID)
+	if !ok {
+		return "", fmt.Errorf("node %d is not currently connected", nodeID)
+	}
+	sess := sessVal.(*yamux.Session)
+	stream, err := sess.OpenStream()
+	if err != nil {
+		return "", fmt.Errorf("open log stream: %w", err)
+	}
+	defer stream.Close()
+
+	msg := ControlMsg{
+		Type:    "log",
+		Payload: []byte("{}"),
+	}
+	enc := json.NewEncoder(stream)
+	if err := enc.Encode(msg); err != nil {
+		return "", fmt.Errorf("send log control msg: %w", err)
+	}
+
+	out, err := io.ReadAll(stream)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return string(out), nil
 }

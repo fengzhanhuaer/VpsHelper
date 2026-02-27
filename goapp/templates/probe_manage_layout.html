@@ -62,14 +62,16 @@
         <div class="sidebar">
             <h3 style="margin: 0 0 10px 0; padding: 0 10px;">{{ .Node.Name }}</h3>
             {{ $isShell := eq .Tab "shell" }}
-            {{ $isDetail := not $isShell }}
+            {{ $isLog := eq .Tab "log" }}
+            {{ $isDetail := and (not $isShell) (not $isLog) }}
             <a href="/probe/node/detail?id={{ .Node.ID }}" target="manage_frame" id="tab-detail" class="{{ if $isDetail }}active{{ end }}" onclick="switchTab('tab-detail')">详情页</a>
             <a href="/probe/node/shell?id={{ .Node.ID }}" target="manage_frame" id="tab-shell" class="{{ if $isShell }}active{{ end }}" onclick="switchTab('tab-shell')">远程 Shell</a>
+            <a href="/probe/node/log?id={{ .Node.ID }}" target="manage_frame" id="tab-log" class="{{ if $isLog }}active{{ end }}" onclick="switchTab('tab-log')">探针日志</a>
             
             <a href="/probe/nodes" style="margin-top: 20px; background: transparent; color: var(--color-text-muted); border-color: transparent;">&larr; 返回列表</a>
         </div>
         
-        <iframe name="manage_frame" src="/probe/node/{{ if $isShell }}shell{{ else }}detail{{ end }}?id={{ .Node.ID }}" class="content-frame" onload="resizeIframe(this)"></iframe>
+        <iframe name="manage_frame" src="/probe/node/{{ if $isShell }}shell{{ else if $isLog }}log{{ else }}detail{{ end }}?id={{ .Node.ID }}" class="content-frame" onload="resizeIframe(this)"></iframe>
     </main>
 
     <script>
