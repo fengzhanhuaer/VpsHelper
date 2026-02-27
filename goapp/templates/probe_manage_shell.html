@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.css" />
+    <link rel="stylesheet" href="https://unpkg.com/@xterm/xterm@5.3.0/css/xterm.css" />
     <style>
         body {
             background-color: transparent;
@@ -49,19 +49,21 @@
         <div id="terminal"></div>
     </div>
 
-    <!-- xterm.js library -->
-    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.8.0/lib/addon-fit.js"></script>
+    <!-- xterm.js library from unpkg (more reliable globally than jsdelivr in some regions) -->
+    <script src="https://unpkg.com/@xterm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://unpkg.com/@xterm/addon-fit@0.8.0/lib/addon-fit.js"></script>
 
     <script>
         const statusEl = document.getElementById('status');
-        const term = new Terminal({
-            cursorBlink: true,
-            theme: {
-                background: '#000000',
-                foreground: '#ffffff'
-            }
-        });
+        
+        try {
+            const term = new Terminal({
+                cursorBlink: true,
+                theme: {
+                    background: '#000000',
+                    foreground: '#ffffff'
+                }
+            });
 
         const fitAddon = new FitAddon.FitAddon();
         term.loadAddon(fitAddon);
@@ -115,6 +117,11 @@
             statusEl.textContent = "连接错误";
             statusEl.style.color = "#bb0000";
         };
+        } catch (e) {
+            statusEl.textContent = "前端组件加载失败";
+            statusEl.style.color = "#bb0000";
+            document.getElementById('terminal').innerHTML = '<div style="color:#ff5555; padding: 20px;">无法加载终端核心依赖库 (xterm.js)。<br/><br/>这是因为您当前的网络无法连接到依赖库的 CDN 节点 (unpkg.com)。请尝试全局翻墙代理或刷新浏览器。</div>';
+        }
     </script>
 </body>
 </html>
