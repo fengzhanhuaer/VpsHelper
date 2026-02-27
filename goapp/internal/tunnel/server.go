@@ -166,7 +166,7 @@ func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 
 	// Register session
 	ActiveSessions.Store(node.ID, yamuxSession)
-	
+
 	probeVersion := c.GetHeader("X-Probe-Version")
 	reportedIP := c.GetHeader("X-Probe-IP")
 	if reportedIP != "" {
@@ -182,7 +182,7 @@ func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 			"version": probeVersion,
 		}
 	}
-	
+
 	// Explicitly broadcast to clear the upgrade progress UI when reconnecting
 	EventBroadcast <- map[string]interface{}{
 		"type":     "upgrade_progress",
@@ -215,7 +215,7 @@ func monitorSession(nodeID int64, nodeName string, session *yamux.Session) {
 			}
 			return
 		}
-		
+
 		// Typically, a probe initiates streams to send data or report status.
 		// However, controlling commands are usually initiated BY the server to the client.
 		// In Yamux, BOTH sides can open streams!
@@ -226,7 +226,7 @@ func monitorSession(nodeID int64, nodeName string, session *yamux.Session) {
 
 func handleIncomingProbeStream(nodeID int64, stream *yamux.Stream) {
 	defer stream.Close()
-	
+
 	reader := bufio.NewReader(stream)
 	line, err := reader.ReadString('\n')
 	if err != nil {

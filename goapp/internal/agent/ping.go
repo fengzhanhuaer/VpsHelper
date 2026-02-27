@@ -61,7 +61,7 @@ func doPing(ctx context.Context, target string) (latencyMs float64, lossPct floa
 	// Parse latency
 	var total float64
 	var count int
-	
+
 	if isWindows {
 		matches := timeRegexpWindows.FindAllStringSubmatch(outputStr, -1)
 		for _, m := range matches {

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .log-container {
+            width: 100%;
+            height: 65vh;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: monospace;
+            font-size: 13px;
+            padding: 10px;
+            overflow-y: auto;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/logout">退出登录</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="panel panel--wide">
+            <h1>运行日志</h1>
+            <p class="muted">查看 vpshelper 服务的最新运行日志。</p>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
+                <button id="btn-refresh" class="btn" onclick="fetchLogs()">⟳ 刷新日志</button>
+                <div class="muted" id="last-updated" style="font-size: 13px;">尚未加载</div>
+            </div>
+
+            <div id="log-content" class="log-container">正在加载日志...</div>
+        </section>
+    </main>
+
+    <script>
+        async function fetchLogs() {
+            const btn = document.getElementById("btn-refresh");
+            const logContent = document.getElementById("log-content");
+            const lastUpdated = document.getElementById("last-updated");
+
+            btn.disabled = true;
+            btn.textContent = "加载中...";
+
+            try {
+                const response = await fetch("/system/log/data");
+                const result = await response.json();
+                
+                if (result.ok) {
+                    logContent.textContent = result.data || "暂无日志。";
+                    // 滚动到最底部
+                    logContent.scrollTop = logContent.scrollHeight;
+                    lastUpdated.textContent = "最后刷新：" + new Date().toLocaleTimeString("zh-CN");
+                } else {
+                    logContent.textContent = "获取日志失败: " + result.message;
+                }
+            } catch (err) {
+                logContent.textContent = "请求失败: " + err.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "⟳ 刷新日志";
+            }
+        }
+
+        // 初始化加载
+        fetchLogs();
+    </script>
+</body>
+</html>

@@ -25,7 +25,7 @@ func getGeoForIP(ip string) string {
 			geoCache.Store(ip, "未知归属地")
 			return
 		}
-		
+
 		client := &http.Client{Timeout: 5 * time.Second}
 		geoResp, err := client.Do(geoReq)
 		if err != nil {
@@ -33,11 +33,11 @@ func getGeoForIP(ip string) string {
 			return
 		}
 		defer geoResp.Body.Close()
-		
+
 		geoBody, _ := io.ReadAll(geoResp.Body)
 		parts := strings.Split(strings.TrimSpace(string(geoBody)), "\n")
 		var geoStr string
-		
+
 		label := "IPv4"
 		if strings.Contains(ip, ":") {
 			label = "IPv6"
@@ -52,7 +52,7 @@ func getGeoForIP(ip string) string {
 		} else {
 			geoStr = label + "未知归属地"
 		}
-		
+
 		geoCache.Store(ip, geoStr)
 	}()
 
@@ -410,7 +410,6 @@ func UpdateProbeNodeSecret(dbConn *sql.DB, id int64, secret string) error {
 	)
 	return err
 }
-
 
 // SetProbeNodeOnline updates the runtime online/ping state (and version) in probe DB only.
 func SetProbeNodeOnline(nodeID int64, online bool, version, ip string) {

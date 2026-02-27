@@ -18,7 +18,7 @@ type LotteryWatch struct {
 	Owner         string `json:"owner"`
 	URL           string `json:"url"`
 	PostID        string `json:"post_id"`
-	DrawTime      int64  `json:"draw_time"`     // unix ms
+	DrawTime      int64  `json:"draw_time"`      // unix ms
 	Count         int    `json:"count"`          // number of prizes
 	StartFloor    int    `json:"start_floor"`    // floor >= start_floor qualify
 	Duplicate     bool   `json:"duplicate"`      // allow same user to win multiple times

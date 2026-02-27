@@ -101,9 +101,9 @@ type acmeUser struct {
 	key          crypto.PrivateKey
 }
 
-func (u *acmeUser) GetEmail() string                              { return u.Email }
-func (u *acmeUser) GetRegistration() *registration.Resource        { return u.Registration }
-func (u *acmeUser) GetPrivateKey() crypto.PrivateKey               { return u.key }
+func (u *acmeUser) GetEmail() string                        { return u.Email }
+func (u *acmeUser) GetRegistration() *registration.Resource { return u.Registration }
+func (u *acmeUser) GetPrivateKey() crypto.PrivateKey        { return u.key }
 
 func loadOrCreateUser(cacheDir, domain string) (*acmeUser, error) {
 	keyPath := filepath.Join(cacheDir, "account.key")
@@ -151,7 +151,6 @@ func loadOrCreateUser(cacheDir, domain string) (*acmeUser, error) {
 
 	return u, nil
 }
-
 
 func saveUserReg(cacheDir string, u *acmeUser) {
 	if u.Registration != nil {

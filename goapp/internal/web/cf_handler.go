@@ -100,10 +100,10 @@ func (h *Handler) cfIndex(c *gin.Context) {
 		}
 
 		c.HTML(http.StatusOK, "cloudflare_index.html", gin.H{
-			"Title":      "Cloudflare 管理",
-			"Token":      settings["cf_api_token"],
-			"Message":    c.Query("message"),
-			"MsgOK":      c.Query("status") == "ok",
+			"Title":   "Cloudflare 管理",
+			"Token":   settings["cf_api_token"],
+			"Message": c.Query("message"),
+			"MsgOK":   c.Query("status") == "ok",
 		})
 		return
 	}

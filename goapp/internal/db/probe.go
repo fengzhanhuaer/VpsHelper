@@ -61,7 +61,7 @@ func MigrateProbe(db *sql.DB) error {
 		`ALTER TABLE probe_node_status ADD COLUMN version TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE probe_node_status ADD COLUMN ip TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE probe_node_status ADD COLUMN upgrade_progress TEXT NOT NULL DEFAULT ''`,
-		
+
 		// ── probe ping history ────────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS probe_ping_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

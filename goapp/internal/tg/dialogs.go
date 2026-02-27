@@ -1,4 +1,4 @@
-﻿package tg
+package tg
 
 import (
 	"context"
@@ -51,7 +51,7 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 				continue
 			}
 			seen[key] = true
-			
+
 			updatedAt := time.Now().Format(time.RFC3339)
 			dialogs = append(dialogs, store.TGDialog{
 				DialogID:  dialogID,
@@ -60,7 +60,7 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 				UpdatedAt: updatedAt,
 				AccountID: accountID,
 			})
-			
+
 			// Avoid spamming progress, report every 100 dialogs
 			if len(dialogs)%100 == 0 && onProgress != nil {
 				onProgress(len(dialogs), "拉取中...")
@@ -70,7 +70,7 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 		if err := iter.Err(); err != nil {
 			return err
 		}
-		
+
 		if onProgress != nil {
 			onProgress(len(dialogs), "拉取中...")
 		}
@@ -95,7 +95,6 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 
 	return len(dialogs), "ok"
 }
-
 
 func resolveDialogPeer(peer tg.PeerClass, users map[int64]*tg.User, chats map[int64]*tg.Chat, channels map[int64]*tg.Channel) (dialogID, username, title string, outPeer tg.InputPeerClass) {
 	switch p := peer.(type) {

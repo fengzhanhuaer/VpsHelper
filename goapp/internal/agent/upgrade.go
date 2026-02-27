@@ -64,7 +64,7 @@ func fallbackDownloadWithProgress(ctx context.Context, host, secret, osParam, ar
 
 func handleAgentUpgradeTrigger(secret, host string, session *yamux.Session) {
 	log.Printf("[Agent] 收到服务端在线更新指令，准备执行自更新流程...")
-	
+
 	sendProgress := func(msg string) {
 		if session == nil || session.IsClosed() {
 			return
@@ -105,7 +105,7 @@ func handleAgentUpgradeTrigger(secret, host string, session *yamux.Session) {
 		log.Printf("[Agent] 正在向 GitHub 拉取释放版本元数据...")
 		sendProgress("正在拉取最新版本元数据...")
 		var tmpFile string
-		
+
 		info, release, err := update.FetchLatestGitHubRelease(ctx, "fengzhanhuaer", "VpsHelper", "")
 		if err == nil && info.OK {
 			if version.Version != "dev" && info.TagName == version.Version {
@@ -149,13 +149,13 @@ func handleAgentUpgradeTrigger(secret, host string, session *yamux.Session) {
 		cmd := exec.CommandContext(ctx, tmpFile)
 		cmd.Env = append(os.Environ(), "VPSHELPER_UPDATE_TEST=1")
 		output, err := cmd.CombinedOutput()
-		
+
 		if err != nil {
 			log.Printf("[Agent] 新版预检失败，拒绝升级: %v, 输出: %s", err, string(output))
 			sendProgress("预检失败，拒绝升级")
 			return
 		}
-		
+
 		// 简单的错误预防，确认测试模式真实触发了
 		if !strings.Contains(string(output), "VPSHELPER_UPDATE_TEST is active") {
 			log.Printf("[Agent] 警告: 未在预检中检测出测试输出标记。输出: %s", string(output))
@@ -171,7 +171,7 @@ func handleAgentUpgradeTrigger(secret, host string, session *yamux.Session) {
 			_ = os.Rename(backupPath, exePath)
 			return
 		}
-		
+
 		_ = os.Chmod(exePath, 0o755)
 
 		log.Printf("[Agent] 文件替换完成，触发生态热启 (%s)...", exePath)

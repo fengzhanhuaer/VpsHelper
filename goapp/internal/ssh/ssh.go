@@ -1,4 +1,4 @@
-﻿package ssh
+package ssh
 
 import (
 	"bytes"
@@ -153,7 +153,6 @@ func DisableFail2ban(ctx context.Context) (bool, string) {
 	return true, "Fail2ban 已停止并禁用自启。"
 }
 
-
 func Fail2banStatus(ctx context.Context) string {
 	if runtime.GOOS == "windows" {
 		return "不支持 (Windows)"
@@ -202,12 +201,12 @@ func ApplySettings(ctx context.Context, port int, allowPassword, allowKey bool, 
 	_ = os.WriteFile(backup, b, 0o600)
 
 	content := string(b)
-	
+
 	// Strip all existing ListenAddress, AllowUsers lines, and previous VPSHELPER blocks
 	lines := strings.Split(content, "\n")
 	var newLines []string
 	inVpsHelperBlock := false
-	
+
 	for _, ln := range lines {
 		trim := strings.TrimSpace(ln)
 		if strings.HasPrefix(strings.ToLower(trim), "listenaddress") {

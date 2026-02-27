@@ -39,12 +39,12 @@ func fetchIPString(client *http.Client, url string) string {
 		return ""
 	}
 	defer resp.Body.Close()
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return ""
 	}
-	
+
 	ipStr := strings.TrimSpace(string(body))
 	if net.ParseIP(ipStr) != nil {
 		return ipStr

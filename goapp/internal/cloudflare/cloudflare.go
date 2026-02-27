@@ -358,10 +358,10 @@ func (c *APIClient) SyncReusablePolicy(policyID string, ips []string) (string, e
 				break
 			}
 		}
-		
+
 		if policyID == "" {
 			newPolicy := map[string]interface{}{
-				"name": "WhiteList",
+				"name":     "WhiteList",
 				"decision": "bypass",
 				"include": []map[string]interface{}{
 					{"ip": map[string]string{"ipv4": "127.0.0.1/32"}},
@@ -396,7 +396,7 @@ func (c *APIClient) SyncReusablePolicy(policyID string, ips []string) (string, e
 	}
 
 	var fetchResult struct {
-		Success bool `json:"success"`
+		Success bool                   `json:"success"`
 		Result  map[string]interface{} `json:"result"`
 	}
 	if err := json.Unmarshal(respBytes, &fetchResult); err != nil {
@@ -404,7 +404,7 @@ func (c *APIClient) SyncReusablePolicy(policyID string, ips []string) (string, e
 	}
 
 	policy := fetchResult.Result
-	
+
 	// Create the "include" array with IPs
 	var includes []map[string]interface{}
 	// For ZeroTrust IP rules, if it doesn't have a CIDR suffix, we should append /32 for ipv4 or /128 for ipv6,

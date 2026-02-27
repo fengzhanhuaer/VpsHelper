@@ -113,7 +113,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 		serverHost = "https://" + serverHost
 	}
 	discoverURL := strings.TrimSuffix(serverHost, "/") + "/api/probe/discover"
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", discoverURL, nil)
 	if err != nil {
 		return fmt.Errorf("create discover request: %w", err)
@@ -154,7 +154,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	wsHeader := http.Header{}
 	wsHeader.Set("X-Probe-Secret", secret)
 	wsHeader.Set("X-Probe-Version", version.Version)
-	
+
 	reportedIP := fetchOutboundIPs(ctx)
 	if reportedIP != "" {
 		wsHeader.Set("X-Probe-IP", reportedIP)
@@ -173,7 +173,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	// 3. Setup Yamux Client
 	conf := yamux.DefaultConfig()
 	conf.EnableKeepAlive = true
-	
+
 	session, err := yamux.Client(wsConn, conf)
 	if err != nil {
 		conn.Close()
@@ -374,7 +374,6 @@ func startTelemetryStream(ctx context.Context, session *yamux.Session, initialIn
 				continue
 			}
 
-
 			msg := tunnel.TelemetryMsg{
 				Type:    "stats",
 				Payload: payload,
@@ -390,7 +389,7 @@ func startTelemetryStream(ctx context.Context, session *yamux.Session, initialIn
 
 func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks []PingTaskInfo, initialInterval int, pingTasksCh <-chan []PingTaskInfo, pingIntervalCh <-chan int, errCh chan<- error) {
 	tasks := initialTasks
-	
+
 	// Start with default 60s unless dynamically updated to something else.
 	// But if initial is passed, maybe use it? Let's cap at 60s minimum for default ping, except when dashboard forces 5s.
 	globalOverride := 0
@@ -410,17 +409,21 @@ func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks [
 		case newTasks := <-pingTasksCh:
 			tasks = newTasks
 			log.Printf("[Agent] Ping Worker 检测到任务列表更新，当前共 %d 个任务", len(tasks))
-			
+
 			// cleanup removed tasks from lastRun tracker
 			active := make(map[int64]bool)
-			for _, t := range tasks { active[t.ID] = true }
+			for _, t := range tasks {
+				active[t.ID] = true
+			}
 			for id := range lastRun {
-				if !active[id] { delete(lastRun, id) }
+				if !active[id] {
+					delete(lastRun, id)
+				}
 			}
 
 		case newInterval := <-pingIntervalCh:
 			if newInterval > 0 {
-				if newInterval <= 5 { 
+				if newInterval <= 5 {
 					globalOverride = newInterval
 				} else {
 					globalOverride = 0
@@ -431,12 +434,16 @@ func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks [
 			if len(tasks) > 0 {
 				now := time.Now()
 				var toRun []PingTaskInfo
-				
+
 				for _, t := range tasks {
 					interval := t.ReportInterval
-					if interval <= 0 { interval = 60 }
-					if globalOverride > 0 { interval = globalOverride }
-					
+					if interval <= 0 {
+						interval = 60
+					}
+					if globalOverride > 0 {
+						interval = globalOverride
+					}
+
 					last, ok := lastRun[t.ID]
 					if !ok || now.Sub(last) >= time.Duration(interval)*time.Second {
 						toRun = append(toRun, t)
@@ -465,12 +472,16 @@ func startPingWorker(ctx context.Context, session *yamux.Session, initialTasks [
 						Type:    "ping_results",
 						Payload: payload,
 					}
-					
+
 					// Open a short-lived stream to push the results
 					go func(msg tunnel.TelemetryMsg) {
-						if session.IsClosed() { return }
+						if session.IsClosed() {
+							return
+						}
 						stream, err := session.OpenStream()
-						if err != nil { return }
+						if err != nil {
+							return
+						}
 						defer stream.Close()
 						fmt.Fprintln(stream, "STATS")
 						_ = json.NewEncoder(stream).Encode(msg)

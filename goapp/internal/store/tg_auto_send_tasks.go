@@ -1,4 +1,4 @@
-﻿package store
+package store
 
 import (
 	"database/sql"
@@ -33,7 +33,6 @@ type AutoSendTask struct {
 	APIHash     string
 	AllProxy    string
 }
-
 
 func scanAutoSendTask(row interface{ Scan(...any) error }) (AutoSendTask, error) {
 	var t AutoSendTask

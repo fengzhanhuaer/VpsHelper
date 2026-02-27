@@ -1,4 +1,4 @@
-﻿package tg
+package tg
 
 import (
 	"context"
@@ -290,7 +290,7 @@ type incomingMessage struct {
 	SenderID   int64  // 0 = self / outgoing
 	SenderName string // display name if resolved, else empty
 	Text       string
-	Date       int64  // unix timestamp
+	Date       int64 // unix timestamp
 	Out        bool
 }
 

@@ -85,7 +85,7 @@ func FetchAndStoreDialogHistory(ctx context.Context, dbConn *sql.DB, owner strin
 					}
 				}
 			}
-cm := store.ChatMessage{
+			cm := store.ChatMessage{
 				MsgID: m.ID,
 				From:  from,
 				Text:  m.Message,

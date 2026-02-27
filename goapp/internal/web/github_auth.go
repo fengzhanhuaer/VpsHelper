@@ -46,7 +46,7 @@ func (h *Handler) githubSettings(c *gin.Context) {
 
 	if c.Request.Method == http.MethodGet {
 		settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_session_days", "github_auth_enabled", "github_whitelist"})
-		
+
 		sessionDays := settings["github_session_days"]
 		if sessionDays == "" {
 			sessionDays = "0"

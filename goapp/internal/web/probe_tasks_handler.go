@@ -32,7 +32,7 @@ func (h *Handler) probeTasks(c *gin.Context) {
 				message = "备注名和IP参数不能为空。"
 				break
 			}
-			
+
 			nodeIDsStr := ""
 			if len(nodes) > 0 {
 				nodeIDsStr = "," + strings.Join(nodes, ",") + ","
@@ -109,7 +109,7 @@ func (h *Handler) probeTasks(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Failed to load tasks")
 		return
 	}
-	
+
 	nodes, err := store.ListProbeNodes(h.dbConn)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to load nodes")

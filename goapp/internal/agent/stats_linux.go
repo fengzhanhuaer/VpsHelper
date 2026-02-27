@@ -109,7 +109,7 @@ func readMem() (float64, string, float64, string) {
 	if swapTotal > 0 {
 		swapUsed := swapTotal - swapFree
 		swapPct = float64(swapUsed) / float64(swapTotal) * 100
-		
+
 		// Adjust display format based on size
 		if swapTotal < 1024*1024 { // Less than 1GB -> show MB
 			swapStr = fmt.Sprintf("%.1fM/%.1fM", float64(swapUsed)/1024, float64(swapTotal)/1024)

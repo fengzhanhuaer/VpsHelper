@@ -1,4 +1,4 @@
-﻿package update
+package update
 
 import (
 	"archive/zip"
@@ -69,10 +69,10 @@ func FetchLatestGitHubRelease(ctx context.Context, owner, repo, token string) (G
 	}
 
 	cacheKey := owner + "/" + repo + "|" + token
-	
+
 	val, _ := globalGHCaches.LoadOrStore(cacheKey, &githubReleaseCache{})
 	cache := val.(*githubReleaseCache)
-	
+
 	cache.mu.Lock()
 	if time.Now().Before(cache.expiresAt) {
 		info = cache.info
@@ -431,7 +431,7 @@ func copyWithProgress(src io.Reader, dst io.Writer, initial int64, total int64, 
 		// Judge speed after the initial 10-second grace period
 		elapsed := time.Since(startTime).Seconds()
 		if elapsed > 10 {
-			speed := float64(copied - startCopied) / elapsed
+			speed := float64(copied-startCopied) / elapsed
 			if speed < 10*1024 { // 10 KB/s
 				return errors.New("download speed too slow (< 10KB/s), switching to proxy")
 			}

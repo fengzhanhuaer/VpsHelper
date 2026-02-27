@@ -19,4 +19,3 @@ func TestLoadTemplatesEmbedded(t *testing.T) {
 		t.Fatalf("template tg_auto_send.html not found")
 	}
 }
-

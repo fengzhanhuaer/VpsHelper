@@ -132,7 +132,7 @@ func (h *Handler) nsLottery(c *gin.Context) {
 		"Title":         "抽奖监视",
 		"Message":       message,
 		"MsgOK":         msgOK,
-		"WatchUsername":  watchUsername,
+		"WatchUsername": watchUsername,
 		"Pending":       pending,
 		"Drawn":         drawn,
 		"Won":           won,

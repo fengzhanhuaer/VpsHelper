@@ -44,10 +44,10 @@ type TelemetryMsg struct {
 var (
 	// DashboardClients map[*websocket.Conn]bool holds active dashboard viewers.
 	DashboardClients = sync.Map{}
-	
+
 	// StatsBroadcast channel receives stats from all probes and multiplexes them to viewers.
 	StatsBroadcast = make(chan NodeStats, 100)
-	
+
 	// PingBroadcast channel receives ping results from probes and broadcasts them to viewers.
 	PingBroadcast = make(chan PingStatsBroadcastMsg, 100)
 
@@ -76,7 +76,7 @@ func init() {
 			})
 		}
 	}()
-	
+
 	go func() {
 		for msg := range PingBroadcast {
 			DashboardClients.Range(func(key, value interface{}) bool {

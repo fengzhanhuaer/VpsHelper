@@ -40,7 +40,7 @@ func (h *Handler) probeDashboardWS(c *gin.Context) {
 	// User wants rapid updates (5s) for 5 minutes when a dashboard is opened
 	go func() {
 		log.Printf("[Web] Dashboard opened (mode=%s). Rapid 5s refresh mode enabled for 5 minutes.", mode)
-		
+
 		changeKey := "report_interval"
 		if mode == "netstatus" {
 			changeKey = "ping_report_interval"

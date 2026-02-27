@@ -1,4 +1,4 @@
-﻿package web
+package web
 
 import (
 	"context"
@@ -107,6 +107,8 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/system/update/stream", h.systemUpdateStream)
 	router.GET("/server/status", h.serverStatus)
 	router.GET("/server/status/data", h.serverStatusData)
+	router.GET("/system/log", h.systemLog)
+	router.GET("/system/log/data", h.systemLogData)
 	router.GET("/shell", h.shellConsole)
 	router.POST("/shell/exec", h.shellExec)
 	router.POST("/shell/shortcuts/add", h.shellShortcutsAdd)
@@ -245,7 +247,7 @@ func isIPInWhitelist(clientIP, whitelistStr string) bool {
 	entries := strings.FieldsFunc(whitelistStr, func(r rune) bool {
 		return r == ',' || r == '\n' || r == '\r' || r == ';'
 	})
-	
+
 	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
@@ -282,11 +284,11 @@ func (h *Handler) login(c *gin.Context) {
 
 	// GitHub Authentication Firewall Check
 	settings, _ := store.GetSettings(h.dbConn, []string{"github_client_id", "github_client_secret", "github_allowed_user", "github_auth_enabled", "github_whitelist"})
-	if settings["github_auth_enabled"] == "true" && 
+	if settings["github_auth_enabled"] == "true" &&
 		strings.TrimSpace(settings["github_client_id"]) != "" &&
 		strings.TrimSpace(settings["github_client_secret"]) != "" &&
 		strings.TrimSpace(settings["github_allowed_user"]) != "" {
-		
+
 		clientIP := c.ClientIP()
 		isWhitelisted := isIPInWhitelist(clientIP, settings["github_whitelist"])
 
@@ -506,11 +508,11 @@ func (h *Handler) tgLoginStart(c *gin.Context) {
 		self, canonical, err := tg.GetSelfFromSessionText(ctx, apiID, apiHash, sessionText, allProxy)
 		if err != nil {
 			c.HTML(http.StatusOK, "tg_login_start.html", gin.H{
-				"Title":        "TG Login",
-				"Error":        "Session 验证失败：" + err.Error(),
-				"Tab":          "session",
-				"SessionText":  sessionText,
-				"AccountName":  accountName,
+				"Title":       "TG Login",
+				"Error":       "Session 验证失败：" + err.Error(),
+				"Tab":         "session",
+				"SessionText": sessionText,
+				"AccountName": accountName,
 			})
 			return
 		}
@@ -769,7 +771,7 @@ func (h *Handler) tgSettings(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	succMsg = "API 设置已保存"
 	c.HTML(http.StatusOK, "tg_settings.html", gin.H{
 		"Title":   "TG Settings",
@@ -796,10 +798,10 @@ func (h *Handler) tgBotSettings(c *gin.Context) {
 		Name string
 	}
 	var adminCandidates []AdminCandidate
-	
+
 	username := h.currentUser(c)
 	accounts, _ := store.ListTGAccounts(h.dbConn, username)
-	
+
 	for _, acc := range accounts {
 		uid := acc.TGUserID
 		if uid == 0 {
@@ -823,7 +825,7 @@ func (h *Handler) tgBotSettings(c *gin.Context) {
 			})
 		}
 	}
-	
+
 	botConfigured := settings["tg_bot_token"] != "" && settings["tg_bot_admin_id"] != ""
 
 	if c.Request.Method == http.MethodGet {
@@ -847,7 +849,7 @@ func (h *Handler) tgBotSettings(c *gin.Context) {
 
 	_ = store.SetSetting(h.dbConn, "tg_bot_token", botToken)
 	_ = store.SetSetting(h.dbConn, "tg_bot_admin_id", botAdmin)
-	
+
 	if webhookSecret == "" && botToken != "" {
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err == nil {
@@ -867,20 +869,20 @@ func (h *Handler) tgBotSettings(c *gin.Context) {
 		if !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
 			scheme = "https"
 		}
-		
+
 		hookURL := fmt.Sprintf("%s://%s/api/%s", scheme, host, webhookSecret)
 		err := tgbot.SetWebhook(botToken, hookURL, webhookSecret)
 		if err != nil {
 			errMsg = "自动注册 Webhook 失败: " + err.Error()
 		} else {
-		    succMsg = "Bot 设置已保存，且 Webhook 注册成功。"
-		    botConfigured = true
+			succMsg = "Bot 设置已保存，且 Webhook 注册成功。"
+			botConfigured = true
 		}
 	} else if botToken == "" {
-	    succMsg = "BotToken 已清空，当前 Bot 功能处于停用状态。"
-	    botConfigured = false
+		succMsg = "BotToken 已清空，当前 Bot 功能处于停用状态。"
+		botConfigured = false
 	} else {
-	    succMsg = "配置已保存，但缺少信息未能注册 Webhook。"
+		succMsg = "配置已保存，但缺少信息未能注册 Webhook。"
 	}
 
 	c.HTML(http.StatusOK, "tg_bot_settings.html", gin.H{
@@ -1322,7 +1324,6 @@ func (h *Handler) tgDialogsRefreshStream(c *gin.Context) {
 	}
 	_ = send(100, finalMsg, true, true)
 }
-
 
 func (h *Handler) tgAutoReply(c *gin.Context) {
 	username := h.currentUser(c)
@@ -1969,7 +1970,7 @@ func (h *Handler) databaseTableList(c *gin.Context) {
 		if d1Name == "" {
 			d1Name = config.UnifiedD1DBName
 		}
-		
+
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 		defer cancel()
 		cf := d1.Client{Token: cfToken}
@@ -2716,7 +2717,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 	cmd := exec.CommandContext(ctxTest, bin, os.Args[1:]...)
 	cmd.Env = append(os.Environ(), "VPSHELPER_UPDATE_TEST=1")
 	out, errTest := cmd.CombinedOutput()
-	
+
 	if errTest != nil || ctxTest.Err() == context.DeadlineExceeded {
 		failMsg := "新版本自检失败，已自动回滚并保持当前原版运行! 原因: "
 		if errTest != nil {
@@ -2725,7 +2726,7 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 			failMsg += "心跳存活超时"
 		}
 		_ = os.Remove(bin) // Rollback: do not use the corrupted binary
-		fail(93, failMsg + ". 输出记录: " + string(out))
+		fail(93, failMsg+". 输出记录: "+string(out))
 		return
 	}
 
@@ -2901,7 +2902,7 @@ func (h *Handler) sshSettings(c *gin.Context) {
 	}
 
 	fail2banStat := ssh.Fail2banStatus(c.Request.Context())
-	
+
 	// Try fetching Last Logs (Fallback depending on platform)
 	loginRecords := getLoginRecords()
 
@@ -2932,7 +2933,6 @@ func getLoginRecords() string {
 	return "无最近登录记录或最后登陆读取失败。"
 }
 
-
 func bool01(v bool) string {
 	if v {
 		return "1"
@@ -2960,6 +2960,32 @@ func (h *Handler) serverStatusData(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true, "data": status.Collect()})
+}
+
+func (h *Handler) systemLog(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	c.HTML(http.StatusOK, "system_log.html", gin.H{
+		"Title": "运行日志",
+	})
+}
+
+func (h *Handler) systemLogData(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "未登录或会话已过期。"})
+		return
+	}
+
+	cmd := exec.Command("journalctl", "-u", "vpshelper", "-n", "200", "--no-pager")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": string(output) + "\n" + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "data": string(output)})
 }
 
 type shortcutItem struct {
@@ -3151,7 +3177,7 @@ func (h *Handler) firewallPage(c *gin.Context) {
 				message = "端口必须是数字。"
 				break
 			}
-			
+
 			if sourceInput == "" {
 				// Global open
 				ok, msg := firewall.OpenPort(fwType, port, proto, "")

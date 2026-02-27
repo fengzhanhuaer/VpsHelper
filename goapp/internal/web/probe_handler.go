@@ -104,12 +104,12 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			}
 			expiredAt := strings.TrimSpace(c.PostForm("expired_at"))
 			intervalStr := strings.TrimSpace(c.PostForm("report_interval"))
-			
+
 			if name == "" {
 				message = "节点名称不能为空。"
 				break
 			}
-			
+
 			intervalVal, _ := strconv.Atoi(intervalStr)
 			if intervalVal < 1 {
 				intervalVal = 60
@@ -121,7 +121,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			}
 			message = "节点信息已更新。"
 			msgOK = true
-			
+
 			// 尝试给在线节点实时推送新的汇报周期
 			pushErr := tunnel.PushConfigToNode(id, "config", map[string]int{"report_interval": intervalVal})
 			if pushErr == nil {
@@ -147,7 +147,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			message = "密钥已重新生成。"
 			msgOK = true
 
-
 		case "upgrade":
 			idStr := strings.TrimSpace(c.PostForm("id"))
 
@@ -157,7 +156,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			}
 			host := c.Request.Host
 			baseURL := fmt.Sprintf("%s://%s", scheme, host)
-			
+
 			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address"})
 			if settings["probe_master_address"] != "" {
 				baseURL = settings["probe_master_address"]
@@ -197,7 +196,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 						}
 					}
 				}
-				
+
 				payload := map[string]string{"secret": node.Secret, "host": baseURL}
 				pushErr := tunnel.PushConfigToNode(id, "upgrade", payload)
 				if pushErr != nil {
@@ -308,9 +307,9 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		historyDays = "90"
 	}
 	enableAutoTLS := settings["probe_auto_tls"] == "true"
-	certReqStatus := settings["probe_tls_cert_status"]   // "", "running", "success", "error"
-	certReqError  := settings["probe_tls_cert_error"]
-	certReqAt     := settings["probe_tls_cert_updated_at"]
+	certReqStatus := settings["probe_tls_cert_status"] // "", "running", "success", "error"
+	certReqError := settings["probe_tls_cert_error"]
+	certReqAt := settings["probe_tls_cert_updated_at"]
 	masterAddress := settings["probe_master_address"]
 
 	// 读取证书详细状态
@@ -379,7 +378,7 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		return
 	}
 	secret := strings.TrimPrefix(authHeader, "Bearer ")
-	
+
 	node, err := store.GetProbeNodeBySecret(h.dbConn, secret)
 	if err != nil {
 		security.RecordFailure(h.dbConn, ip)
@@ -470,6 +469,7 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		"ping_tasks":      tasksRes,
 	})
 }
+
 // probeDashboard renders either the wrapper layout or the specific iframe content
 func (h *Handler) probeDashboard(c *gin.Context) {
 	if h.currentUser(c) == "" {
@@ -595,7 +595,7 @@ func (h *Handler) probeLatestBinary(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "req create error")
 		return
 	}
-	
+
 	client := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -619,7 +619,7 @@ func (h *Handler) probeInstallScript(c *gin.Context) {
 		c.String(http.StatusUnauthorized, "echo 'Error: secret parameter is required'; exit 1")
 		return
 	}
-	
+
 	_, err := store.GetProbeNodeBySecret(h.dbConn, secret)
 	if err != nil {
 		c.String(http.StatusForbidden, "echo 'Error: invalid secret or node not found'; exit 1")
@@ -627,13 +627,13 @@ func (h *Handler) probeInstallScript(c *gin.Context) {
 	}
 
 	scriptURL := fmt.Sprintf("https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.sh?t=%d", time.Now().Unix())
-	
+
 	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", scriptURL, nil)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "echo 'Error: Failed to construct proxy request'; exit 1")
 		return
 	}
-	
+
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -641,12 +641,12 @@ func (h *Handler) probeInstallScript(c *gin.Context) {
 		return
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		c.String(resp.StatusCode, "Upstream returned non-OK status: %d", resp.StatusCode)
 		return
 	}
-	
+
 	c.DataFromReader(resp.StatusCode, resp.ContentLength, "text/plain; charset=utf-8", resp.Body, nil)
 }
 
