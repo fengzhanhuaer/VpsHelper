@@ -235,3 +235,37 @@ func OpenLogStream(nodeID int64) (string, error) {
 	}
 	return string(out), nil
 }
+
+// OpenExecStream requests the probe to execute a short-lived shell command within a specified working directory.
+func OpenExecStream(nodeID int64, cwd string, cmd string) (string, error) {
+	sessVal, ok := ActiveSessions.Load(nodeID)
+	if !ok {
+		return "", fmt.Errorf("node %d is not currently connected", nodeID)
+	}
+	sess := sessVal.(*yamux.Session)
+	stream, err := sess.OpenStream()
+	if err != nil {
+		return "", fmt.Errorf("open exec stream: %w", err)
+	}
+	defer stream.Close()
+
+	payload, _ := json.Marshal(map[string]string{
+		"cwd":     cwd,
+		"command": cmd,
+	})
+	
+	msg := ControlMsg{
+		Type:    "exec_cmd",
+		Payload: payload,
+	}
+	enc := json.NewEncoder(stream)
+	if err := enc.Encode(msg); err != nil {
+		return "", fmt.Errorf("send exec control msg: %w", err)
+	}
+
+	out, err := io.ReadAll(stream)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return string(out), nil
+}

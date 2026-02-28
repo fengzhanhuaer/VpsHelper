@@ -137,7 +137,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/probe/node/manage", h.probeNodeManage)
 	router.GET("/probe/node/detail", h.probeNodeDetail)
 	router.GET("/probe/node/shell", h.probeNodeShell)
-	router.GET("/probe/node/shell/ws", h.probeNodeShellWS)
+	router.POST("/probe/node/shell/exec", h.probeNodeShellExec)
 	router.GET("/probe/node/log", h.probeNodeLog)
 	router.GET("/probe/node/log/data", h.probeNodeLogData)
 	router.GET("/probe/nodes/tasks", h.probeTasks)

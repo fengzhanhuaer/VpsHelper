@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hashicorp/yamux"
 
+	"vpshelper-go/internal/shell"
 	"vpshelper-go/internal/tunnel"
 	"vpshelper-go/internal/version"
 )
@@ -283,6 +284,31 @@ func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, i
 			output = []byte("暂无日志 / No log output found")
 		}
 		stream.Write(output)
+		return
+	case "exec_cmd":
+		var payload struct {
+			CWD     string `json:"cwd"`
+			Command string `json:"command"`
+		}
+		if err := json.Unmarshal(msg.Payload, &payload); err == nil {
+			cwd := shell.ResolveCWD(payload.CWD)
+			if newCWD, ok, outMsg := shell.ApplyCD(cwd, payload.Command); ok {
+				resp, _ := json.Marshal(map[string]interface{}{
+					"ok":     true,
+					"output": outMsg,
+					"cwd":    newCWD,
+				})
+				stream.Write(resp)
+				return
+			}
+			ok, output, _ := shell.Run(context.Background(), cwd, payload.Command)
+			resp, _ := json.Marshal(map[string]interface{}{
+				"ok":     ok,
+				"output": output,
+				"cwd":    cwd,
+			})
+			stream.Write(resp)
+		}
 		return
 	case "config":
 		var cfg struct {

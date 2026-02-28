@@ -3,6 +3,7 @@ package web
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,12 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 
 	"vpshelper-go/internal/cloudflare"
 	"vpshelper-go/internal/firewall"
 	"vpshelper-go/internal/security"
+	"vpshelper-go/internal/shell"
 	"vpshelper-go/internal/store"
 	"vpshelper-go/internal/tunnel"
 	"vpshelper-go/internal/update"
@@ -753,9 +755,10 @@ func (h *Handler) probeNodeDetail(c *gin.Context) {
 	})
 }
 
-// probeNodeShell renders a placeholder for remote shell of the probe.
+// probeNodeShell renders a remote shell interface matching the /shell simple pattern.
 func (h *Handler) probeNodeShell(c *gin.Context) {
-	if h.currentUser(c) == "" {
+	username := h.currentUser(c)
+	if username == "" {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
@@ -767,65 +770,72 @@ func (h *Handler) probeNodeShell(c *gin.Context) {
 		return
 	}
 
+	sess := sessions.Default(c)
+	sessionKey := fmt.Sprintf("probe_cwd_%d", nodeID)
+	cwd, _ := sess.Get(sessionKey).(string)
+	if cwd == "" {
+		cwd = "~"
+	}
+
+	history := shell.LoadHistory(h.cfg.DataDir, username)
+	shortcuts, _ := h.loadShellShortcuts(username)
+
+	historyJSON, _ := json.Marshal(history)
+	shortcutsJSON, _ := json.Marshal(shortcuts)
+
 	c.HTML(http.StatusOK, "probe_manage_shell.html", gin.H{
-		"Title": "远程 Shell - " + node.Name,
-		"Node":  node,
+		"Title":         "远程 Shell - " + node.Name,
+		"Node":          node,
+		"CWD":           cwd,
+		"HistoryJSON":   string(historyJSON),
+		"ShortcutsJSON": string(shortcutsJSON),
+		"Shortcuts":     shortcuts,
+		"History":       history,
 	})
 }
 
-// probeNodeShellWS bridges a WebSocket from the browser to the Yamux shell stream on the probe.
-func (h *Handler) probeNodeShellWS(c *gin.Context) {
-	if h.currentUser(c) == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
+// probeNodeShellExec executes a command via proxy on the probe.
+func (h *Handler) probeNodeShellExec(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "output": "未登录或会话已过期。", "cwd": ""})
 		return
 	}
+
 	nodeIDStr := c.Query("id")
 	nodeID, _ := strconv.ParseInt(nodeIDStr, 10, 64)
 
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
+	command := strings.TrimSpace(c.PostForm("command"))
+	
+	sess := sessions.Default(c)
+	sessionKey := fmt.Sprintf("probe_cwd_%d", nodeID)
+	cwd, _ := sess.Get(sessionKey).(string)
+	if cwd == "" {
+		cwd = "~"
 	}
-	wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
+
+	if command == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "output": "命令不能为空。", "cwd": cwd})
 		return
 	}
-	defer wsConn.Close()
 
-	stream, err := tunnel.OpenShellStream(nodeID)
+	shell.AppendHistory(h.cfg.DataDir, username, command)
+
+	respJSONStr, err := tunnel.OpenExecStream(nodeID, cwd, command)
 	if err != nil {
-		_ = wsConn.WriteMessage(websocket.TextMessage, []byte("\r\n[无法连接探针 Shell: "+err.Error()+"]\r\n"))
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "output": "[代理转发错误] " + err.Error(), "cwd": cwd})
 		return
 	}
-	defer stream.Close()
 
-	// Notify frontend that shell is ready
-	_ = wsConn.WriteMessage(websocket.TextMessage, []byte("\r\n[已成功建立到节点的 PTY 终端连接]\r\n"))
-
-	// Copy from Yamux to WebSocket
-	go func() {
-		buf := make([]byte, 1024)
-		for {
-			n, err := stream.Read(buf)
-			if err != nil {
-				return
-			}
-			if n > 0 {
-				if err := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
-					return
-				}
-			}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(respJSONStr), &parsed); err == nil {
+		if newCWD, ok := parsed["cwd"].(string); ok && newCWD != cwd {
+			sess.Set(sessionKey, newCWD)
+			_ = sess.Save()
 		}
-	}()
-
-	// Copy from WebSocket to Yamux
-	for {
-		_, msg, err := wsConn.ReadMessage()
-		if err != nil {
-			return
-		}
-		if _, err := stream.Write(msg); err != nil {
-			return
-		}
+		c.JSON(http.StatusOK, parsed)
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "output": "[探针端解析错误] " + respJSONStr, "cwd": cwd})
 	}
 }
 

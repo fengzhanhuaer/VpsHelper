@@ -5,123 +5,174 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
-    <link rel="stylesheet" href="https://unpkg.com/@xterm/xterm@5.3.0/css/xterm.css" />
     <style>
-        body {
-            background-color: transparent;
-            padding: 0;
-            margin: 0;
-            font-family: var(--font-stack, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif);
-        }
-        .shell-panel {
-            background: #1e1e1e;
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius);
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            min-height: 500px;
-            overflow: hidden;
-        }
-        .shell-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: #ddd;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        #terminal {
-            flex-grow: 1;
-            width: 100%;
-            height: calc(100% - 30px);
-            background: #000;
-        }
+        body { background-color: transparent; }
+        #terminal { background:#111; color:#e2e8f0; font-family:"Courier New",Courier,monospace; font-size:13px; padding:12px; border-radius:10px; min-height:400px; max-height:600px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
+        #cmd-input { font-family:"Courier New",Courier,monospace; font-size:14px; flex:1; }
+        #cmd-bar { display:flex; gap:8px; margin-top:10px; }
     </style>
 </head>
 <body>
-    <div class="shell-panel">
-        <div class="shell-header">
-            <span>💻 {{ .Node.Name }} - 原生反向 PTY 终端</span>
-            <span id="status" style="color: #bbb;">断开连接</span>
+    <div style="padding: 10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+            <span style="color:#ddd; font-size:14px;">💻 {{ .Node.Name }} - 远程 Shell交互</span>
         </div>
+
         <div id="terminal"></div>
+
+        <div id="cmd-bar">
+            <input id="cmd-input" class="field" style="margin:0;" type="text" placeholder="输入 Shell 命令" autocomplete="off" autofocus />
+            <button class="btn" id="run-btn" type="button">执行</button>
+            <button class="ghost" id="clear-btn" type="button">清空</button>
+        </div>
+
+        <div style="margin-top: 16px;">
+            <h3 style="font-size: 15px; margin: 0 0 8px;">快捷命令</h3>
+            <div id="shortcut-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                {{ range .Shortcuts }}
+                <button class="ghost shortcut-btn" data-cmd="{{ .Command }}" title="{{ .Command }}" style="position:relative; padding-right:30px;">
+                    {{ .Name }}
+                    <span class="del-shortcut" data-id="{{ .ID }}" title="删除" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:#9b1c1c; font-size:14px; padding:0 2px; line-height:1;">✕</span>
+                </button>
+                {{ else }}
+                <span class="muted" style="font-size:13px;">暂无快捷命令</span>
+                {{ end }}
+            </div>
+
+            <form id="add-shortcut-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+                <div class="field" style="margin:0; flex:1; min-width:160px;">
+                    <label style="font-size:12px;" for="sc-name">名称</label>
+                    <input id="sc-name" name="name" placeholder="例如：查看内存" required />
+                </div>
+                <div class="field" style="margin:0; flex:2; min-width:200px;">
+                    <label style="font-size:12px;" for="sc-cmd">命令</label>
+                    <input id="sc-cmd" name="command" placeholder="例如：free -h" required />
+                </div>
+                <button class="ghost" type="submit">添加快捷命令</button>
+            </form>
+        </div>
     </div>
 
-    <!-- xterm.js library from unpkg (more reliable globally than jsdelivr in some regions) -->
-    <script src="https://unpkg.com/@xterm/xterm@5.3.0/lib/xterm.js"></script>
-    <script src="https://unpkg.com/@xterm/addon-fit@0.8.0/lib/addon-fit.js"></script>
-
+    <script id="history-data" type="application/json">{{ .HistoryJSON }}</script>
     <script>
-        const statusEl = document.getElementById('status');
+        var terminal = document.getElementById('terminal');
+        var cmdInput = document.getElementById('cmd-input');
+        var runBtn = document.getElementById('run-btn');
+        var clearBtn = document.getElementById('clear-btn');
+        var cmdHistory = [];
+        var histIdx = -1;
         
         try {
-            const term = new Terminal({
-                cursorBlink: true,
-                theme: {
-                    background: '#000000',
-                    foreground: '#ffffff'
+            var histEl = document.getElementById('history-data');
+            if (histEl) {
+                var parsed = JSON.parse(histEl.textContent);
+                if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+                if (Array.isArray(parsed)) cmdHistory = parsed;
+            }
+        } catch(e) {}
+
+        function appendLine(text) {
+            terminal.textContent += text;
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        appendLine('已连接到节点交互终端，等待命令...\n');
+
+        function runCommand(cmd) {
+            if (!cmd.trim()) return;
+            appendLine('\n$ ' + cmd + '\n');
+            cmdHistory.unshift(cmd);
+            histIdx = -1;
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/probe/node/shell/exec?id={{ .Node.ID }}', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            
+            xhr.onload = function() {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    appendLine((data.output || '') + '\n');
+                } catch (e) {
+                    appendLine('[错误] ' + xhr.status + ': ' + xhr.responseText.substring(0, 200) + '\n');
                 }
-            });
+            };
+            xhr.onerror = function() {
+                appendLine('[网络错误] 请求失败\n');
+            };
+            xhr.send('command=' + encodeURIComponent(cmd));
+        }
 
-        const fitAddon = new FitAddon.FitAddon();
-        term.loadAddon(fitAddon);
-        term.open(document.getElementById('terminal'));
-        fitAddon.fit();
-
-        window.addEventListener('resize', () => {
-            fitAddon.fit();
+        runBtn.addEventListener('click', function () {
+            var cmd = cmdInput.value;
+            cmdInput.value = '';
+            runCommand(cmd);
         });
 
-        const loc = window.location;
-        let wsProto = "ws:";
-        if (loc.protocol === "https:") {
-            wsProto = "wss:";
-        }
-        const wsUrl = `${wsProto}//${loc.host}/probe/node/shell/ws?id={{ .Node.ID }}`;
-
-        statusEl.textContent = "正在连接...";
-        statusEl.style.color = "#bbbb00";
-        term.write('正在通过主控请求建立反向 Yamux 终端网络...\r\n');
-
-        const socket = new WebSocket(wsUrl);
-
-        socket.onopen = () => {
-            statusEl.textContent = "已连接";
-            statusEl.style.color = "#00bb00";
-            
-            term.onData(data => {
-                socket.send(data);
-            });
-        };
-
-        socket.onmessage = (event) => {
-            if (typeof event.data === 'string') {
-                term.write(event.data);
-            } else {
-                event.data.arrayBuffer().then((buffer) => {
-                    const bytes = new Uint8Array(buffer);
-                    term.write(bytes);
-                });
+        cmdInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var cmd = cmdInput.value;
+                cmdInput.value = '';
+                runCommand(cmd);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (histIdx < cmdHistory.length - 1) {
+                    histIdx += 1;
+                    cmdInput.value = cmdHistory[histIdx];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (histIdx > 0) {
+                    histIdx -= 1;
+                    cmdInput.value = cmdHistory[histIdx];
+                } else {
+                    histIdx = -1;
+                    cmdInput.value = '';
+                }
             }
-        };
+        });
 
-        socket.onclose = () => {
-            statusEl.textContent = "已断开";
-            statusEl.style.color = "#bb0000";
-            term.write('\r\n[连接已断开]\r\n');
-        };
+        clearBtn.addEventListener('click', function () {
+            terminal.textContent = '';
+            appendLine('等待命令...\n');
+        });
 
-        socket.onerror = (err) => {
-            statusEl.textContent = "连接错误";
-            statusEl.style.color = "#bb0000";
-        };
-        } catch (e) {
-            statusEl.textContent = "前端组件加载失败";
-            statusEl.style.color = "#bb0000";
-            document.getElementById('terminal').innerHTML = '<div style="color:#ff5555; padding: 20px;">无法加载终端核心依赖库 (xterm.js)。<br/><br/>这是因为您当前的网络无法连接到依赖库的 CDN 节点 (unpkg.com)。请尝试全局翻墙代理或刷新浏览器。</div>';
-        }
+        // Shortcuts
+        document.querySelectorAll('.shortcut-btn').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                if (e.target && e.target.classList.contains('del-shortcut')) return;
+                runCommand(btn.dataset.cmd);
+            });
+        });
+
+        document.getElementById('add-shortcut-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var name = document.getElementById('sc-name').value;
+            var cmd = document.getElementById('sc-cmd').value;
+            if (!name || !cmd) return;
+            try {
+                const resp = await fetch('/shell/shortcuts/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'name=' + encodeURIComponent(name) + '&command=' + encodeURIComponent(cmd)
+                });
+                const data = await resp.json();
+                if (data.ok) location.reload();
+                else alert(data.message || '添加失败');
+            } catch(e) { alert('网络错误: ' + e.message); }
+        });
+
+        document.querySelectorAll('.del-shortcut').forEach(function (btn) {
+            btn.addEventListener('click', async function(e) {
+                e.stopPropagation();
+                if (!confirm('删除快捷命令？')) return;
+                try {
+                    const resp = await fetch('/shell/shortcuts/delete/' + btn.dataset.id, { method: 'POST' });
+                    const data = await resp.json();
+                    if (data.ok) location.reload();
+                    else alert(data.message || '删除失败');
+                } catch(e) { alert('网络错误: ' + e.message); }
+            });
+        });
     </script>
 </body>
 </html>
