@@ -20,6 +20,9 @@ import (
 
 func fallbackDownloadWithProgress(ctx context.Context, host, secret, osParam, archParam string, destPath string, onProgress update.ProgressCallback) (string, error) {
 	baseURL := strings.TrimSuffix(host, "/")
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		baseURL = "https://" + baseURL
+	}
 	infoURL := fmt.Sprintf("%s/api/probe/latest_binary?os=%s&arch=%s&info=true", baseURL, osParam, archParam)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", infoURL, nil)
