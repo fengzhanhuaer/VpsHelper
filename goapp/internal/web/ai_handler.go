@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"vpshelper-go/internal/store"
 )
 
 // AIResponse represents the response from Google AI API
@@ -20,6 +22,19 @@ type AIResponse struct {
 			} `json:"parts"`
 		} `json:"content"`
 	} `json:"candidates"`
+	Error struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// GeminiModelsResponse represents the response from Google AI models list API
+type GeminiModelsResponse struct {
+	Models []struct {
+		Name                       string   `json:"name"`
+		DisplayName                string   `json:"displayName"`
+		SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+	} `json:"models"`
 	Error struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
@@ -49,10 +64,39 @@ func (h *Handler) aiAssistant(c *gin.Context) {
 		return
 	}
 
+	settings, _ := store.GetSettings(h.dbConn, []string{"ai_api_key", "ai_model", "ai_system_prompt"})
+
 	c.HTML(http.StatusOK, "ai_assistant.html", gin.H{
-		"Title":    "AI 助手",
-		"Username": username,
+		"Title":          "AI 助手",
+		"Username":       username,
+		"SavedAPIKey":    settings["ai_api_key"],
+		"SavedModel":     settings["ai_model"],
+		"SavedSysPrompt": settings["ai_system_prompt"],
 	})
+}
+
+// aiSaveSettings saves AI configuration (API key, model, system prompt) to the database
+func (h *Handler) aiSaveSettings(c *gin.Context) {
+	if h.currentUser(c) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Unauthorized"})
+		return
+	}
+
+	var req struct {
+		APIKey       string `json:"api_key"`
+		Model        string `json:"model"`
+		SystemPrompt string `json:"system_prompt"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request"})
+		return
+	}
+
+	_ = store.SetSetting(h.dbConn, "ai_api_key", req.APIKey)
+	_ = store.SetSetting(h.dbConn, "ai_model", req.Model)
+	_ = store.SetSetting(h.dbConn, "ai_system_prompt", req.SystemPrompt)
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 // aiChat handles the chat API call
@@ -66,7 +110,12 @@ func (h *Handler) aiChat(c *gin.Context) {
 		return
 	}
 
-	// Validate inputs
+	// If no API key in request, fall back to saved key in DB
+	if req.APIKey == "" {
+		settings, _ := store.GetSettings(h.dbConn, []string{"ai_api_key"})
+		req.APIKey = settings["ai_api_key"]
+	}
+
 	if req.APIKey == "" {
 		c.JSON(http.StatusBadRequest, ChatResponse{
 			Success: false,
@@ -180,15 +229,69 @@ func callGoogleAI(apiKey, model, message, systemPrompt string) (string, error) {
 	return strings.TrimSpace(aiResp.Candidates[0].Content.Parts[0].Text), nil
 }
 
-// getAvailableModels returns a list of available Google AI models
+// getAvailableModels fetches the real model list from Gemini API.
+// Uses ?api_key=xxx query param, or falls back to the key saved in the database.
+// Returns a built-in default list when no key is available.
 func (h *Handler) getAvailableModels(c *gin.Context) {
-	models := []map[string]string{
-		{"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash (Fastest)"},
-		{"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro (Most Capable)"},
-		{"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash (Balance)"},
+	apiKey := strings.TrimSpace(c.Query("api_key"))
+	if apiKey == "" {
+		settings, _ := store.GetSettings(h.dbConn, []string{"ai_api_key"})
+		apiKey = settings["ai_api_key"]
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"models":  models,
-	})
+
+	type ModelInfo struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+
+	if apiKey == "" {
+		// No key available – return built-in defaults
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"models": []ModelInfo{
+				{ID: "gemini-2.0-flash", Name: "Gemini 2.0 Flash"},
+				{ID: "gemini-2.0-flash-lite", Name: "Gemini 2.0 Flash Lite"},
+				{ID: "gemini-1.5-pro", Name: "Gemini 1.5 Pro"},
+				{ID: "gemini-1.5-flash", Name: "Gemini 1.5 Flash"},
+			},
+		})
+		return
+	}
+
+	listURL := "https://generativelanguage.googleapis.com/v1beta/models?key=" + apiKey
+	resp, err := http.Get(listURL) //nolint:noctx
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var modelsResp GeminiModelsResponse
+	if err := json.Unmarshal(body, &modelsResp); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "error": "Failed to parse models response"})
+		return
+	}
+
+	if modelsResp.Error.Code != 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "error": modelsResp.Error.Message})
+		return
+	}
+
+	var models []ModelInfo
+	for _, m := range modelsResp.Models {
+		for _, method := range m.SupportedGenerationMethods {
+			if method == "generateContent" {
+				id := strings.TrimPrefix(m.Name, "models/")
+				name := m.DisplayName
+				if name == "" {
+					name = id
+				}
+				models = append(models, ModelInfo{ID: id, Name: name})
+				break
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "models": models})
 }

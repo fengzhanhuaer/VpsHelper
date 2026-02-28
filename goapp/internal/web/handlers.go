@@ -158,6 +158,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/ai/assistant", h.aiAssistant)
 	router.POST("/api/ai/chat", h.aiChat)
 	router.GET("/api/ai/models", h.getAvailableModels)
+	router.POST("/api/ai/settings", h.aiSaveSettings)
 }
 
 func (h *Handler) index(c *gin.Context) {

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -6,259 +6,252 @@
     <title>{{ .Title }}</title>
     <link rel="stylesheet" href="/static/style.css?v=0236" />
     <style>
-        .ai-container {
+        body, html { height: 100%; margin: 0; }
+
+        main {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 120px);
-            gap: 1rem;
+            height: calc(100vh - 52px);
+            overflow: hidden;
         }
 
-        .ai-config {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr auto;
-            gap: 0.75rem;
-            align-items: flex-end;
-            padding: 1rem;
-            background: #f5f5f5;
-            border-radius: 8px;
-        }
-
-        .ai-config label {
-            display: block;
-            font-size: 0.9rem;
-            font-weight: 500;
-            margin-bottom: 0.25rem;
-        }
-
-        .ai-config input,
-        .ai-config select {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 0.9rem;
-        }
-
-        .ai-config input:focus,
-        .ai-config select:focus {
-            outline: none;
-            border-color: #0066cc;
-            box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
-        }
-
-        .ai-config button {
-            padding: 0.5rem 1.5rem;
-            background: #0066cc;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background 0.2s;
-        }
-
-        .ai-config button:hover {
-            background: #0052a3;
-        }
-
-        .ai-config button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .ai-chat-area {
+        .ai-wrapper {
             flex: 1;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+            padding: 1rem;
             gap: 0.75rem;
         }
 
+        .ai-title-row {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+            flex-shrink: 0;
+        }
+        .ai-title-row h1  { margin: 0; font-size: 1.25rem; }
+        .ai-title-row .muted { margin: 0; font-size: 0.85rem; }
+
+        /* Messages area */
         .ai-messages {
             flex: 1;
-            padding: 1rem;
-            background: white;
-            border-radius: 8px;
-            border: 1px solid #ddd;
             overflow-y: auto;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 0.875rem;
         }
 
+        .ai-empty {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #bbb;
+            font-size: 0.95rem;
+            user-select: none;
+        }
+
+        /* Message bubbles */
         .ai-message {
             display: flex;
             gap: 0.5rem;
-            animation: slideIn 0.3s ease-out;
+            animation: slideIn 0.25s ease-out;
         }
-
         @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
         .message-avatar {
             flex-shrink: 0;
-            width: 32px;
-            height: 32px;
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
-            font-weight: bold;
+            font-size: 1rem;
         }
+        .message-user-avatar { background: #0066cc; color: #fff; }
+        .message-ai-avatar   { background: #e8f0ff; color: #0066cc; }
 
-        .message-user {
-            background: #0066cc;
-            color: white;
-        }
-
-        .message-ai {
-            background: #e8f0ff;
-            color: #0066cc;
-        }
+        .message-body { flex: 1; min-width: 0; }
 
         .message-content {
-            flex: 1;
-            padding: 0.75rem;
-            background: #f5f5f5;
+            padding: 0.6rem 0.85rem;
             border-radius: 6px;
             word-break: break-word;
             white-space: pre-wrap;
-            line-height: 1.5;
+            line-height: 1.55;
+            font-size: 0.9rem;
         }
-
-        .message-ai .message-content {
-            background: #e8f0ff;
-            color: #333;
-        }
-
-        .message-user .message-content {
-            background: #0066cc;
-            color: white;
+        .message-user .message-content  { background: #0066cc; color: #fff; }
+        .message-ai  .message-content   { background: #f0f4ff; color: #222; }
+        .message-error .message-content {
+            background: #fff0f0; color: #c00;
+            border-left: 3px solid #c00;
         }
 
         .message-time {
-            font-size: 0.75rem;
-            color: #999;
-            margin-top: 0.25rem;
+            font-size: 0.72rem;
+            color: #aaa;
+            margin-top: 0.2rem;
+            padding-left: 0.2rem;
         }
 
-        .ai-input-area {
+        .loading-dot {
+            display: inline-block;
+            animation: blink 1.2s infinite;
+        }
+        @keyframes blink { 0%,80%,100%{opacity:0} 40%{opacity:1} }
+
+        /* Input area */
+        .ai-input-row {
             display: flex;
-            gap: 0.75rem;
+            gap: 0.6rem;
+            flex-shrink: 0;
         }
-
-        .ai-input-area textarea {
+        .ai-input-row textarea {
             flex: 1;
-            padding: 0.75rem;
+            padding: 0.65rem 0.85rem;
             border: 1px solid #ddd;
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: 0.9rem;
             font-family: inherit;
             resize: none;
-            min-height: 80px;
+            min-height: 72px;
+            max-height: 160px;
         }
-
-        .ai-input-area textarea:focus {
+        .ai-input-row textarea:focus {
             outline: none;
             border-color: #0066cc;
-            box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+            box-shadow: 0 0 0 3px rgba(0,102,204,0.1);
         }
-
-        .ai-send-button {
+        .ai-action-col {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.4rem;
+        }
+        .ai-action-col button {
+            padding: 0.55rem 1.1rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.88rem;
+            font-weight: 500;
+            transition: background 0.15s;
+        }
+        #send-btn { background: #0066cc; color: #fff; }
+        #send-btn:hover:not(:disabled) { background: #0052a3; }
+        #send-btn:disabled { background: #9cbfe8; cursor: not-allowed; }
+        #clear-btn { background: #e5e5e5; color: #444; }
+        #clear-btn:hover { background: #d0d0d0; }
+
+        /* Settings panel */
+        .ai-settings {
+            flex-shrink: 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .ai-settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.55rem 1rem;
+            background: #f5f5f5;
+            cursor: pointer;
+            user-select: none;
+            font-size: 0.88rem;
+            font-weight: 500;
+            color: #555;
+        }
+        .ai-settings-header:hover { background: #ebebeb; }
+        .ai-settings-toggle { font-size: 0.8rem; color: #888; }
+
+        .ai-settings-body {
+            padding: 0.85rem 1rem;
+            background: #fafafa;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.65rem 0.75rem;
+            align-items: end;
+        }
+        .ai-settings-body.hidden { display: none; }
+
+        .ai-settings-left {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.65rem 0.75rem;
+            align-items: end;
         }
 
-        .ai-send-button button {
-            padding: 0.75rem 1.5rem;
-            background: #0066cc;
-            color: white;
+        .ai-field label {
+            display: block;
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 0.2rem;
+        }
+        .ai-field input,
+        .ai-field select {
+            width: 100%;
+            padding: 0.4rem 0.6rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.88rem;
+            box-sizing: border-box;
+        }
+        .ai-field input:focus,
+        .ai-field select:focus {
+            outline: none;
+            border-color: #0066cc;
+            box-shadow: 0 0 0 2px rgba(0,102,204,0.15);
+        }
+
+        .ai-settings-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            align-self: end;
+        }
+        .ai-settings-actions button {
+            padding: 0.4rem 1rem;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-weight: 500;
-            transition: background 0.2s;
-            min-width: 100px;
-        }
-
-        .ai-send-button button:hover:not(:disabled) {
-            background: #0052a3;
-        }
-
-        .ai-send-button button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .ai-clear-button {
-            background: #999 !important;
-        }
-
-        .ai-clear-button:hover:not(:disabled) {
-            background: #777 !important;
-        }
-
-        .error-message {
-            color: #d32f2f;
-            padding: 1rem;
-            background: #ffebee;
-            border-radius: 4px;
-            border-left: 4px solid #d32f2f;
-        }
-
-        .loading {
-            display: inline-block;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        .system-prompt-section {
-            display: none;
-        }
-
-        .system-prompt-section.show {
-            display: block;
-        }
-
-        .system-prompt-toggle {
             font-size: 0.85rem;
-            color: #0066cc;
-            cursor: pointer;
-            text-decoration: underline;
-            margin-top: 0.5rem;
+            font-weight: 500;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+        #fetch-models-btn { background: #e8f0fe; color: #1a73e8; }
+        #fetch-models-btn:hover:not(:disabled) { background: #d2e3fc; }
+        #save-settings-btn { background: #0066cc; color: #fff; }
+        #save-settings-btn:hover:not(:disabled) { background: #0052a3; }
+        #save-settings-btn:disabled,
+        #fetch-models-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        #settings-status {
+            font-size: 0.78rem;
+            min-height: 1em;
+            text-align: right;
         }
 
-        @media (max-width: 1200px) {
-            .ai-config {
-                grid-template-columns: 1fr 1fr;
-            }
+        @media (max-width: 900px) {
+            .ai-settings-body  { grid-template-columns: 1fr; }
+            .ai-settings-left  { grid-template-columns: 1fr 1fr; }
+            .ai-settings-actions { flex-direction: row; }
         }
-
-        @media (max-width: 768px) {
-            .ai-config {
-                grid-template-columns: 1fr;
-            }
-
-            .ai-input-area {
-                flex-direction: column;
-            }
+        @media (max-width: 600px) {
+            .ai-settings-left  { grid-template-columns: 1fr; }
+            .ai-input-row      { flex-direction: column; }
+            .ai-action-col     { flex-direction: row; }
         }
     </style>
 </head>
@@ -266,180 +259,247 @@
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/home">🏠 主页</a>
-            <a class="ghost" href="/system/settings">⚙️ 系统设置</a>
+            <a class="ghost" href="/home"> 主页</a>
+            <a class="ghost" href="/system/settings"> 系统设置</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
     <main>
-        <section class="panel panel--wide">
-            <h1>🤖 AI 助手</h1>
-            <p class="muted">使用 Google Gemini 进行对话</p>
+        <div class="ai-wrapper">
+            <!-- Title row -->
+            <div class="ai-title-row">
+                <h1> AI 助手</h1>
+                <span class="muted">使用 Google Gemini 进行对话</span>
+            </div>
 
-            <div class="ai-container">
-                <!-- Configuration Section -->
-                <div class="ai-config">
-                    <div>
-                        <label for="api-key">API Key:</label>
-                        <input
-                            type="password"
-                            id="api-key"
-                            placeholder="输入您的 Google AI Studio API Key"
-                            title="API Key 仅在本次会话中保存，不会被存储"
-                        />
-                    </div>
-                    <div>
-                        <label for="model-select">选择模型:</label>
-                        <select id="model-select">
-                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (最快)</option>
-                            <option value="gemini-1.5-pro">Gemini 1.5 Pro (最强)</option>
-                            <option value="gemini-1.5-flash">Gemini 1.5 Flash (均衡)</option>
-                        </select>
-                    </div>
-                    <div id="system-prompt-container" style="display: none;">
-                        <label for="system-prompt">系统提示:</label>
-                        <input
-                            type="text"
-                            id="system-prompt"
-                            placeholder="例如: 你是一个技术顾问..."
-                        />
-                    </div>
-                    <div>
-                        <button id="toggle-system-prompt" type="button">
-                            🔧 高级选项
-                        </button>
-                    </div>
+            <!-- Messages area -->
+            <div class="ai-messages" id="messages">
+                <div class="ai-empty" id="empty-hint">暂无消息，开始对话吧 </div>
+            </div>
+
+            <!-- Input area -->
+            <div class="ai-input-row">
+                <textarea
+                    id="message-input"
+                    placeholder="输入消息 (Enter 发送，Shift+Enter 换行)"
+                ></textarea>
+                <div class="ai-action-col">
+                    <button id="send-btn" type="button"> 发送</button>
+                    <button id="clear-btn" type="button"> 清空</button>
                 </div>
+            </div>
 
-                <!-- Chat Area -->
-                <div class="ai-chat-area">
-                    <div class="ai-messages" id="messages"></div>
-
-                    <div class="ai-input-area">
-                        <textarea
-                            id="message-input"
-                            placeholder="输入您的问题或消息... (Shift+Enter 换行, Enter 发送)"
-                        ></textarea>
-                        <div class="ai-send-button">
-                            <button id="send-btn" type="button">
-                                📤 发送
-                            </button>
-                            <button id="clear-btn" class="ai-clear-button" type="button">
-                                🗑 清空
-                            </button>
+            <!-- Settings panel (bottom) -->
+            <div class="ai-settings">
+                <div class="ai-settings-header" id="settings-toggle">
+                    <span> API 配置</span>
+                    <span class="ai-settings-toggle" id="toggle-arrow"> 收起</span>
+                </div>
+                <div class="ai-settings-body" id="settings-body">
+                    <div class="ai-settings-left">
+                        <div class="ai-field">
+                            <label for="api-key">API Key</label>
+                            <input
+                                type="password"
+                                id="api-key"
+                                placeholder="Google AI Studio API Key"
+                                value="{{ .SavedAPIKey }}"
+                                autocomplete="off"
+                            />
                         </div>
+                        <div class="ai-field">
+                            <label for="model-select">模型</label>
+                            <select id="model-select">
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                            </select>
+                        </div>
+                        <div class="ai-field">
+                            <label for="system-prompt">系统提示（可选）</label>
+                            <input
+                                type="text"
+                                id="system-prompt"
+                                placeholder="例如：你是一个运维专家"
+                                value="{{ .SavedSysPrompt }}"
+                            />
+                        </div>
+                    </div>
+                    <div class="ai-settings-actions">
+                        <button id="fetch-models-btn" type="button"> 获取模型</button>
+                        <button id="save-settings-btn" type="button"> 保存设置</button>
+                        <div id="settings-status"></div>
                     </div>
                 </div>
             </div>
-        </section>
+        </div>
     </main>
 
     <script>
-        const apiKeyInput = document.getElementById("api-key");
-        const modelSelect = document.getElementById("model-select");
+        const apiKeyInput       = document.getElementById("api-key");
+        const modelSelect       = document.getElementById("model-select");
         const systemPromptInput = document.getElementById("system-prompt");
-        const toggleSystemPromptBtn = document.getElementById("toggle-system-prompt");
-        const systemPromptContainer = document.getElementById("system-prompt-container");
-        const messageInput = document.getElementById("message-input");
-        const sendBtn = document.getElementById("send-btn");
-        const clearBtn = document.getElementById("clear-btn");
-        const messagesDiv = document.getElementById("messages");
+        const messageInput      = document.getElementById("message-input");
+        const sendBtn           = document.getElementById("send-btn");
+        const clearBtn          = document.getElementById("clear-btn");
+        const messagesDiv       = document.getElementById("messages");
+        const emptyHint         = document.getElementById("empty-hint");
+        const settingsToggle    = document.getElementById("settings-toggle");
+        const settingsBody      = document.getElementById("settings-body");
+        const toggleArrow       = document.getElementById("toggle-arrow");
+        const fetchModelsBtn    = document.getElementById("fetch-models-btn");
+        const saveSettingsBtn   = document.getElementById("save-settings-btn");
+        const settingsStatus    = document.getElementById("settings-status");
 
         let isLoading = false;
 
-        // Toggle system prompt visibility
-        toggleSystemPromptBtn.addEventListener("click", () => {
-            systemPromptContainer.style.display =
-                systemPromptContainer.style.display === "none" ? "block" : "none";
-            toggleSystemPromptBtn.textContent =
-                systemPromptContainer.style.display === "none"
-                    ? "🔧 高级选项"
-                    : "🔧 隐藏选项";
+        // Pre-select saved model (may not be in default option list)
+        const savedModel = "{{ .SavedModel }}";
+        if (savedModel) {
+            const exists = Array.from(modelSelect.options).some(o => o.value === savedModel);
+            if (!exists) {
+                const opt = document.createElement("option");
+                opt.value = savedModel;
+                opt.textContent = savedModel;
+                modelSelect.prepend(opt);
+            }
+            modelSelect.value = savedModel;
+        }
+
+        // Collapse settings panel if API key already saved
+        if (apiKeyInput.value.trim() !== "") {
+            settingsBody.classList.add("hidden");
+            toggleArrow.textContent = " 展开";
+        }
+
+        // Toggle settings panel
+        settingsToggle.addEventListener("click", () => {
+            const collapsed = settingsBody.classList.toggle("hidden");
+            toggleArrow.textContent = collapsed ? " 展开" : " 收起";
         });
+
+        // Fetch real model list from Gemini API
+        fetchModelsBtn.addEventListener("click", async () => {
+            const key = apiKeyInput.value.trim();
+            fetchModelsBtn.disabled = true;
+            fetchModelsBtn.textContent = " 获取中";
+            setStatus("");
+
+            try {
+                const url = "/api/ai/models" + (key ? "?api_key=" + encodeURIComponent(key) : "");
+                const resp = await fetch(url);
+                const data = await resp.json();
+
+                if (data.success && data.models && data.models.length > 0) {
+                    const current = modelSelect.value;
+                    modelSelect.innerHTML = "";
+                    data.models.forEach(m => {
+                        const opt = document.createElement("option");
+                        opt.value = m.id;
+                        opt.textContent = m.name;
+                        if (m.id === current) opt.selected = true;
+                        modelSelect.appendChild(opt);
+                    });
+                    if (!modelSelect.value && modelSelect.options.length > 0) {
+                        modelSelect.selectedIndex = 0;
+                    }
+                    setStatus(" 已获取 " + data.models.length + " 个模型", "#0a0");
+                } else {
+                    setStatus(" " + (data.error || "获取失败"), "#c00");
+                }
+            } catch (e) {
+                setStatus(" 网络错误: " + e.message, "#c00");
+            } finally {
+                fetchModelsBtn.disabled = false;
+                fetchModelsBtn.textContent = " 获取模型";
+            }
+        });
+
+        // Save settings to database
+        saveSettingsBtn.addEventListener("click", async () => {
+            saveSettingsBtn.disabled = true;
+            setStatus("");
+            try {
+                const resp = await fetch("/api/ai/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        api_key:       apiKeyInput.value.trim(),
+                        model:         modelSelect.value,
+                        system_prompt: systemPromptInput.value.trim(),
+                    }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    setStatus(" 已保存", "#0a0");
+                    setTimeout(() => setStatus(""), 3000);
+                } else {
+                    setStatus(" " + (data.error || "保存失败"), "#c00");
+                }
+            } catch (e) {
+                setStatus(" 网络错误: " + e.message, "#c00");
+            } finally {
+                saveSettingsBtn.disabled = false;
+            }
+        });
+
+        function setStatus(msg, color) {
+            settingsStatus.textContent = msg;
+            settingsStatus.style.color = color || "";
+        }
 
         // Send message
         sendBtn.addEventListener("click", sendMessage);
-
-        // Handle Enter key (send) and Shift+Enter (newline)
-        messageInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
-        // Clear messages
-        clearBtn.addEventListener("click", () => {
-            if (confirm("确定要清空所有消息吗？")) {
-                messagesDiv.innerHTML = "";
-            }
+        messageInput.addEventListener("keydown", e => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
         });
 
         async function sendMessage() {
-            const apiKey = apiKeyInput.value.trim();
+            const apiKey  = apiKeyInput.value.trim();
             const message = messageInput.value.trim();
 
             if (!apiKey) {
-                showError("请输入 API Key");
+                settingsBody.classList.remove("hidden");
+                toggleArrow.textContent = " 收起";
+                apiKeyInput.focus();
+                apiKeyInput.style.borderColor = "#c00";
+                setTimeout(() => { apiKeyInput.style.borderColor = ""; }, 2500);
+                appendError("请先在下方填写 API Key 并保存");
                 return;
             }
+            if (!message || isLoading) return;
 
-            if (!message) {
-                showError("请输入消息");
-                return;
-            }
-
-            if (isLoading) {
-                return;
-            }
-
-            // Add user message to chat
-            addMessage(message, "user");
+            emptyHint.style.display = "none";
+            appendMessage(message, "user");
             messageInput.value = "";
             isLoading = true;
             sendBtn.disabled = true;
 
-            // Show loading indicator
-            const loadingDiv = document.createElement("div");
-            loadingDiv.className = "ai-message";
-            loadingDiv.innerHTML = `
-                <div class="message-avatar message-ai">🤖</div>
-                <div>
-                    <div class="message-content">
-                        <span class="loading">⏳</span> 思考中...
-                    </div>
-                </div>
-            `;
-            messagesDiv.appendChild(loadingDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            const loadingEl = appendLoading();
 
             try {
-                const response = await fetch("/api/ai/chat", {
+                const resp = await fetch("/api/ai/chat", {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        api_key: apiKey,
-                        model: modelSelect.value,
-                        message: message,
+                        api_key:       apiKey,
+                        model:         modelSelect.value,
+                        message:       message,
                         system_prompt: systemPromptInput.value.trim(),
                     }),
                 });
-
-                const data = await response.json();
-
-                // Remove loading indicator
-                loadingDiv.remove();
+                const data = await resp.json();
+                loadingEl.remove();
 
                 if (data.success) {
-                    addMessage(data.message, "ai");
+                    appendMessage(data.message, "ai");
                 } else {
-                    showError(data.error || "请求失败，请检查 API Key 和网络连接");
+                    appendError(data.error || "请求失败，请检查 API Key 与网络连接");
                 }
-            } catch (error) {
-                loadingDiv.remove();
-                showError("网络错误: " + error.message);
+            } catch (e) {
+                loadingEl.remove();
+                appendError("网络错误: " + e.message);
             } finally {
                 isLoading = false;
                 sendBtn.disabled = false;
@@ -447,72 +507,77 @@
             }
         }
 
-        function addMessage(text, sender) {
-            const messageDiv = document.createElement("div");
-            messageDiv.className = "ai-message";
+        function appendMessage(text, role) {
+            const wrap = document.createElement("div");
+            wrap.className = "ai-message " + (role === "user" ? "message-user" : "message-ai");
 
-            const avatar = sender === "user" ? "👤" : "🤖";
-            const avatarClass = sender === "user" ? "message-user" : "message-ai";
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString("zh-CN", {
-                hour: "2-digit",
-                minute: "2-digit",
-            });
+            const avatar = document.createElement("div");
+            avatar.className = "message-avatar " +
+                (role === "user" ? "message-user-avatar" : "message-ai-avatar");
+            avatar.textContent = role === "user" ? "" : "";
 
-            messageDiv.innerHTML = `
-                <div class="message-avatar ${avatarClass}">${avatar}</div>
-                <div>
-                    <div class="message-content">${escapeHtml(text)}</div>
-                    <div class="message-time">${timeStr}</div>
-                </div>
-            `;
+            const body = document.createElement("div");
+            body.className = "message-body";
 
-            messagesDiv.appendChild(messageDiv);
+            const content = document.createElement("div");
+            content.className = "message-content";
+            content.textContent = text;
+
+            const time = document.createElement("div");
+            time.className = "message-time";
+            time.textContent = new Date().toLocaleTimeString("zh-CN",
+                { hour: "2-digit", minute: "2-digit" });
+
+            body.appendChild(content);
+            body.appendChild(time);
+            wrap.appendChild(avatar);
+            wrap.appendChild(body);
+            messagesDiv.appendChild(wrap);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return wrap;
+        }
+
+        function appendLoading() {
+            const wrap = document.createElement("div");
+            wrap.className = "ai-message message-ai";
+            wrap.innerHTML = `
+                <div class="message-avatar message-ai-avatar"></div>
+                <div class="message-body">
+                    <div class="message-content">
+                        <span class="loading-dot"></span>
+                        <span class="loading-dot" style="animation-delay:.4s"></span>
+                        <span class="loading-dot" style="animation-delay:.8s"></span>
+                    </div>
+                </div>`;
+            messagesDiv.appendChild(wrap);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return wrap;
+        }
+
+        function appendError(msg) {
+            const wrap = document.createElement("div");
+            wrap.className = "ai-message message-error";
+            wrap.innerHTML = `
+                <div class="message-avatar" style="background:#fff0f0;color:#c00;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center"></div>
+                <div class="message-body"><div class="message-content"> ${escapeHtml(msg)}</div></div>`;
+            messagesDiv.appendChild(wrap);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        function showError(errorText) {
-            const errorDiv = document.createElement("div");
-            errorDiv.className = "error-message";
-            errorDiv.textContent = "❌ " + errorText;
-            messagesDiv.appendChild(errorDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        clearBtn.addEventListener("click", () => {
+            if (!confirm("确定清空所有消息？")) return;
+            messagesDiv.innerHTML = "";
+            messagesDiv.appendChild(emptyHint);
+            emptyHint.style.display = "";
+        });
+
+        function escapeHtml(s) {
+            const d = document.createElement("div");
+            d.textContent = s;
+            return d.innerHTML;
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement("div");
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // Focus on input when page loads
         messageInput.focus();
-
-        // Load API Key preferences from localStorage (optional)
-        window.addEventListener("load", () => {
-            const savedApiKey = localStorage.getItem("ai_api_key");
-            const savedModel = localStorage.getItem("ai_model");
-            const savedSystemPrompt = localStorage.getItem("ai_system_prompt");
-
-            if (savedModel) modelSelect.value = savedModel;
-            if (savedSystemPrompt) {
-                systemPromptInput.value = savedSystemPrompt;
-                systemPromptContainer.style.display = "block";
-                toggleSystemPromptBtn.textContent = "🔧 隐藏选项";
-            }
-
-            // Only auto-fill API key if user explicitly saved it
-            // For security, we don't auto-fill by default
-        });
-
-        // Save preferences to localStorage
-        modelSelect.addEventListener("change", () => {
-            localStorage.setItem("ai_model", modelSelect.value);
-        });
-
-        systemPromptInput.addEventListener("change", () => {
-            localStorage.setItem("ai_system_prompt", systemPromptInput.value);
-        });
     </script>
 </body>
 </html>
