@@ -161,7 +161,12 @@ func (h *Handler) probeNodes(c *gin.Context) {
 
 			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address"})
 			if settings["probe_master_address"] != "" {
-				baseURL = settings["probe_master_address"]
+				addr := strings.TrimRight(settings["probe_master_address"], "/")
+				// 确保始终携带 scheme，避免老版本探针收到无协议的地址后拼出非法 URL
+				if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+					addr = "https://" + addr
+				}
+				baseURL = addr
 			}
 
 			if idStr == "all" {

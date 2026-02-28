@@ -115,6 +115,12 @@ if [[ -z "$PROBE_SECRET" ]] || [[ -z "$PROBE_HOST" ]]; then
   exit 1
 fi
 
+# 归一化 PROBE_HOST：去掉末尾斜杠，并补全 https:// 前缀（如用户省略了协议头）
+PROBE_HOST="${PROBE_HOST%/}"
+if [[ ! "$PROBE_HOST" =~ ^https?:// ]]; then
+  PROBE_HOST="https://${PROBE_HOST}"
+fi
+
 RUN_USER="${SUDO_USER:-root}"
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -241,11 +247,9 @@ esac
 
 asset="${BINARY_NAME}_${goos}_${goarch}"
 
-# Try to download from the master proxy instead of raw github URL directly
+# 优先通过主控代理下载，避免 IPv6-only 机器访问 GitHub 失败
 if [[ -n "${PROBE_HOST}" ]]; then
-  # Try to form proxy url
-  clean_host="${PROBE_HOST%/}"
-  url="${clean_host}/api/probe/latest_binary?os=${goos}&arch=${goarch}"
+  url="${PROBE_HOST}/api/probe/latest_binary?os=${goos}&arch=${goarch}"
 else
   url="https://github.com/${REPO_SLUG}/releases/latest/download/${asset}"
 fi
