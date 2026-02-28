@@ -11,3 +11,4 @@
 *.session
 *.session-journal
 userdata/
+.idx/dev.nix
