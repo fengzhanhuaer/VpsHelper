@@ -10,9 +10,11 @@ import (
 	"syscall"
 
 	"vpshelper-go/internal/agent"
+	"vpshelper-go/internal/logger"
 )
 
 func main() {
+	logger.Init(500)
 	var (
 		serverHost string
 		secret     string

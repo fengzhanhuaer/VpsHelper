@@ -16,6 +16,7 @@ import (
 	"vpshelper-go/internal/d1"
 	"vpshelper-go/internal/db"
 	"vpshelper-go/internal/firewall"
+	"vpshelper-go/internal/logger"
 	"vpshelper-go/internal/ns"
 	"vpshelper-go/internal/routes"
 	appstore "vpshelper-go/internal/store"
@@ -25,6 +26,7 @@ import (
 )
 
 func main() {
+	logger.Init(500)
 	cfg := config.Load()
 
 	database, err := db.Open(cfg)

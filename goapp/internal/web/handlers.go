@@ -28,6 +28,7 @@ import (
 	"vpshelper-go/internal/config"
 	"vpshelper-go/internal/d1"
 	"vpshelper-go/internal/firewall"
+	"vpshelper-go/internal/logger"
 	"vpshelper-go/internal/shell"
 	"vpshelper-go/internal/ssh"
 	"vpshelper-go/internal/status"
@@ -2980,14 +2981,7 @@ func (h *Handler) systemLogData(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("journalctl", "-u", "vpshelper", "-n", "200", "--no-pager")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": string(output) + "\n" + err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"ok": true, "data": string(output)})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "data": logger.GetLogs()})
 }
 
 type shortcutItem struct {
