@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,10 +43,8 @@ type ChatResponse struct {
 
 // aiAssistant handles the AI assistant page
 func (h *Handler) aiAssistant(c *gin.Context) {
-	// Check session
-	session := sessions.Default(c)
-	username := session.Get("username")
-	if username == nil {
+	username := h.currentUser(c)
+	if username == "" {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
