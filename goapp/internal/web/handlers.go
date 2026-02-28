@@ -153,6 +153,11 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/api/probe/latest_binary", h.probeLatestBinary)
 	router.GET("/api/probe/install", h.probeInstallScript)
 	router.POST("/api/:secret", h.tgBotWebhook)
+
+	// AI Assistant routes
+	router.GET("/ai/assistant", h.aiAssistant)
+	router.POST("/api/ai/chat", h.aiChat)
+	router.GET("/api/ai/models", h.getAvailableModels)
 }
 
 func (h *Handler) index(c *gin.Context) {
