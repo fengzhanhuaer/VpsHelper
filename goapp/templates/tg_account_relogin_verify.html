@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css?v=0236" />
+    <style>
+        .account-badge {
+            display:inline-flex; align-items:center; gap:8px;
+            background:var(--bg2,#f3f4f6); border-radius:8px;
+            padding:8px 14px; margin-bottom:18px; font-size:14px;
+        }
+        .account-badge .id { color:var(--muted); font-size:12px; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>VpsHelper</strong>
+        <nav>
+            <a class="ghost" href="/tg/accounts/relogin?account_id={{ .AccountID }}">返回重新登录</a>
+            <a class="ghost" href="/tg/accounts?account_id={{ .AccountID }}">返回账号管理</a>
+        </nav>
+    </header>
+    <main>
+        <section class="panel panel--center">
+            <h1>验证码确认</h1>
+
+            <div class="account-badge">
+                <span>{{ .Account.AccountName }}</span>
+                <span class="id">#{{ .Account.ID }}</span>
+            </div>
+
+            <p class="muted">验证码已发送到 <strong>{{ .Phone }}</strong>，输入后将更新该账号的 Session。</p>
+
+            {{ if .Error }}
+            <div class="error" style="margin-bottom:14px;">{{ .Error }}</div>
+            {{ end }}
+
+            <form method="post">
+                <input type="hidden" name="flow_id" value="{{ .FlowID }}" />
+                <input type="hidden" name="account_id" value="{{ .AccountID }}" />
+                <div class="field">
+                    <label for="code">验证码</label>
+                    <input id="code" name="code" required autofocus />
+                </div>
+                <div class="field">
+                    <label for="password">两步验证密码（如有）</label>
+                    <input id="password" name="password" type="password" />
+                </div>
+                <button class="btn" type="submit">确认更新 Session</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

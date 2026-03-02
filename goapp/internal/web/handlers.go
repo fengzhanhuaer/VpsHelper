@@ -80,6 +80,10 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.POST("/tg/login/verify", h.tgLoginVerify)
 	router.GET("/tg/accounts", h.tgAccounts)
 	router.POST("/tg/accounts", h.tgAccounts)
+	router.GET("/tg/accounts/relogin", h.tgAccountRelogin)
+	router.POST("/tg/accounts/relogin", h.tgAccountRelogin)
+	router.GET("/tg/accounts/relogin/verify", h.tgAccountReloginVerify)
+	router.POST("/tg/accounts/relogin/verify", h.tgAccountReloginVerify)
 	router.GET("/tg/proxy", h.tgProxy)
 	router.POST("/tg/proxy", h.tgProxy)
 	router.GET("/tg/dialogs", h.tgDialogs)
@@ -1092,6 +1096,310 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 		"SelectedAccountID": selectedAccountID,
 		"Dialogs":           dialogs,
 	})
+}
+
+// tgAccountRelogin handles re-login for an existing TG account.
+// It only refreshes session_text and tg_user_id; all other fields (account_name,
+// tasks, rules, …) remain unchanged.
+func (h *Handler) tgAccountRelogin(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	// Determine which account to re-login.
+	accountIDText := strings.TrimSpace(c.Query("account_id"))
+	if c.Request.Method == http.MethodPost {
+		if v := strings.TrimSpace(c.PostForm("account_id")); v != "" {
+			accountIDText = v
+		}
+	}
+	accountID, _ := strconv.ParseInt(accountIDText, 10, 64)
+	if accountID <= 0 {
+		c.String(http.StatusBadRequest, "account_id 参数错误")
+		return
+	}
+
+	acct, err := store.GetTGAccountByID(h.dbConn, username, accountID)
+	if err != nil {
+		c.String(http.StatusNotFound, "账号不存在或不属于当前用户")
+		return
+	}
+
+	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+	if err != nil {
+		c.String(http.StatusInternalServerError, "读取 API 配置失败")
+		return
+	}
+	apiIDText := strings.TrimSpace(settings["telegram_api_id"])
+	apiHash := strings.TrimSpace(settings["telegram_api_hash"])
+	allProxy := strings.TrimSpace(settings["tg_all_proxy"])
+	if apiIDText == "" || apiHash == "" {
+		c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+			"Title":   "重新登录",
+			"Account": acct,
+			"Error":   "请先在 API 设置里配置 Telegram API ID/Hash。",
+		})
+		return
+	}
+
+	if c.Request.Method == http.MethodGet {
+		c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+			"Title":   "重新登录",
+			"Account": acct,
+		})
+		return
+	}
+
+	// ── Session Text import (fast path, no phone code needed) ────
+	if strings.TrimSpace(c.PostForm("action")) == "session" {
+		sessionText := strings.TrimSpace(c.PostForm("session_text"))
+		if sessionText == "" {
+			c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+				"Title":   "重新登录",
+				"Account": acct,
+				"Error":   "请粘贴 session_text。",
+				"Tab":     "session",
+			})
+			return
+		}
+		apiID, err := strconv.Atoi(apiIDText)
+		if err != nil {
+			c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+				"Title":   "重新登录",
+				"Account": acct,
+				"Error":   "API ID 格式不正确。",
+				"Tab":     "session",
+			})
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		defer cancel()
+		self, canonical, err := tg.GetSelfFromSessionText(ctx, apiID, apiHash, sessionText, allProxy)
+		if err != nil {
+			c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+				"Title":       "重新登录",
+				"Account":     acct,
+				"Error":       "Session 验证失败：" + err.Error(),
+				"Tab":         "session",
+				"SessionText": sessionText,
+			})
+			return
+		}
+		var tgUserID int64
+		if self != nil {
+			tgUserID = self.ID
+		}
+		if err := store.UpdateTGAccountSession(h.dbConn, username, accountID, canonical, tgUserID); err != nil {
+			c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+				"Title":   "重新登录",
+				"Account": acct,
+				"Error":   "保存失败：" + err.Error(),
+				"Tab":     "session",
+			})
+			return
+		}
+		redirectURL := fmt.Sprintf("/tg/accounts?account_id=%d&message=%s&status=ok",
+			accountID, url.QueryEscape("Session 已更新，重新登录成功。"))
+		c.Redirect(http.StatusSeeOther, redirectURL)
+		return
+	}
+
+	// ── Phone code flow ───────────────────────────────────────────
+	phone := strings.TrimSpace(c.PostForm("phone"))
+	if phone == "" {
+		c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+			"Title":   "重新登录",
+			"Account": acct,
+			"Error":   "手机号不能为空。",
+		})
+		return
+	}
+	apiID, err := strconv.Atoi(apiIDText)
+	if err != nil {
+		c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+			"Title":   "重新登录",
+			"Account": acct,
+			"Error":   "API ID 格式不正确。",
+		})
+		return
+	}
+
+	flowID, err := store.CreateLoginFlow(h.dbConn, username, phone, acct.AccountName)
+	if err != nil {
+		c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+			"Title":   "重新登录",
+			"Account": acct,
+			"Error":   "创建登录流程失败。",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 25*time.Second)
+	defer cancel()
+	storage := tg.NewLoginFlowSessionStorage(h.dbConn, flowID)
+	codeHash, err := tg.SendLoginCode(ctx, apiID, apiHash, phone, storage, allProxy)
+	if err != nil {
+		_ = store.DeleteLoginFlow(h.dbConn, flowID, username)
+		c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+			"Title":   "重新登录",
+			"Account": acct,
+			"Error":   "发送验证码失败：" + err.Error(),
+		})
+		return
+	}
+	if err := store.UpdateLoginFlowCodeHash(h.dbConn, flowID, codeHash); err != nil {
+		_ = store.DeleteLoginFlow(h.dbConn, flowID, username)
+		c.HTML(http.StatusOK, "tg_account_relogin.html", gin.H{
+			"Title":   "重新登录",
+			"Account": acct,
+			"Error":   "保存验证码信息失败。",
+		})
+		return
+	}
+
+	c.Redirect(http.StatusFound,
+		fmt.Sprintf("/tg/accounts/relogin/verify?flow_id=%d&account_id=%d", flowID, accountID))
+}
+
+// tgAccountReloginVerify completes the phone-code re-login flow.
+// On success it updates only session_text + tg_user_id.
+func (h *Handler) tgAccountReloginVerify(c *gin.Context) {
+	username := h.currentUser(c)
+	if username == "" {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	flowIDText := c.Query("flow_id")
+	if c.Request.Method == http.MethodPost {
+		if v := c.PostForm("flow_id"); v != "" {
+			flowIDText = v
+		}
+	}
+	accountIDText := c.Query("account_id")
+	if c.Request.Method == http.MethodPost {
+		if v := c.PostForm("account_id"); v != "" {
+			accountIDText = v
+		}
+	}
+
+	flowID, err := strconv.ParseInt(strings.TrimSpace(flowIDText), 10, 64)
+	if err != nil || flowID <= 0 {
+		c.String(http.StatusBadRequest, "invalid flow_id")
+		return
+	}
+	accountID, err := strconv.ParseInt(strings.TrimSpace(accountIDText), 10, 64)
+	if err != nil || accountID <= 0 {
+		c.String(http.StatusBadRequest, "invalid account_id")
+		return
+	}
+
+	acct, err := store.GetTGAccountByID(h.dbConn, username, accountID)
+	if err != nil {
+		c.String(http.StatusNotFound, "账号不存在")
+		return
+	}
+
+	flow, err := store.GetLoginFlow(h.dbConn, flowID, username)
+	if err != nil {
+		c.String(http.StatusNotFound, "login flow not found")
+		return
+	}
+
+	settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+	if err != nil {
+		c.String(http.StatusInternalServerError, "load settings failed")
+		return
+	}
+	apiIDText := settings["telegram_api_id"]
+	apiHash := settings["telegram_api_hash"]
+	allProxy := settings["tg_all_proxy"]
+	apiID, err := strconv.Atoi(apiIDText)
+	if err != nil || apiHash == "" {
+		c.String(http.StatusBadRequest, "api settings invalid")
+		return
+	}
+
+	if c.Request.Method == http.MethodGet {
+		c.HTML(http.StatusOK, "tg_account_relogin_verify.html", gin.H{
+			"Title":     "验证码确认",
+			"Account":   acct,
+			"FlowID":    flowID,
+			"AccountID": accountID,
+			"Phone":     flow.Phone,
+		})
+		return
+	}
+
+	code := strings.TrimSpace(c.PostForm("code"))
+	password := strings.TrimSpace(c.PostForm("password"))
+	if code == "" {
+		c.HTML(http.StatusOK, "tg_account_relogin_verify.html", gin.H{
+			"Title":     "验证码确认",
+			"Account":   acct,
+			"FlowID":    flowID,
+			"AccountID": accountID,
+			"Phone":     flow.Phone,
+			"Error":     "验证码不能为空。",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 35*time.Second)
+	defer cancel()
+	storage := tg.NewLoginFlowSessionStorage(h.dbConn, flowID)
+	self, err := tg.SignIn(ctx, apiID, apiHash, flow.Phone, code, flow.PhoneCodeHash, password, storage, allProxy)
+	if err != nil {
+		errMsg := "登录失败。"
+		if errors.Is(err, auth.ErrPasswordNotProvided) {
+			errMsg = "需要两步验证密码。"
+		}
+		c.HTML(http.StatusOK, "tg_account_relogin_verify.html", gin.H{
+			"Title":     "验证码确认",
+			"Account":   acct,
+			"FlowID":    flowID,
+			"AccountID": accountID,
+			"Phone":     flow.Phone,
+			"Error":     errMsg,
+		})
+		return
+	}
+
+	updatedFlow, err := store.GetLoginFlow(h.dbConn, flowID, username)
+	if err != nil {
+		c.HTML(http.StatusOK, "tg_account_relogin_verify.html", gin.H{
+			"Title":     "验证码确认",
+			"Account":   acct,
+			"FlowID":    flowID,
+			"AccountID": accountID,
+			"Phone":     flow.Phone,
+			"Error":     "读取会话失败。",
+		})
+		return
+	}
+
+	var tgUserID int64
+	if self != nil {
+		tgUserID = self.ID
+	}
+	if err := store.UpdateTGAccountSession(h.dbConn, username, accountID, updatedFlow.SessionText, tgUserID); err != nil {
+		c.HTML(http.StatusOK, "tg_account_relogin_verify.html", gin.H{
+			"Title":     "验证码确认",
+			"Account":   acct,
+			"FlowID":    flowID,
+			"AccountID": accountID,
+			"Phone":     flow.Phone,
+			"Error":     "保存失败：" + err.Error(),
+		})
+		return
+	}
+	_ = store.DeleteLoginFlow(h.dbConn, flowID, username)
+
+	redirectURL := fmt.Sprintf("/tg/accounts?account_id=%d&message=%s&status=ok",
+		accountID, url.QueryEscape("重新登录成功，Session 已更新。"))
+	c.Redirect(http.StatusSeeOther, redirectURL)
 }
 
 func (h *Handler) tgProxy(c *gin.Context) {

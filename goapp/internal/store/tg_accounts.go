@@ -80,3 +80,17 @@ func UpdateTGAccountUserID(dbConn *sql.DB, accountID int64, tgUserID int64) erro
 	_, err := dbConn.Exec("UPDATE tg_accounts SET tg_user_id = ? WHERE id = ?", tgUserID, accountID)
 	return err
 }
+
+// UpdateTGAccountSession replaces only the session_text (and optionally tg_user_id)
+// for an existing account. All other fields (account_name, tasks, rules, …) are untouched.
+func UpdateTGAccountSession(dbConn *sql.DB, owner string, accountID int64, sessionText string, tgUserID int64) error {
+	_, err := dbConn.Exec(
+		"UPDATE tg_accounts SET session_text = ?, tg_user_id = ? WHERE id = ? AND owner = ?",
+		sessionText, tgUserID, accountID, owner,
+	)
+	if err != nil {
+		return fmt.Errorf("update tg account session: %w", err)
+	}
+	return nil
+}
+

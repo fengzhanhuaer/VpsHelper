@@ -19,7 +19,7 @@
     <main>
         <section class="panel">
             <h1>TG 账号管理</h1>
-            <p class="muted">本页支持：删除账号、刷新会话列表。</p>
+            <p class="muted">本页支持：重新登录（仅更新 Session）、删除账号、刷新会话列表。</p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
@@ -94,6 +94,7 @@
                         <td>{{ .AccountName }}</td>
                         <td>{{ .CreatedAt }}</td>
                         <td>
+                            <a class="ghost" href="/tg/accounts/relogin?account_id={{ .ID }}" style="margin-right:6px;">重新登录</a>
                             <form method="post" action="/tg/accounts" style="display:inline;">
                                 <input type="hidden" name="id" value="{{ .ID }}" />
                                 <button class="ghost" type="submit" name="action" value="delete" onclick="return confirm('确定删除该账号会话吗？');">删除</button>
