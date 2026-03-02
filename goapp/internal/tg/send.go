@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
 )
 
@@ -35,12 +34,12 @@ func IsDialogID(input string) bool {
 	return ok
 }
 
-func SendMessageToUsername(ctx context.Context, client *telegram.Client, target, message string) error {
-	_, err := SendMessageToTarget(ctx, client, target, message)
+func SendMessageToUsername(ctx context.Context, api *tg.Client, target, message string) error {
+	_, err := SendMessageToTarget(ctx, api, target, message)
 	return err
 }
 
-func SendMessageToTarget(ctx context.Context, client *telegram.Client, target, message string) (string, error) {
+func SendMessageToTarget(ctx context.Context, api *tg.Client, target, message string) (string, error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return "", errors.New("empty target")
@@ -50,19 +49,19 @@ func SendMessageToTarget(ctx context.Context, client *telegram.Client, target, m
 		return "", errors.New("empty message")
 	}
 
-	resolved, err := resolveTarget(ctx, client.API(), target)
+	resolved, err := resolveTarget(ctx, api, target)
 	if err != nil {
 		return "", err
 	}
 
-	if err := sendMessageToPeer(ctx, client.API(), resolved.peer, message); err != nil {
+	if err := sendMessageToPeer(ctx, api, resolved.peer, message); err != nil {
 		return "", err
 	}
 	return resolved.dialogID, nil
 }
 
-func ResolveDialogID(ctx context.Context, client *telegram.Client, target string) (string, error) {
-	resolved, err := resolveTarget(ctx, client.API(), target)
+func ResolveDialogID(ctx context.Context, api *tg.Client, target string) (string, error) {
+	resolved, err := resolveTarget(ctx, api, target)
 	if err != nil {
 		return "", err
 	}

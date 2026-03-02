@@ -44,13 +44,6 @@ func ResolveDialogIDForAccount(ctx context.Context, dbConn *sql.DB, owner string
 		return "", err
 	}
 
-	storage := NewAccountSessionStorage(dbConn, owner, accountID)
-	opts, err := newTelegramOptions(storage, true, allProxy)
-	if err != nil {
-		return "", err
-	}
-	client := telegram.NewClient(apiID, apiHash, opts)
-
 	callCtx := ctx
 	if callCtx == nil {
 		callCtx = context.Background()
@@ -61,9 +54,27 @@ func ResolveDialogIDForAccount(ctx context.Context, dbConn *sql.DB, owner string
 		defer cancel()
 	}
 
+	if api := GetLiveAPI(owner, accountID); api != nil {
+		out, err := ResolveDialogID(callCtx, api, target)
+		if err != nil {
+			return "", err
+		}
+		if out == "" {
+			return "", errors.New("resolve target empty")
+		}
+		return out, nil
+	}
+
+	storage := NewAccountSessionStorage(dbConn, owner, accountID)
+	opts, err := newTelegramOptions(storage, true, allProxy)
+	if err != nil {
+		return "", err
+	}
+	client := telegram.NewClient(apiID, apiHash, opts)
+
 	var dialogID string
 	err = client.Run(callCtx, func(ctx context.Context) error {
-		out, err := ResolveDialogID(ctx, client, target)
+		out, err := ResolveDialogID(ctx, client.API(), target)
 		if err != nil {
 			return err
 		}
@@ -78,6 +89,7 @@ func ResolveDialogIDForAccount(ctx context.Context, dbConn *sql.DB, owner string
 	}
 	return dialogID, nil
 }
+
 
 func NormalizeStoredTargetsByDialogs(dbConn *sql.DB, owner string, accountID int64) (int, error) {
 	dialogs, err := store.ListTGDialogs(dbConn, accountID)

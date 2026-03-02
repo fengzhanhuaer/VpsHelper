@@ -43,6 +43,24 @@ func SendOnceWithResolvedDialogID(ctx context.Context, dbConn *sql.DB, owner str
 		return false, "API ID 格式不正确", ""
 	}
 
+	callCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
+	defer cancel()
+
+	if api := GetLiveAPI(owner, accountID); api != nil {
+		usedDialogID, err := SendMessageToTarget(callCtx, api, dialogID, message)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return false, "发送超时", ""
+			}
+			return false, err.Error(), ""
+		}
+		resolvedDialogID := strings.TrimSpace(usedDialogID)
+		if normalized, ok := NormalizeDialogID(resolvedDialogID); ok {
+			resolvedDialogID = normalized
+		}
+		return true, "已发送", resolvedDialogID
+	}
+
 	storage := NewAccountSessionStorage(dbConn, owner, accountID)
 	opts, err := newTelegramOptions(storage, true, allProxy)
 	if err != nil {
@@ -50,12 +68,9 @@ func SendOnceWithResolvedDialogID(ctx context.Context, dbConn *sql.DB, owner str
 	}
 
 	client := telegram.NewClient(apiID, apiHash, opts)
-	callCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
-	defer cancel()
-
 	resolvedDialogID := dialogID
 	err = client.Run(callCtx, func(ctx context.Context) error {
-		usedDialogID, err := SendMessageToTarget(ctx, client, dialogID, message)
+		usedDialogID, err := SendMessageToTarget(ctx, client.API(), dialogID, message)
 		if err != nil {
 			return err
 		}
@@ -74,3 +89,4 @@ func SendOnceWithResolvedDialogID(ctx context.Context, dbConn *sql.DB, owner str
 	}
 	return true, "已发送", resolvedDialogID
 }
+

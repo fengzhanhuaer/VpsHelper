@@ -22,7 +22,7 @@ func FetchAndStoreDialogHistory(ctx context.Context, dbConn *sql.DB, owner strin
 		limit = 100
 	}
 
-	acct, err := store.GetTGAccountByID(dbConn, owner, accountID)
+	_, err := store.GetTGAccountByID(dbConn, owner, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,17 +36,11 @@ func FetchAndStoreDialogHistory(ctx context.Context, dbConn *sql.DB, owner strin
 		return nil, err
 	}
 
-	var storage telegram.SessionStorage
-	if acct.SessionText != "" {
-		data, err := decodeSessionText(acct.SessionText)
-		if err != nil {
-			return nil, err
-		}
-		storage = &inMemorySessionStorage{data: data}
-	} else {
-		storage = NewAccountSessionStorage(dbConn, owner, accountID)
+	if api := GetLiveAPI(owner, accountID); api != nil {
+		return execFetchAndStoreDialogHistory(ctx, api, accountID, dialogID, limit)
 	}
 
+	storage := NewAccountSessionStorage(dbConn, owner, accountID)
 	opts, err := buildOptions(storage, allProxy)
 	if err != nil {
 		return nil, err
@@ -55,49 +49,56 @@ func FetchAndStoreDialogHistory(ctx context.Context, dbConn *sql.DB, owner strin
 
 	var msgs []store.ChatMessage
 	runErr := client.Run(ctx, func(ctx context.Context) error {
-		api := client.API()
-		resolved, err := resolveTarget(ctx, api, dialogID)
-		if err != nil {
-			return err
-		}
-		res, err := messagesGetHistoryWithRetry(ctx, api, &gotdtg.MessagesGetHistoryRequest{
-			Peer:  resolved.peer,
-			Limit: limit,
-		})
-		if err != nil {
-			return err
-		}
-		raw := historyMessagesFromResponse(res)
-		nameMap := buildSenderNameMap(historyUsersFromResponse(res))
-		// Telegram returns newest-first; store oldest-first.
-		for i := len(raw) - 1; i >= 0; i-- {
-			m, ok := raw[i].(*gotdtg.Message)
-			if !ok || strings.TrimSpace(m.Message) == "" {
-				continue
-			}
-			from := "me"
-			if !m.Out {
-				if fid, ok := m.FromID.(*gotdtg.PeerUser); ok {
-					if n := nameMap[fid.UserID]; n != "" {
-						from = n
-					} else {
-						from = strconv.FormatInt(fid.UserID, 10)
-					}
-				}
-			}
-			cm := store.ChatMessage{
-				MsgID: m.ID,
-				From:  from,
-				Text:  m.Message,
-				Date:  int64(m.Date),
-				Out:   m.Out,
-			}
-			msgs = append(msgs, cm)
-			_ = store.AppendChatMessage(accountID, dialogID, cm)
-		}
-		return nil
+		var err error
+		msgs, err = execFetchAndStoreDialogHistory(ctx, client.API(), accountID, dialogID, limit)
+		return err
 	})
 	return msgs, runErr
+}
+
+func execFetchAndStoreDialogHistory(ctx context.Context, api *gotdtg.Client, accountID int64, dialogID string, limit int) ([]store.ChatMessage, error) {
+	resolved, err := resolveTarget(ctx, api, dialogID)
+	if err != nil {
+		return nil, err
+	}
+	res, err := messagesGetHistoryWithRetry(ctx, api, &gotdtg.MessagesGetHistoryRequest{
+		Peer:  resolved.peer,
+		Limit: limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	raw := historyMessagesFromResponse(res)
+	nameMap := buildSenderNameMap(historyUsersFromResponse(res))
+	
+	var msgs []store.ChatMessage
+	// Telegram returns newest-first; store oldest-first.
+	for i := len(raw) - 1; i >= 0; i-- {
+		m, ok := raw[i].(*gotdtg.Message)
+		if !ok || strings.TrimSpace(m.Message) == "" {
+			continue
+		}
+		from := "me"
+		if !m.Out {
+			if fid, ok := m.FromID.(*gotdtg.PeerUser); ok {
+				if n := nameMap[fid.UserID]; n != "" {
+					from = n
+				} else {
+					from = strconv.FormatInt(fid.UserID, 10)
+				}
+			}
+		}
+		cm := store.ChatMessage{
+			MsgID: m.ID,
+			From:  from,
+			Text:  m.Message,
+			Date:  int64(m.Date),
+			Out:   m.Out,
+		}
+		msgs = append(msgs, cm)
+		_ = store.AppendChatMessage(accountID, dialogID, cm)
+	}
+	return msgs, nil
 }
 
 // SendChatMessageFromPage sends a text message to the given dialog via a short-lived
@@ -109,7 +110,7 @@ func SendChatMessageFromPage(ctx context.Context, dbConn *sql.DB, owner string, 
 		return store.ChatMessage{}, fmt.Errorf("empty message")
 	}
 
-	acct, err := store.GetTGAccountByID(dbConn, owner, accountID)
+	_, err := store.GetTGAccountByID(dbConn, owner, accountID)
 	if err != nil {
 		return store.ChatMessage{}, err
 	}
@@ -123,42 +124,42 @@ func SendChatMessageFromPage(ctx context.Context, dbConn *sql.DB, owner string, 
 		return store.ChatMessage{}, fmt.Errorf("TG api credentials not configured")
 	}
 
-	var storage telegram.SessionStorage
-	if acct.SessionText != "" {
-		data, err := decodeSessionText(acct.SessionText)
-		if err != nil {
-			return store.ChatMessage{}, err
-		}
-		storage = &inMemorySessionStorage{data: data}
-	} else {
-		storage = NewAccountSessionStorage(dbConn, owner, accountID)
+	if api := GetLiveAPI(owner, accountID); api != nil {
+		return execSendChatMessageFromPage(ctx, api, accountID, dialogID, text)
 	}
 
+	storage := NewAccountSessionStorage(dbConn, owner, accountID)
 	opts, err := buildOptions(storage, allProxy)
 	if err != nil {
 		return store.ChatMessage{}, err
 	}
 	client := telegram.NewClient(apiID, apiHash, opts)
 
+	var sent store.ChatMessage
+	runErr := client.Run(ctx, func(ctx context.Context) error {
+		var err error
+		sent, err = execSendChatMessageFromPage(ctx, client.API(), accountID, dialogID, text)
+		return err
+	})
+	return sent, runErr
+}
+
+func execSendChatMessageFromPage(ctx context.Context, api *gotdtg.Client, accountID int64, dialogID, text string) (store.ChatMessage, error) {
 	// Convert peerKey → numeric target that resolveTarget understands.
 	target := peerKeyToTarget(dialogID)
 
-	var sent store.ChatMessage
-	runErr := client.Run(ctx, func(ctx context.Context) error {
-		_, err := SendMessageToTarget(ctx, client, target, text)
-		if err != nil {
-			return err
-		}
-		now := time.Now().Unix()
-		sent = store.ChatMessage{
-			From: "me",
-			Text: text,
-			Date: now,
-			Out:  true,
-		}
-		_ = store.AppendChatMessage(accountID, dialogID, sent)
-		_ = store.UpdateDialogLastMsgAt(accountID, dialogID, "", now)
-		return nil
-	})
-	return sent, runErr
+	_, err := SendMessageToTarget(ctx, api, target, text)
+	if err != nil {
+		return store.ChatMessage{}, err
+	}
+	now := time.Now().Unix()
+	sent := store.ChatMessage{
+		From: "me",
+		Text: text,
+		Date: now,
+		Out:  true,
+	}
+	_ = store.AppendChatMessage(accountID, dialogID, sent)
+	_ = store.UpdateDialogLastMsgAt(accountID, dialogID, "", now)
+	return sent, nil
 }

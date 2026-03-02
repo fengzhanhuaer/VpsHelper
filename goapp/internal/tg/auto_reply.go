@@ -140,10 +140,14 @@ func runAutoReplyListener(ctx context.Context, dbConn *sql.DB, acct store.OwnerA
 	h.setAPI(client.API())
 
 	_ = client.Run(ctx, func(ctx context.Context) error {
+		api := client.API()
+		poolRegister(acct.Owner, acct.AccountID, api)
+		defer poolUnregister(acct.Owner, acct.AccountID)
+
 		pm := peers.Options{
 			Storage: new(peers.InmemoryStorage),
 			Cache:   new(peers.InmemoryCache),
-		}.Build(client.API())
+		}.Build(api)
 		if err := pm.Init(ctx); err == nil {
 			h.setPeers(pm)
 			late.Set(pm.UpdateHook(h))
@@ -151,12 +155,12 @@ func runAutoReplyListener(ctx context.Context, dbConn *sql.DB, acct store.OwnerA
 			late.Set(h)
 		}
 
-		if res, err := client.API().ContactsGetContacts(ctx, 0); err == nil {
+		if res, err := api.ContactsGetContacts(ctx, 0); err == nil {
 			h.applyContacts(res)
 		}
 
 		// On first connect, catch up messages missed while offline (best-effort).
-		go catchUpAccountDialogs(ctx, client.API(), acct.AccountID)
+		go catchUpAccountDialogs(ctx, api, acct.AccountID)
 
 		<-ctx.Done()
 		return nil

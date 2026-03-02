@@ -17,66 +17,26 @@ import (
 )
 
 func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID int64, apiID int, apiHash, allProxy string, onProgress func(int, string)) (int, string) {
-	storage := NewAccountSessionStorage(dbConn, owner, accountID)
-	opts, err := newTelegramOptions(storage, true, allProxy)
-	if err != nil {
-		return 0, "初始化 Telegram 客户端失败：" + err.Error()
+	var dialogs []store.TGDialog
+	var err error
+
+	if api := GetLiveAPI(owner, accountID); api != nil {
+		dialogs, err = execRefreshDialogs(ctx, api, accountID, onProgress)
+	} else {
+		storage := NewAccountSessionStorage(dbConn, owner, accountID)
+		opts, err2 := newTelegramOptions(storage, true, allProxy)
+		if err2 != nil {
+			return 0, "初始化 Telegram 客户端失败：" + err2.Error()
+		}
+		client := telegram.NewClient(apiID, apiHash, opts)
+		
+		err = client.Run(ctx, func(ctx context.Context) error {
+			var err3 error
+			dialogs, err3 = execRefreshDialogs(ctx, client.API(), accountID, onProgress)
+			return err3
+		})
 	}
-	client := telegram.NewClient(apiID, apiHash, opts)
 
-	dialogs := make([]store.TGDialog, 0)
-	err = client.Run(ctx, func(ctx context.Context) error {
-		api := client.API()
-
-		seen := map[string]bool{}
-		iter := query.NewQuery(api).GetDialogs().BatchSize(100).Iter()
-
-		for iter.Next(ctx) {
-			elem := iter.Value()
-			d, ok := elem.Dialog.(*tg.Dialog)
-			if !ok {
-				continue
-			}
-
-			userByID := elem.Entities.Users()
-			chatByID := elem.Entities.Chats()
-			channelByID := elem.Entities.Channels()
-
-			dialogID, username, title, _ := resolveDialogPeer(d.Peer, userByID, chatByID, channelByID)
-			if dialogID == "" {
-				continue
-			}
-			key := strings.ToLower(dialogID)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-
-			updatedAt := time.Now().Format(time.RFC3339)
-			dialogs = append(dialogs, store.TGDialog{
-				DialogID:  dialogID,
-				Title:     title,
-				Username:  username,
-				UpdatedAt: updatedAt,
-				AccountID: accountID,
-			})
-
-			// Avoid spamming progress, report every 100 dialogs
-			if len(dialogs)%100 == 0 && onProgress != nil {
-				onProgress(len(dialogs), "拉取中...")
-			}
-		}
-
-		if err := iter.Err(); err != nil {
-			return err
-		}
-
-		if onProgress != nil {
-			onProgress(len(dialogs), "拉取中...")
-		}
-
-		return nil
-	})
 	if err != nil {
 		if waitSeconds, ok := parseFloodWaitSeconds(err); ok {
 			return 0, fmt.Sprintf("Telegram 限流，请 %d 秒后重试", waitSeconds)
@@ -95,6 +55,59 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 
 	return len(dialogs), "ok"
 }
+
+func execRefreshDialogs(ctx context.Context, api *tg.Client, accountID int64, onProgress func(int, string)) ([]store.TGDialog, error) {
+	dialogs := make([]store.TGDialog, 0)
+	seen := map[string]bool{}
+	iter := query.NewQuery(api).GetDialogs().BatchSize(100).Iter()
+
+	for iter.Next(ctx) {
+		elem := iter.Value()
+		d, ok := elem.Dialog.(*tg.Dialog)
+		if !ok {
+			continue
+		}
+
+		userByID := elem.Entities.Users()
+		chatByID := elem.Entities.Chats()
+		channelByID := elem.Entities.Channels()
+
+		dialogID, username, title, _ := resolveDialogPeer(d.Peer, userByID, chatByID, channelByID)
+		if dialogID == "" {
+			continue
+		}
+		key := strings.ToLower(dialogID)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		updatedAt := time.Now().Format(time.RFC3339)
+		dialogs = append(dialogs, store.TGDialog{
+			DialogID:  dialogID,
+			Title:     title,
+			Username:  username,
+			UpdatedAt: updatedAt,
+			AccountID: accountID,
+		})
+
+		// Avoid spamming progress, report every 100 dialogs
+		if len(dialogs)%100 == 0 && onProgress != nil {
+			onProgress(len(dialogs), "拉取中...")
+		}
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+
+	if onProgress != nil {
+		onProgress(len(dialogs), "拉取中...")
+	}
+
+	return dialogs, nil
+}
+
 
 func resolveDialogPeer(peer tg.PeerClass, users map[int64]*tg.User, chats map[int64]*tg.Chat, channels map[int64]*tg.Channel) (dialogID, username, title string, outPeer tg.InputPeerClass) {
 	switch p := peer.(type) {

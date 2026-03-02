@@ -136,44 +136,53 @@ func loadAutoSendConfig(dbConn *sql.DB) (autoSendConfig, error) {
 }
 
 func runAutoSendTask(ctx context.Context, dbConn *sql.DB, t store.AutoSendTask, fallbackCfg autoSendConfig) (string, string, string) {
-	// Always use global config for API credentials.
+	// Prefer the long-lived pool connection – avoids a new connection per task.
+	if api := GetLiveAPI(t.Owner, t.AccountID); api != nil {
+		return execAutoSendViaAPI(ctx, api, t)
+	}
+
+	// Fallback: build a short-lived connection using global API credentials.
 	apiID := fallbackCfg.apiID
 	apiHash := fallbackCfg.apiHash
 	allProxy := fallbackCfg.allProxy
-
 	if apiID == 0 || apiHash == "" {
 		return "api credentials missing", "", ""
 	}
 
-	// Always load session from tg_accounts table (unified source of truth).
 	storage := NewAccountSessionStorage(dbConn, t.Owner, t.AccountID)
-
 	opts, err := buildOptions(storage, allProxy)
 	if err != nil {
 		return "client options error", "", ""
 	}
 
 	client := telegram.NewClient(apiID, apiHash, opts)
-	resolvedDialogID := ""
-	lastReply := ""
+	var errMsg, resolvedDialogID, lastReply string
 	err = client.Run(ctx, func(ctx context.Context) error {
-		api := client.API()
-		resolved, err := resolveTarget(ctx, api, t.DialogID)
-		if err != nil {
-			return err
+		errMsg, resolvedDialogID, lastReply = execAutoSendViaAPI(ctx, client.API(), t)
+		if errMsg != "ok" {
+			return errors.New(errMsg)
 		}
-		resolvedDialogID = strings.TrimSpace(resolved.dialogID)
-		baselineID := latestPeerMessageID(ctx, api, resolved.peer)
-		sendAt := time.Now()
-		if err := sendMessageToPeer(ctx, api, resolved.peer, t.Message); err != nil {
-			return err
-		}
-		lastReply = waitAutoSendReply(ctx, api, resolved.peer, sendAt, baselineID)
 		return nil
 	})
+	if err != nil && (errMsg == "" || errMsg == "ok") {
+		errMsg = err.Error()
+	}
+	return errMsg, resolvedDialogID, lastReply
+}
+
+// execAutoSendViaAPI executes the send using a live *tg.Client (pool or short-lived).
+func execAutoSendViaAPI(ctx context.Context, api *tg.Client, t store.AutoSendTask) (string, string, string) {
+	resolved, err := resolveTarget(ctx, api, t.DialogID)
 	if err != nil {
+		return err.Error(), "", ""
+	}
+	resolvedDialogID := strings.TrimSpace(resolved.dialogID)
+	baselineID := latestPeerMessageID(ctx, api, resolved.peer)
+	sendAt := time.Now()
+	if err := sendMessageToPeer(ctx, api, resolved.peer, t.Message); err != nil {
 		return err.Error(), resolvedDialogID, ""
 	}
+	lastReply := waitAutoSendReply(ctx, api, resolved.peer, sendAt, baselineID)
 	if normalized, ok := NormalizeDialogID(resolvedDialogID); ok {
 		resolvedDialogID = normalized
 	}
