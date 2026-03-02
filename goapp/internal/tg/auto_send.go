@@ -136,34 +136,17 @@ func loadAutoSendConfig(dbConn *sql.DB) (autoSendConfig, error) {
 }
 
 func runAutoSendTask(ctx context.Context, dbConn *sql.DB, t store.AutoSendTask, fallbackCfg autoSendConfig) (string, string, string) {
-	// Prefer task-embedded credentials; fall back to global config for old tasks.
+	// Always use global config for API credentials.
 	apiID := fallbackCfg.apiID
 	apiHash := fallbackCfg.apiHash
 	allProxy := fallbackCfg.allProxy
 
-	if t.APIID != "" && t.APIHash != "" {
-		if id, err := parseInt(t.APIID); err == nil {
-			apiID = id
-			apiHash = t.APIHash
-			allProxy = t.AllProxy
-		}
-	}
 	if apiID == 0 || apiHash == "" {
 		return "api credentials missing", "", ""
 	}
 
-	// Build session storage from task-embedded session_text, or fall back to account DB.
-	var storage telegram.SessionStorage
-	if t.SessionText != "" {
-		data, err := decodeSessionText(t.SessionText)
-		if err != nil {
-			return "decode session: " + err.Error(), "", ""
-		}
-		storage = &inMemorySessionStorage{data: data}
-	} else {
-		// Legacy path: load from tg_accounts table.
-		storage = NewAccountSessionStorage(dbConn, t.Owner, t.AccountID)
-	}
+	// Always load session from tg_accounts table (unified source of truth).
+	storage := NewAccountSessionStorage(dbConn, t.Owner, t.AccountID)
 
 	opts, err := buildOptions(storage, allProxy)
 	if err != nil {

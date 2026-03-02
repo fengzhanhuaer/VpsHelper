@@ -1377,17 +1377,12 @@ func (h *Handler) tgAutoReply(c *gin.Context) {
 			} else if matchText == "" || replyText == "" {
 				message = "匹配文本和回复内容不能为空。"
 			} else {
-				acct, acctErr := store.GetTGAccountByID(h.dbConn, username, accountID)
-				tgCfg, _ := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
-				var sessionText, apiID, apiHash, allProxy, accountName string
-				if acctErr == nil {
-					sessionText = acct.SessionText
+				var accountName string
+				if acct, acctErr := store.GetTGAccountByID(h.dbConn, username, accountID); acctErr == nil {
 					accountName = acct.AccountName
 				}
-				apiID = strings.TrimSpace(tgCfg["telegram_api_id"])
-				apiHash = strings.TrimSpace(tgCfg["telegram_api_hash"])
-				allProxy = strings.TrimSpace(tgCfg["tg_all_proxy"])
-				if err := store.CreateAutoReplyRule(h.dbConn, username, accountID, accountName, matchText, replyText, true, sessionText, apiID, apiHash, allProxy); err != nil {
+				// Credentials are no longer embedded in rules; loaded from unified source at runtime.
+				if err := store.CreateAutoReplyRule(h.dbConn, username, accountID, accountName, matchText, replyText, true, "", "", "", ""); err != nil {
 					message = "创建失败。"
 				} else {
 					message = "已创建并启用。"
@@ -1741,17 +1736,12 @@ func (h *Handler) tgAutoSendNew(c *gin.Context) {
 		}
 	}
 
-	// Load global TG settings to embed in the task.
-	tgSettings, _ := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
-	apiID := strings.TrimSpace(tgSettings["telegram_api_id"])
-	apiHash := strings.TrimSpace(tgSettings["telegram_api_hash"])
-	allProxy := strings.TrimSpace(tgSettings["tg_all_proxy"])
-
+	// Credentials are no longer embedded in tasks; loaded from unified source at runtime.
 	next := time.Now().Format(time.RFC3339)
 	if err := store.CreateAutoSendTask(
 		h.dbConn, username, selectedAccountID, account.AccountName,
 		dialogID, msg, intervalSeconds, jitterSeconds, scheduleType, timeOfDay, enabled, next,
-		account.SessionText, apiID, apiHash, allProxy,
+		"", "", "", "",
 	); err != nil {
 		view["Error"] = "创建失败。"
 		c.HTML(http.StatusOK, "tg_auto_send_new.html", view)

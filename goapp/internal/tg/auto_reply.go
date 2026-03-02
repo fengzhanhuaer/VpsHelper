@@ -70,23 +70,9 @@ func StartAutoReply(ctx context.Context, dbConn *sql.DB) {
 					continue
 				}
 
-				// All TG accounts: for message capture (may have no rules).
-				allAccts, _ := store.ListAllTGAccountsAsOwnerAccounts(dbConn)
-				// Rule accounts: may have better embedded credentials.
-				ruleAccts, _ := store.ListEnabledAutoReplyAccounts(dbConn)
+				// All TG accounts: always use tg_accounts as the unified source of truth.
+				accounts, _ := store.ListAllTGAccountsAsOwnerAccounts(dbConn)
 
-				// Build merged map; rule accounts override all-accounts (better credentials).
-				acctMap := make(map[autoReplyKey]store.OwnerAccount, len(allAccts))
-				for _, a := range allAccts {
-					acctMap[autoReplyKey{owner: a.Owner, accountID: a.AccountID}] = a
-				}
-				for _, a := range ruleAccts {
-					acctMap[autoReplyKey{owner: a.Owner, accountID: a.AccountID}] = a
-				}
-				accounts := make([]store.OwnerAccount, 0, len(acctMap))
-				for _, a := range acctMap {
-					accounts = append(accounts, a)
-				}
 
 				want := map[autoReplyKey]bool{}
 				for _, a := range accounts {
@@ -123,41 +109,24 @@ func StartAutoReply(ctx context.Context, dbConn *sql.DB) {
 }
 
 func runAutoReplyListener(ctx context.Context, dbConn *sql.DB, acct store.OwnerAccount) {
-	// Prefer task-embedded credentials; fall back to global config for old rules.
-	apiIDText := acct.APIID
-	apiHash := acct.APIHash
-	allProxy := acct.AllProxy
-
+	// Always load API credentials from global app_settings (unified source of truth).
+	settings, err := store.GetSettings(dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
+	if err != nil {
+		return
+	}
+	apiIDText := strings.TrimSpace(settings["telegram_api_id"])
+	apiHash := strings.TrimSpace(settings["telegram_api_hash"])
+	allProxy := strings.TrimSpace(settings["tg_all_proxy"])
 	if apiIDText == "" || apiHash == "" {
-		// Legacy path: load from app_settings.
-		settings, err := store.GetSettings(dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
-		if err != nil {
-			return
-		}
-		apiIDText = strings.TrimSpace(settings["telegram_api_id"])
-		apiHash = strings.TrimSpace(settings["telegram_api_hash"])
-		allProxy = strings.TrimSpace(settings["tg_all_proxy"])
-		if apiIDText == "" || apiHash == "" {
-			return
-		}
+		return
 	}
 	apiID, err := parseInt(apiIDText)
 	if err != nil {
 		return
 	}
 
-	// Build session storage.
-	var storage telegram.SessionStorage
-	if acct.SessionText != "" {
-		data, err := decodeSessionText(acct.SessionText)
-		if err != nil {
-			return
-		}
-		storage = &inMemorySessionStorage{data: data}
-	} else {
-		// Legacy path: load from tg_accounts.
-		storage = NewAccountSessionStorage(dbConn, acct.Owner, acct.AccountID)
-	}
+	// Always load session from tg_accounts table (unified source of truth).
+	storage := NewAccountSessionStorage(dbConn, acct.Owner, acct.AccountID)
 
 	h := newAutoReplyHandler(dbConn, acct.Owner, acct.AccountID)
 	late := &lateUpdateHandler{}
