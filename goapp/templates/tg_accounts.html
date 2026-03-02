@@ -19,64 +19,15 @@
     <main>
         <section class="panel">
             <h1>TG 账号管理</h1>
-            <p class="muted">本页支持：重新登录（仅更新 Session）、删除账号、刷新会话列表。</p>
+            <p class="muted">本页支持：重新登录（仅更新 Session）、删除账号。</p>
 
             {{ if .Message }}
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}">{{ .Message }}</div>
             {{ end }}
 
-            <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
+            <div style="margin:12px 0;">
                 <a class="btn" href="/tg/login/start">添加账号（登录）</a>
-                <a class="ghost" href="/tg/dialogs">会话列表页面</a>
             </div>
-
-            {{ if .HasAccounts }}
-            <form method="get" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin:12px 0;">
-                <div class="field" style="min-width:320px;">
-                    <label for="account_id">选择账号</label>
-                    <select id="account_id" name="account_id">
-                        {{ range .Accounts }}
-                          <option value="{{ .ID }}" {{ if eq $.SelectedAccountID .ID }}selected{{ end }}>{{ .ID }} - {{ .AccountName }}</option>
-                        {{ end }}
-                    </select>
-                </div>
-                <button class="ghost" type="submit">切换</button>
-            </form>
-
-            <form id="refresh-dialogs-form" method="post" action="/tg/accounts" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; align-items:center;">
-                <input type="hidden" name="account_id" value="{{ .SelectedAccountID }}" />
-                <input type="hidden" name="action" value="refresh_dialogs" />
-                <button id="refresh-dialogs-btn" class="ghost" type="submit">刷新会话列表</button>
-                <span id="refresh-dialogs-status" class="muted" style="display:none;">正在刷新会话列表，可能需要 10-120 秒，请勿重复点击。</span>
-            </form>
-
-            <div style="display:grid; gap:10px; margin:12px 0;">
-                <div>
-                    <h2 style="font-size:16px; margin:0 0 8px;">会话列表（当前账号）</h2>
-                    <p class="muted" style="margin:0 0 8px;">列表中的目标值均为会话ID。</p>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>标题</th>
-                                <th>目标</th>
-                                <th>更新时间</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        {{ range .Dialogs }}
-                            <tr>
-                                <td>{{ .Title }}</td>
-                                <td>{{ .DialogID }}</td>
-                                <td class="muted">{{ .UpdatedAt }}</td>
-                            </tr>
-                        {{ else }}
-                            <tr><td colspan="3" class="muted">暂无数据（先点"刷新会话列表"）</td></tr>
-                        {{ end }}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {{ end }}
 
             <table>
                 <thead>
@@ -108,23 +59,5 @@
             </table>
         </section>
     </main>
-
-    <script>
-    (function () {
-        var form = document.getElementById('refresh-dialogs-form');
-        var btn = document.getElementById('refresh-dialogs-btn');
-        var status = document.getElementById('refresh-dialogs-status');
-        if (!form || !btn || !status) return;
-        form.addEventListener('submit', function (event) {
-            if (form.dataset.submitting === '1') {
-                event.preventDefault();
-                return;
-            }
-            form.dataset.submitting = '1';
-            btn.textContent = '刷新中...';
-            status.style.display = 'inline';
-        });
-    })();
-    </script>
 </body>
 </html>

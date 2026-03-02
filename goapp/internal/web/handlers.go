@@ -981,33 +981,12 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 		return
 	}
 
-	selectedAccountID := int64(0)
-	if len(accounts) > 0 {
-		selectedAccountID = accounts[0].ID
-	}
-	if idText := strings.TrimSpace(c.Query("account_id")); idText != "" {
-		if id, err := strconv.ParseInt(idText, 10, 64); err == nil && id > 0 {
-			selectedAccountID = id
-		}
-	}
-	if c.Request.Method == http.MethodPost {
-		if idText := strings.TrimSpace(c.PostForm("account_id")); idText != "" {
-			if id, err := strconv.ParseInt(idText, 10, 64); err == nil && id > 0 {
-				selectedAccountID = id
-			}
-		}
-	}
-
 	message := strings.TrimSpace(c.Query("message"))
 	msgOK := c.Query("status") == "ok"
 	if c.Request.Method == http.MethodPost {
 		action := strings.TrimSpace(c.PostForm("action"))
-		if action == "" {
-			if strings.TrimSpace(c.PostForm("id")) != "" {
-				action = "delete"
-			} else if strings.TrimSpace(c.PostForm("account_id")) != "" {
-				action = "refresh_dialogs"
-			}
+		if action == "" && strings.TrimSpace(c.PostForm("id")) != "" {
+			action = "delete"
 		}
 		switch action {
 		case "delete":
@@ -1023,55 +1002,12 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 				message = "已删除账号。"
 				msgOK = true
 			}
-		case "refresh_dialogs":
-			if selectedAccountID <= 0 {
-				message = "请先选择账号。"
-				break
-			}
-			if _, err := store.GetTGAccountByID(h.dbConn, username, selectedAccountID); err != nil {
-				message = "账号不存在或不属于当前用户。"
-				break
-			}
-
-			settings, err := store.GetSettings(h.dbConn, []string{"telegram_api_id", "telegram_api_hash", "tg_all_proxy"})
-			if err != nil {
-				message = "读取 API 配置失败。"
-				break
-			}
-			apiIDText := strings.TrimSpace(settings["telegram_api_id"])
-			apiHash := strings.TrimSpace(settings["telegram_api_hash"])
-			allProxy := strings.TrimSpace(settings["tg_all_proxy"])
-			apiID, err := strconv.Atoi(apiIDText)
-			if err != nil || apiHash == "" {
-				message = "请先在 API 设置里配置 Telegram API ID/Hash。"
-				break
-			}
-
-			ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
-			defer cancel()
-			n, msg := tg.RefreshDialogs(ctx, h.dbConn, username, selectedAccountID, apiID, apiHash, allProxy, nil)
-			if msg != "ok" {
-				message = "刷新失败：" + msg
-				break
-			}
-			migrated, migrateErr := tg.NormalizeStoredTargetsByDialogs(h.dbConn, username, selectedAccountID)
-			if migrateErr != nil {
-				message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。任务迁移失败：%s", n, migrateErr.Error())
-				break
-			}
-			if migrated > 0 {
-				message = fmt.Sprintf("已刷新会话列表：%d 条，已迁移 %d 条任务目标为会话ID。", n, migrated)
-				msgOK = true
-			} else {
-				message = fmt.Sprintf("已刷新会话列表：%d 条（已保存会话ID）。", n)
-				msgOK = true
-			}
 		default:
 			message = "未知操作。"
 		}
-		redirectURL := fmt.Sprintf("/tg/accounts?account_id=%d", selectedAccountID)
+		redirectURL := "/tg/accounts"
 		if message != "" {
-			redirectURL += "&message=" + url.QueryEscape(message)
+			redirectURL += "?message=" + url.QueryEscape(message)
 			if msgOK {
 				redirectURL += "&status=ok"
 			}
@@ -1080,21 +1016,11 @@ func (h *Handler) tgAccounts(c *gin.Context) {
 		return
 	}
 
-	dialogs := []store.TGDialog{}
-	if selectedAccountID > 0 {
-		if d, err := store.ListTGDialogs(h.dbConn, selectedAccountID); err == nil {
-			dialogs = d
-		}
-	}
-
 	c.HTML(http.StatusOK, "tg_accounts.html", gin.H{
-		"Title":             "TG 账号管理",
-		"Message":           message,
-		"MsgOK":             msgOK,
-		"Accounts":          accounts,
-		"HasAccounts":       len(accounts) > 0,
-		"SelectedAccountID": selectedAccountID,
-		"Dialogs":           dialogs,
+		"Title":    "TG 账号管理",
+		"Message":  message,
+		"MsgOK":    msgOK,
+		"Accounts": accounts,
 	})
 }
 
