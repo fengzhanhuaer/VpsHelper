@@ -367,6 +367,21 @@
             modelSelect.value = savedModel;
         }
 
+        // Auto-save model selection whenever it changes
+        modelSelect.addEventListener("change", async () => {
+            try {
+                await fetch("/api/ai/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        api_key:       apiKeyInput.value.trim(),
+                        model:         modelSelect.value,
+                        system_prompt: systemPromptInput.value.trim(),
+                    }),
+                });
+            } catch (_) { /* silent */ }
+        });
+
         // Collapse settings panel if API key already saved
         if (apiKeyInput.value.trim() !== "") {
             settingsBody.classList.add("hidden");

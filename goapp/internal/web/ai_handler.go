@@ -22,6 +22,11 @@ type AIResponse struct {
 			} `json:"parts"`
 		} `json:"content"`
 	} `json:"candidates"`
+	UsageMetadata struct {
+		PromptTokenCount     int `json:"promptTokenCount"`
+		CandidatesTokenCount int `json:"candidatesTokenCount"`
+		TotalTokenCount      int `json:"totalTokenCount"`
+	} `json:"usageMetadata"`
 	Error struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
@@ -33,6 +38,8 @@ type GeminiModelsResponse struct {
 	Models []struct {
 		Name                       string   `json:"name"`
 		DisplayName                string   `json:"displayName"`
+		InputTokenLimit            int      `json:"inputTokenLimit"`
+		OutputTokenLimit           int      `json:"outputTokenLimit"`
 		SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
 	} `json:"models"`
 	Error struct {
@@ -49,11 +56,19 @@ type ChatRequest struct {
 	SystemPrompt string `json:"system_prompt"`
 }
 
+// TokenUsage holds token count info from a single API call
+type TokenUsage struct {
+	PromptTokens    int `json:"prompt_tokens"`
+	ResponseTokens  int `json:"response_tokens"`
+	TotalTokens     int `json:"total_tokens"`
+}
+
 // ChatResponse represents the response to send to frontend
 type ChatResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-	Error   string `json:"error,omitempty"`
+	Success bool        `json:"success"`
+	Message string      `json:"message"`
+	Usage   *TokenUsage `json:"usage,omitempty"`
+	Error   string      `json:"error,omitempty"`
 }
 
 // aiAssistant handles the AI assistant page
@@ -137,7 +152,7 @@ func (h *Handler) aiChat(c *gin.Context) {
 	}
 
 	// Call Google AI API
-	response, err := callGoogleAI(req.APIKey, req.Model, req.Message, req.SystemPrompt)
+	response, usage, err := callGoogleAI(req.APIKey, req.Model, req.Message, req.SystemPrompt)
 	if err != nil {
 		c.JSON(http.StatusOK, ChatResponse{
 			Success: false,
@@ -149,11 +164,12 @@ func (h *Handler) aiChat(c *gin.Context) {
 	c.JSON(http.StatusOK, ChatResponse{
 		Success: true,
 		Message: response,
+		Usage:   usage,
 	})
 }
 
 // callGoogleAI calls the Google Generative AI API
-func callGoogleAI(apiKey, model, message, systemPrompt string) (string, error) {
+func callGoogleAI(apiKey, model, message, systemPrompt string) (string, *TokenUsage, error) {
 	// Build the request URL
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
 
@@ -180,13 +196,13 @@ func callGoogleAI(apiKey, model, message, systemPrompt string) (string, error) {
 	// Marshal to JSON
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	// Create HTTP request
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -195,38 +211,44 @@ func callGoogleAI(apiKey, model, message, systemPrompt string) (string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// Parse response
 	var aiResp AIResponse
 	err = json.Unmarshal(body, &aiResp)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+		return "", nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	// Check for API errors
 	if aiResp.Error.Code != 0 {
-		return "", fmt.Errorf("API error: %s", aiResp.Error.Message)
+		return "", nil, fmt.Errorf("API error: %s", aiResp.Error.Message)
 	}
 
 	// Extract text from response
 	if len(aiResp.Candidates) == 0 {
-		return "", fmt.Errorf("no response from AI")
+		return "", nil, fmt.Errorf("no response from AI")
 	}
 
 	if len(aiResp.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("no text in response")
+		return "", nil, fmt.Errorf("no text in response")
 	}
 
-	return strings.TrimSpace(aiResp.Candidates[0].Content.Parts[0].Text), nil
+	usage := &TokenUsage{
+		PromptTokens:   aiResp.UsageMetadata.PromptTokenCount,
+		ResponseTokens: aiResp.UsageMetadata.CandidatesTokenCount,
+		TotalTokens:    aiResp.UsageMetadata.TotalTokenCount,
+	}
+
+	return strings.TrimSpace(aiResp.Candidates[0].Content.Parts[0].Text), usage, nil
 }
 
 // getAvailableModels fetches the real model list from Gemini API.
@@ -240,8 +262,10 @@ func (h *Handler) getAvailableModels(c *gin.Context) {
 	}
 
 	type ModelInfo struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
+		ID               string `json:"id"`
+		Name             string `json:"name"`
+		InputTokenLimit  int    `json:"input_token_limit"`
+		OutputTokenLimit int    `json:"output_token_limit"`
 	}
 
 	if apiKey == "" {
@@ -287,7 +311,12 @@ func (h *Handler) getAvailableModels(c *gin.Context) {
 				if name == "" {
 					name = id
 				}
-				models = append(models, ModelInfo{ID: id, Name: name})
+				models = append(models, ModelInfo{
+					ID:               id,
+					Name:             name,
+					InputTokenLimit:  m.InputTokenLimit,
+					OutputTokenLimit: m.OutputTokenLimit,
+				})
 				break
 			}
 		}
