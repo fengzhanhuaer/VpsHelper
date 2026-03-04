@@ -90,21 +90,21 @@
             <a href="/probe/node/detail?id={{ .Node.ID }}" target="manage_frame" id="tab-detail" class="{{ if $isDetail }}active{{ end }}" onclick="switchTab('tab-detail')">详情页</a>
             <a href="/probe/node/shell?id={{ .Node.ID }}" target="manage_frame" id="tab-shell" class="{{ if $isShell }}active{{ end }}" onclick="switchTab('tab-shell')">远程 Shell</a>
             <a href="/probe/node/log?id={{ .Node.ID }}" target="manage_frame" id="tab-log" class="{{ if $isLog }}active{{ end }}" onclick="switchTab('tab-log')">探针日志</a>
-            
-            <h4 style="margin: 20px 0 6px 0; padding: 0 10px; color: var(--color-text-muted); font-size: 0.85rem;">快捷操作</h4>
-            <div style="display:flex; flex-direction:column; gap:8px;">
-                <form method="post" action="/probe/node/manage" style="margin:0;">
-                    <input type="hidden" name="id" value="{{ .Node.ID }}" />
-                    <input type="hidden" name="tab" value="{{ .Tab }}" />
-                    <button class="ghost" style="width:100%; text-align:left; padding:10px 16px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; color: #2563eb; cursor:pointer;" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')">🚀 升级探针</button>
-                </form>
-                <button class="ghost" style="width:100%; text-align:left; padding:10px 16px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; cursor:pointer;" type="button" onclick="openEditModal('{{.Node.ID}}', '{{.Node.Name}}', '{{.Node.Note}}', '{{.Node.Vendor}}', '{{.Node.VendorUrl}}', '{{.Node.Price}}', '{{.Node.ExpiredAt}}', '{{.Node.ReportInterval}}')">⚙️ 节点设置</button>
-            </div>
-
             <a href="/probe/nodes" style="margin-top: 20px; background: transparent; color: var(--color-text-muted); border-color: transparent;">&larr; 返回列表</a>
         </div>
         
-        <iframe name="manage_frame" src="/probe/node/{{ if $isShell }}shell{{ else if $isLog }}log{{ else }}detail{{ end }}?id={{ .Node.ID }}" class="content-frame" onload="resizeIframe(this)"></iframe>
+        <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+            <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center; margin-bottom: 12px; padding: 12px; background: var(--color-bg-alt); border-radius: var(--radius); border: 1px solid var(--color-border);">
+                <span style="margin-right: auto; font-weight: bold; color: var(--color-text-muted);">快捷操作</span>
+                <form method="post" action="/probe/node/manage" style="margin:0;">
+                    <input type="hidden" name="id" value="{{ .Node.ID }}" />
+                    <input type="hidden" name="tab" value="{{ .Tab }}" />
+                    <button class="ghost" style="padding:6px 12px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; color: #2563eb; cursor:pointer;" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')">🚀 升级探针</button>
+                </form>
+                <button class="ghost" style="padding:6px 12px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; cursor:pointer;" type="button" onclick="openEditModal('{{.Node.ID}}', '{{.Node.Name}}', '{{.Node.Note}}', '{{.Node.Vendor}}', '{{.Node.VendorUrl}}', '{{.Node.Price}}', '{{.Node.ExpiredAt}}', '{{.Node.ReportInterval}}')">⚙️ 节点设置</button>
+            </div>
+            <iframe name="manage_frame" src="/probe/node/{{ if $isShell }}shell{{ else if $isLog }}log{{ else }}detail{{ end }}?id={{ .Node.ID }}" class="content-frame" onload="resizeIframe(this)" style="width: 100%;"></iframe>
+        </div>
     </main>
 
     <!-- Modal for Settings -->
