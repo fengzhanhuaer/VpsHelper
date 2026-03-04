@@ -3,6 +3,7 @@ package cloudflare
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -90,6 +91,83 @@ func TriggerProbeDDNS(dbConn *sql.DB) string {
 	return ""
 }
 
+// TriggerNodeDDNS forces an immediate update of all online nodes' DDNS records
+func TriggerNodeDDNS(dbConn *sql.DB) string {
+	keys := []string{"cf_api_token", "cf_account_id", "probe_node_ddns_domain"}
+	settings, err := store.GetSettings(dbConn, keys)
+	if err != nil {
+		return "读取设置失败: " + err.Error()
+	}
+
+	cfToken := strings.TrimSpace(settings["cf_api_token"])
+	if cfToken == "" {
+		return "Cloudflare API Token 未配置"
+	}
+
+	nodeDDNSDomain := strings.TrimSpace(settings["probe_node_ddns_domain"])
+	if nodeDDNSDomain == "" {
+		return "未配置节点 DDNS 主域名"
+	}
+
+	accountID := strings.TrimSpace(settings["cf_account_id"])
+	tempClient := NewAPIClient(cfToken, accountID, "")
+
+	ddnsZoneID := ""
+	if id, err := tempClient.LookupZoneID(nodeDDNSDomain); err == nil && id != "" {
+		ddnsZoneID = id
+	}
+
+	if ddnsZoneID == "" {
+		return "无法确定域名对应的 Cloudflare Zone ID"
+	}
+
+	client := NewAPIClient(cfToken, accountID, ddnsZoneID)
+
+	nodes, err := store.ListProbeNodes(dbConn)
+	if err != nil {
+		return "获取节点列表失败"
+	}
+
+	count := 0
+	for _, n := range nodes {
+		if !n.Online || len(n.IPInfos) == 0 {
+			continue
+		}
+
+		var ips PublicIPs
+		for _, ipInfo := range n.IPInfos {
+			if strings.Contains(ipInfo.Raw, ":") {
+				if ips.IPv6 == "" {
+					ips.IPv6 = ipInfo.Raw
+				}
+			} else {
+				if ips.IPv4 == "" {
+					ips.IPv4 = ipInfo.Raw
+				}
+			}
+		}
+
+		if ips.IPv4 == "" && ips.IPv6 == "" {
+			continue
+		}
+
+		// clear last ip cache to force update
+		cacheKey := fmt.Sprintf("node_ddns_last_ip_%d", n.ID)
+		_ = store.SetLocalSetting(cacheKey, "")
+
+		subDomain := fmt.Sprintf("ddnsgo_%d.%s", n.ID, nodeDDNSDomain)
+		if err := client.SyncDDNSRecord(subDomain, ips); err != nil {
+			log.Printf("[ddns] TriggerNodeDDNS node %d failed: %v", n.ID, err)
+		} else {
+			_ = store.SetLocalSetting(cacheKey, ips.IPv4+"|"+ips.IPv6)
+			count++
+		}
+	}
+
+	log.Printf("[ddns] TriggerNodeDDNS updated %d nodes", count)
+	return ""
+}
+
 // domainIPKey computes a stable string representing the current resolved IPs
 // of all hostnames in a list of IP/CIDR/domain entries.
 // Pure IPs are skipped (stable); only domains are resolved and included.
@@ -141,7 +219,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 		"cf_api_token", "cf_account_id", "cf_zone_id", "cf_zone_domain",
 		"cf_allow_ips", "cf_policy_id",
 		"cf_block_ips", "cf_block_uris",
-		"probe_ddns_domain",
+		"probe_ddns_domain", "probe_node_ddns_domain",
 	}
 	settings, err := store.GetSettings(dbConn, keys)
 	if err != nil {
@@ -247,6 +325,62 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 				} else {
 					_ = store.SetLocalSetting("probe_ddns_last_ip", currentIPKey)
 					log.Printf("[ddns-watch] probe DDNS updated for %s: v4=%s, v6=%s", probeDDNSDomain, ips.IPv4, ips.IPv6)
+				}
+			}
+		}
+	}
+
+	// ── 4. Nodes Auto DDNS (ddnsgo_{ID}.domain) ────────────
+	nodeDDNSDomain := strings.TrimSpace(settings["probe_node_ddns_domain"])
+	if nodeDDNSDomain != "" && cfToken != "" {
+		ddnsZoneID := ""
+		tempClient := NewAPIClient(cfToken, accountID, "")
+
+		if id, err := tempClient.LookupZoneID(nodeDDNSDomain); err == nil && id != "" {
+			ddnsZoneID = id
+		}
+
+		if ddnsZoneID != "" {
+			ddnsClient := NewAPIClient(cfToken, accountID, ddnsZoneID)
+			
+			nodes, err := store.ListProbeNodes(dbConn)
+			if err == nil {
+				for _, n := range nodes {
+					if !n.Online || len(n.IPInfos) == 0 {
+						continue
+					}
+					
+					var ips PublicIPs
+					for _, ipInfo := range n.IPInfos {
+						if strings.Contains(ipInfo.Raw, ":") {
+							if ips.IPv6 == "" {
+								ips.IPv6 = ipInfo.Raw
+							}
+						} else {
+							if ips.IPv4 == "" {
+								ips.IPv4 = ipInfo.Raw
+							}
+						}
+					}
+					
+					if ips.IPv4 == "" && ips.IPv6 == "" {
+						continue
+					}
+					
+					currentIPKey := ips.IPv4 + "|" + ips.IPv6
+					cacheKey := fmt.Sprintf("node_ddns_last_ip_%d", n.ID)
+					lastIPKey := store.GetLocalSetting(cacheKey)
+
+					if currentIPKey != "|" && currentIPKey != lastIPKey {
+						subDomain := fmt.Sprintf("ddnsgo_%d.%s", n.ID, nodeDDNSDomain)
+						err := ddnsClient.SyncDDNSRecord(subDomain, ips)
+						if err != nil {
+							log.Printf("[ddns-watch] node %d DDNS sync failed: %v", n.ID, err)
+						} else {
+							_ = store.SetLocalSetting(cacheKey, currentIPKey)
+							log.Printf("[ddns-watch] node %d DDNS updated for %s: v4=%s, v6=%s", n.ID, subDomain, ips.IPv4, ips.IPv6)
+						}
+					}
 				}
 			}
 		}

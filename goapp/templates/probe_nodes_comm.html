@@ -47,6 +47,24 @@
                 </form>
             </div>
 
+            <!-- 节点自动 DDNS 设置 -->
+            <div class="panel" style="margin-bottom: 24px; border: 1px solid #ddd;">
+                <h3 style="margin-top:0;">探针节点纯净 DDNS</h3>
+                <p class="muted" style="margin-top:-5px; margin-bottom: 12px; font-size: 0.9em;">
+                    填写托管在 Cloudflare 的主域名。系统将自动为所有在线探针下发维护 DDNS 记录，格式通常为 <code>ddnsgo_{节点ID}.主域名</code>。
+                </p>
+                <form method="post" action="/probe/nodes/comm" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div class="field">
+                        <label>节点 DDNS 主域名</label>
+                        <input name="probe_node_ddns_domain" value="{{ .NodeDDNSDomain }}" placeholder="例如：example.com（留空则关闭该功能）" />
+                        <div class="muted">必须是有效接入到您账户中 Cloudflare API 所绑定的同一主域名</div>
+                    </div>
+                    <div>
+                        <button class="btn" type="submit" name="action" value="save_node_ddns_settings">保存节点 DDNS 设置</button>
+                    </div>
+                </form>
+            </div>
+
             <!-- 探针通信地址配置 -->
             <div class="panel" style="margin-bottom: 24px; border: 1px solid #ddd;">
                 <h3 style="margin-top:0;">WebSocket 通信设置 (双端口隔离)</h3>

@@ -297,6 +297,16 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				go tunnel.RequestCertificate(h.dbConn, addressIn)
 				message += " | 正在后台申请 TLS 证书，请稍后刷新查看状态。"
 			}
+
+		case "save_node_ddns_settings":
+			nodeDDNSDomain := strings.TrimSpace(c.PostForm("probe_node_ddns_domain"))
+			_ = store.SetSetting(h.dbConn, "probe_node_ddns_domain", nodeDDNSDomain)
+
+			message = "探针节点 DDNS 设置已保存。"
+			msgOK = true
+
+			// Optional: Trigger immediately in a goroutine
+			go cloudflare.TriggerNodeDDNS(h.dbConn)
 		}
 	}
 
@@ -304,7 +314,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"probe_private_port", "probe_public_address", "probe_ddns_domain",
 		"probe_history_days", "probe_auto_tls",
 		"probe_tls_cert_status", "probe_tls_cert_error", "probe_tls_cert_updated_at",
-		"probe_master_address",
+		"probe_master_address", "probe_node_ddns_domain",
 	})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "加载设置失败")
@@ -325,6 +335,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	certReqError := settings["probe_tls_cert_error"]
 	certReqAt := settings["probe_tls_cert_updated_at"]
 	masterAddress := settings["probe_master_address"]
+	nodeDDNSDomain := settings["probe_node_ddns_domain"]
 
 	// 读取证书详细状态
 	certInfo := tunnel.GetCertInfo(h.dbConn)
@@ -374,6 +385,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"CertReqAt":     certReqAt,
 		"HistoryDays":   historyDays,
 		"MasterAddress": masterAddress,
+		"NodeDDNSDomain": nodeDDNSDomain,
 	})
 }
 
