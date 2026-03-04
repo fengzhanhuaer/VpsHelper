@@ -53,14 +53,37 @@
         <nav>
             <a class="ghost" href="/probe/nodes" style="color:var(--color-primary); font-weight:bold;">探针管理</a>
             <a class="ghost" href="/probe/dashboard">探针监视</a>
-            <a class="ghost" href="/home">返回主菜单</a>
+            <a class="ghost" href="/home" target="_blank">主页</a>
             <a class="ghost" href="/logout">退出登录</a>
         </nav>
     </header>
     
-    <main class="layout-container">
+    <main class="layout-container" style="position: relative;">
+        {{ if .Message }}
+        <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); z-index: 1000; padding: 10px 20px; border-radius: 8px; font-weight: bold; {{ if .MsgOK }}background: #d3f9d8; color: #2b8a3e;{{ else }}background: #ffe3e3; color: #9b1c1c;{{ end }} box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            {{ .Message }}
+        </div>
+        <script>
+            setTimeout(() => {
+                const msgDiv = document.querySelector('div[style*="transform: translateX(-50%)"]');
+                if (msgDiv) {
+                    msgDiv.style.opacity = '1';
+                    msgDiv.style.transition = 'opacity 0.5s ease-out';
+                    msgDiv.style.opacity = '0';
+                    setTimeout(() => msgDiv.remove(), 500);
+                }
+            }, 3000);
+        </script>
+        {{ end }}
         <div class="sidebar">
-            <h3 style="margin: 0 0 10px 0; padding: 0 10px;">{{ .Node.Name }}</h3>
+            <h3 style="margin: 0 0 6px 0; padding: 0 10px; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ .Node.Name }}">{{ .Node.Name }}</h3>
+            {{ if gt (len .AllNodes) 1 }}
+            <select id="node-switcher" style="width:100%; padding:6px 8px; border-radius:6px; border:1px solid #ddd; font:inherit; font-size:0.85rem; cursor:pointer; margin-bottom:4px; box-sizing:border-box;" onchange="switchNode(this.value)">
+                {{ range .AllNodes }}
+                <option value="{{ .ID }}" {{ if eq .ID $.Node.ID }}selected{{ end }}>{{ .Name }}</option>
+                {{ end }}
+            </select>
+            {{ end }}
             {{ $isShell := eq .Tab "shell" }}
             {{ $isLog := eq .Tab "log" }}
             {{ $isDetail := and (not $isShell) (not $isLog) }}
@@ -68,13 +91,99 @@
             <a href="/probe/node/shell?id={{ .Node.ID }}" target="manage_frame" id="tab-shell" class="{{ if $isShell }}active{{ end }}" onclick="switchTab('tab-shell')">远程 Shell</a>
             <a href="/probe/node/log?id={{ .Node.ID }}" target="manage_frame" id="tab-log" class="{{ if $isLog }}active{{ end }}" onclick="switchTab('tab-log')">探针日志</a>
             
+            <h4 style="margin: 20px 0 6px 0; padding: 0 10px; color: var(--color-text-muted); font-size: 0.85rem;">快捷操作</h4>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <form method="post" action="/probe/node/manage" style="margin:0;">
+                    <input type="hidden" name="id" value="{{ .Node.ID }}" />
+                    <input type="hidden" name="tab" value="{{ .Tab }}" />
+                    <button class="ghost" style="width:100%; text-align:left; padding:10px 16px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; color: #2563eb; cursor:pointer;" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')">🚀 升级探针</button>
+                </form>
+                <button class="ghost" style="width:100%; text-align:left; padding:10px 16px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; cursor:pointer;" type="button" onclick="openEditModal('{{.Node.ID}}', '{{.Node.Name}}', '{{.Node.Note}}', '{{.Node.Vendor}}', '{{.Node.VendorUrl}}', '{{.Node.Price}}', '{{.Node.ExpiredAt}}', '{{.Node.ReportInterval}}')">⚙️ 节点设置</button>
+            </div>
+
             <a href="/probe/nodes" style="margin-top: 20px; background: transparent; color: var(--color-text-muted); border-color: transparent;">&larr; 返回列表</a>
         </div>
         
         <iframe name="manage_frame" src="/probe/node/{{ if $isShell }}shell{{ else if $isLog }}log{{ else }}detail{{ end }}?id={{ .Node.ID }}" class="content-frame" onload="resizeIframe(this)"></iframe>
     </main>
 
+    <!-- Modal for Settings -->
+    <div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+        <div class="panel" style="width:500px; max-width:90%; padding:24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); background: var(--color-bg);">
+            <h3 style="margin-top:0;">节点设置</h3>
+            <form method="post" action="/probe/node/manage" style="display: flex; flex-direction: column; gap: 12px;">
+                <input type="hidden" name="id" id="edit-id" value="" />
+                <input type="hidden" name="tab" value="{{ .Tab }}" />
+                
+                <div class="field">
+                    <label>节点名称(必填)</label>
+                    <input type="text" name="name" id="edit-name" required style="width:100%; padding:6px; border-radius:4px; border:1px solid var(--color-border); box-sizing:border-box; font:inherit;" />
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="field" style="flex: 1;">
+                        <label>厂商</label>
+                        <input type="text" name="vendor" id="edit-vendor" placeholder="如：搬瓦工" style="width:100%; padding:6px; border-radius:4px; border:1px solid var(--color-border); box-sizing:border-box; font:inherit;" />
+                    </div>
+                    <div class="field" style="flex: 1;">
+                        <label>厂商链接</label>
+                        <input type="url" name="vendor_url" id="edit-vendor-url" placeholder="可选：包含 http://" style="width:100%; padding:6px; border-radius:4px; border:1px solid var(--color-border); box-sizing:border-box; font:inherit;" />
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="field" style="flex: 2;">
+                        <label>价格设置</label>
+                        <div style="display: flex; gap: 4px;">
+                            <select name="price_currency" id="edit-price-currency" style="width: auto; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit; background: var(--color-bg);">
+                                <option value="¥">¥ (CNY)</option>
+                                <option value="$">$ (USD)</option>
+                                <option value="€">€ (EUR)</option>
+                                <option value="£">£ (GBP)</option>
+                                <option value="₽">₽ (RUB)</option>
+                                <option value="HK$">HK$</option>
+                                <option value="NT$">NT$</option>
+                                <option value="">无</option>
+                            </select>
+                            <input type="number" step="0.01" name="price_amount" id="edit-price-amount" placeholder="金额" style="flex: 1; min-width: 60px; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit;" />
+                            <select name="price_period" id="edit-price-period" style="width: auto; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border); font: inherit; background: var(--color-bg);">
+                                <option value="/年">/ 年</option>
+                                <option value="/季">/ 季</option>
+                                <option value="/月">/ 月</option>
+                                <option value="/日">/ 日</option>
+                                <option value="/三年">/ 三年</option>
+                                <option value="/五年">/ 五年</option>
+                                <option value="">一次性</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field" style="flex: 1;">
+                        <label>到期时间</label>
+                        <input type="date" name="expired_at" id="edit-expired" style="width:100%; padding:6px; border-radius:4px; border:1px solid var(--color-border); box-sizing:border-box; font:inherit;" />
+                    </div>
+                </div>
+                <div class="field">
+                    <label>汇报周期(秒)</label>
+                    <input type="number" name="report_interval" id="edit-interval" min="1" max="3600" required style="width:100%; padding:6px; border-radius:4px; border:1px solid var(--color-border); box-sizing:border-box; font:inherit;" />
+                </div>
+                <div class="field">
+                    <label>备注名</label>
+                    <input type="text" name="note" id="edit-note" style="width:100%; padding:6px; border-radius:4px; border:1px solid var(--color-border); box-sizing:border-box; font:inherit;" />
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                    <button type="button" class="ghost" onclick="closeEditModal()" style="padding:6px 12px; border-radius:4px; border:1px solid var(--color-border); cursor:pointer;">取消</button>
+                    <button class="btn" type="submit" name="action" value="edit" style="padding:6px 12px; border-radius:4px; border:none; background:var(--color-primary); color:#fff; cursor:pointer;">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        function switchNode(nodeId) {
+            const currentTab = new URLSearchParams(window.location.search).get('tab') || 'detail';
+            const newUrl = '/probe/node/manage?id=' + nodeId + '&tab=' + currentTab;
+            window.location.href = newUrl;
+        }
+
         function switchTab(tabId) {
             document.querySelectorAll('.sidebar a[id^="tab-"]').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
@@ -98,6 +207,52 @@
                  resizeIframe(iframe);
             }
         }, 1000);
+
+        function openEditModal(id, name, note, vendor, vendorUrl, price, expiredAt, interval) {
+            document.getElementById('edit-id').value = id;
+            document.getElementById('edit-name').value = name;
+            document.getElementById('edit-note').value = note;
+            document.getElementById('edit-vendor').value = vendor;
+            document.getElementById('edit-vendor-url').value = vendorUrl;
+            
+            let currency = "¥";
+            let amount = "";
+            let period = "/年";
+            
+            if (price) {
+                let currMatch = price.match(/^(¥|\$|€|£|₽|HK\$|NT\$)/u);
+                if (currMatch) {
+                    currency = currMatch[1];
+                    price = price.substring(currency.length).trim();
+                } else {
+                    currency = "";
+                }
+                
+                let periodMatch = price.match(/(\/年|\/月|\/日|\/季|\/三年|\/五年|\/yr|\/mo|\/day)$/u);
+                if (periodMatch) {
+                    period = periodMatch[1];
+                    if (period === "/yr") period = "/年";
+                    if (period === "/mo") period = "/月";
+                    if (period === "/day") period = "/日";
+                    price = price.substring(0, price.indexOf(periodMatch[1])).trim();
+                } else {
+                    period = "";
+                }
+                amount = price;
+            }
+            
+            document.getElementById('edit-price-currency').value = currency;
+            document.getElementById('edit-price-amount').value = amount;
+            document.getElementById('edit-price-period').value = period;
+            document.getElementById('edit-expired').value = expiredAt;
+            document.getElementById('edit-interval').value = interval;
+            
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
     </script>
 </body>
 </html>

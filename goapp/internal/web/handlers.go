@@ -140,6 +140,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/probe/nodes/deleted", h.probeNodesDeleted)
 	router.POST("/probe/nodes/deleted", h.probeNodesDeleted)
 	router.GET("/probe/node/manage", h.probeNodeManage)
+	router.POST("/probe/node/manage", h.probeNodeManage)
 	router.GET("/probe/node/detail", h.probeNodeDetail)
 	router.GET("/probe/node/shell", h.probeNodeShell)
 	router.POST("/probe/node/shell/exec", h.probeNodeShellExec)

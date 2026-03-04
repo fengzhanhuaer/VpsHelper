@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -716,6 +717,87 @@ func (h *Handler) probeNodeManage(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
+
+	// ── Handle POST quick-actions ────────────────────────────────
+	if c.Request.Method == http.MethodPost {
+		idStr := c.PostForm("id")
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil || id <= 0 {
+			c.String(http.StatusBadRequest, "invalid node id")
+			return
+		}
+		tab := c.PostForm("tab")
+		if tab == "" {
+			tab = "detail"
+		}
+		action := c.PostForm("action")
+		var msg string
+		var ok bool
+
+		switch action {
+		case "upgrade":
+			scheme := "http"
+			if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" || c.GetHeader("Cf-Visitor") != "" {
+				scheme = "https"
+			}
+			baseURL := fmt.Sprintf("%s://%s", scheme, c.Request.Host)
+			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address"})
+			if ma := strings.TrimRight(settings["probe_master_address"], "/"); ma != "" {
+				if !strings.HasPrefix(ma, "http://") && !strings.HasPrefix(ma, "https://") {
+					ma = "https://" + ma
+				}
+				baseURL = ma
+			}
+			node, err := store.GetProbeNodeByID(h.dbConn, id)
+			if err != nil {
+				msg = "节点不存在"
+			} else {
+				payload := map[string]string{"secret": node.Secret, "host": baseURL}
+				if pushErr := tunnel.PushConfigToNode(id, "upgrade", payload); pushErr != nil {
+					msg = "探针当前不在线，请确保在线后再操作"
+				} else {
+					msg = "已下发升级指令，探针将自动重启更新"
+					ok = true
+				}
+			}
+
+		case "edit":
+			name := strings.TrimSpace(c.PostForm("name"))
+			if name == "" {
+				msg = "节点名称不能为空"
+				break
+			}
+			note := strings.TrimSpace(c.PostForm("note"))
+			vendor := strings.TrimSpace(c.PostForm("vendor"))
+			vendorUrl := strings.TrimSpace(c.PostForm("vendor_url"))
+			priceAmt := strings.TrimSpace(c.PostForm("price_amount"))
+			price := ""
+			if priceAmt != "" {
+				price = strings.TrimSpace(c.PostForm("price_currency") + priceAmt + c.PostForm("price_period"))
+			}
+			expiredAt := strings.TrimSpace(c.PostForm("expired_at"))
+			intervalVal, _ := strconv.Atoi(strings.TrimSpace(c.PostForm("report_interval")))
+			if intervalVal < 1 {
+				intervalVal = 60
+			}
+			if err := store.UpdateProbeNodeDetails(h.dbConn, id, name, note, vendor, vendorUrl, price, expiredAt, intervalVal); err != nil {
+				msg = "保存失败：" + err.Error()
+			} else {
+				msg = "节点设置已更新"
+				ok = true
+				tunnel.PushConfigToNode(id, "config", map[string]int{"report_interval": intervalVal})
+			}
+		}
+
+		redirectURL := fmt.Sprintf("/probe/node/manage?id=%d&tab=%s&msg=%s", id, tab, url.QueryEscape(msg))
+		if ok {
+			redirectURL += "&ok=1"
+		}
+		c.Redirect(http.StatusSeeOther, redirectURL)
+		return
+	}
+
+	// ── GET: render layout ───────────────────────────────────────
 	nodeIDStr := c.Query("id")
 	nodeID, err := strconv.ParseInt(nodeIDStr, 10, 64)
 	if err != nil || nodeID <= 0 {
@@ -733,12 +815,18 @@ func (h *Handler) probeNodeManage(c *gin.Context) {
 		tab = "detail"
 	}
 
+	allNodes, _ := store.ListProbeNodes(h.dbConn)
+
 	c.HTML(http.StatusOK, "probe_manage_layout.html", gin.H{
-		"Title": "单探针管理 - " + node.Name,
-		"Node":  node,
-		"Tab":   tab,
+		"Title":    "单探针管理 - " + node.Name,
+		"Node":     node,
+		"Tab":      tab,
+		"AllNodes": allNodes,
+		"Message":  c.Query("msg"),
+		"MsgOK":    c.Query("ok") == "1",
 	})
 }
+
 
 // probeNodeDetail renders the details specific to one node.
 func (h *Handler) probeNodeDetail(c *gin.Context) {

@@ -120,7 +120,7 @@
                                     
                                     <div class="actions" style="display: flex; flex-direction: column; gap: 8px;">
                                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                            <a href="/probe/node/manage?id={{.ID}}" target="_top" class="ghost btn-sm" style="text-decoration: none;">💻 单一管理</a>
+                                            <a href="/probe/node/manage?id={{.ID}}" target="_blank" class="ghost btn-sm" style="text-decoration: none;">💻 单一管理</a>
                                             <button class="ghost btn-sm" type="button" onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.VendorUrl}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}')">⚙️ 设置</button>
                                             <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-github-{{.ID}}')" title="从 GitHub 下载脚本">命令(直连)</button>
                                             <button class="ghost btn-sm" type="button" onclick="copyCmd('cmd-proxy-{{.ID}}')" title="从主控端代理下载脚本，解决 GitHub 污染问题">命令(代理)</button>
