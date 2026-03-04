@@ -215,11 +215,30 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				}
 			}
 
-		case "save_settings":
-			privatePort := strings.TrimSpace(c.PostForm("probe_private_port"))
-			addressIn := strings.TrimSpace(c.PostForm("probe_address"))
+		case "save_master_settings":
 			masterAddress := strings.TrimSpace(c.PostForm("probe_master_address"))
 			masterAddress = strings.TrimRight(masterAddress, "/") // 清理末尾反斜杠
+			
+			historyDays := strings.TrimSpace(c.PostForm("probe_history_days"))
+			if historyDays == "" {
+				historyDays = "90"
+			}
+
+			_ = store.SetSetting(h.dbConn, "probe_history_days", historyDays)
+			_ = store.SetSetting(h.dbConn, "probe_master_address", masterAddress)
+
+			message = "主控配置已保存。"
+			msgOK = true
+
+			// 向所有仍在线的探针热推送新的主控地址配置
+			if masterAddress != "" {
+				tunnel.PushConfigToAllNodes("update_master_address", map[string]string{"host": masterAddress})
+				message += "（已向在线探针下发新主控地址。）"
+			}
+
+		case "save_websocket_settings":
+			privatePort := strings.TrimSpace(c.PostForm("probe_private_port"))
+			addressIn := strings.TrimSpace(c.PostForm("probe_address"))
 			enableDDNS := c.PostForm("enable_ddns") == "on" || c.PostForm("enable_ddns") == "true"
 			enableAutoTLS := c.PostForm("enable_auto_tls") == "on" || c.PostForm("enable_auto_tls") == "true"
 
@@ -231,11 +250,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				ddnsDomain = addressIn
 			} else {
 				publicAddress = addressIn
-			}
-
-			historyDays := strings.TrimSpace(c.PostForm("probe_history_days"))
-			if historyDays == "" {
-				historyDays = "90"
 			}
 
 			// 如果关闭了自动 TLS，清除已存的证书状态
@@ -250,17 +264,9 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			_ = store.SetSetting(h.dbConn, "probe_private_port", privatePort)
 			_ = store.SetSetting(h.dbConn, "probe_public_address", publicAddress)
 			_ = store.SetSetting(h.dbConn, "probe_ddns_domain", ddnsDomain)
-			_ = store.SetSetting(h.dbConn, "probe_history_days", historyDays)
-			_ = store.SetSetting(h.dbConn, "probe_master_address", masterAddress)
 
-			message = "设置已保存，端口更改需重启服务生效。"
+			message = "WebSocket 通信设置已保存，端口更改需重启服务生效。"
 			msgOK = true
-
-			// 向所有仍在线的探针热推送新的主控地址配置
-			if masterAddress != "" {
-				tunnel.PushConfigToAllNodes("update_master_address", map[string]string{"host": masterAddress})
-				message += "（已向在线探针下发新主控地址。）"
-			}
 
 			// 自动协助放行专属通讯端口
 			pPortInt, _ := strconv.Atoi(privatePort)

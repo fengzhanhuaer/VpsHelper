@@ -22,6 +22,31 @@
             <div class="{{ if .MsgOK }}success{{ else }}error{{ end }}" style="margin-bottom: 16px;">{{ .Message }}</div>
             {{ end }}
 
+            <!-- 主控端设置 -->
+            <div class="panel" style="margin-bottom: 24px; border: 1px solid #ddd;">
+                <h3 style="margin-top:0;">主控配置</h3>
+                <p class="muted" style="margin-top:-5px; margin-bottom: 12px; font-size: 0.9em;">
+                    设置探针获取控制信息及状态数据本地化的核心配置。
+                </p>
+                <form method="post" action="/probe/nodes/comm" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <div class="field" style="flex: 2; min-width: 300px;">
+                            <label>主控地址</label>
+                            <input name="probe_master_address" value="{{ .ControllerAdminAddress }}" placeholder="例如：https://panel.example.com (留空则默认采用当前访问地址)" />
+                            <div class="muted">留空则默认采用当前浏览的域名。将在控制台中用作探针服务热更新的 host 依据</div>
+                        </div>
+                        <div class="field" style="flex: 1; min-width: 150px;">
+                            <label>历史数据保存天数</label>
+                            <input name="probe_history_days" value="{{ .HistoryDays }}" placeholder="默认：90" type="number" min="1" required />
+                            <div class="muted">探针的历史健康数据保存在本地数据库，设置自动清理周期</div>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn" type="submit" name="action" value="save_master_settings">保存主控配置</button>
+                    </div>
+                </form>
+            </div>
+
             <!-- 探针通信地址配置 -->
             <div class="panel" style="margin-bottom: 24px; border: 1px solid #ddd;">
                 <h3 style="margin-top:0;">WebSocket 通信设置 (双端口隔离)</h3>
@@ -51,18 +76,7 @@
                             <div class="muted">指定给探针拨号的高优先级地址；若填域名并勾选自动 TLS，私有端口将以 WSS 加密运行</div>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
-                        <div class="field" style="flex: 2; min-width: 300px;">
-                            <label>主控地址</label>
-                            <input name="controller_admin_address" value="{{ .ControllerAdminAddress }}" placeholder="例如：https://panel.example.com (留空则默认采用当前访问地址)" />
-                            <div class="muted">留空则默认采用当前浏览的域名。将在控制台中用作探针服务端的 host 参数</div>
-                        </div>
-                        <div class="field" style="flex: 1; min-width: 150px;">
-                            <label>历史数据保存天数</label>
-                            <input name="probe_history_days" value="{{ .HistoryDays }}" placeholder="默认：90" type="number" min="1" required />
-                            <div class="muted">探针的状态历史保存在本地，设置自动清理周期</div>
-                        </div>
-                    </div>
+
                     {{/* ── TLS 证书状态面板 ── */}}
                     {{ if .CertInfo }}
                     {{ if .CertInfo.IsValid }}
@@ -121,7 +135,7 @@
                     {{ end }}
 
                     <div>
-                        <button class="btn" type="submit" name="action" value="save_settings">保存设置并应用 (端口更改需重启生效)</button>
+                        <button class="btn" type="submit" name="action" value="save_websocket_settings">保存通信设置 (端口更改需重启生效)</button>
                     </div>
                 </form>
             </div>
