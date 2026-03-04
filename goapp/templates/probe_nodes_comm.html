@@ -32,7 +32,7 @@
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                         <div class="field" style="flex: 2; min-width: 300px;">
                             <label>主控地址</label>
-                            <input name="probe_master_address" value="{{ .ControllerAdminAddress }}" placeholder="例如：https://panel.example.com (留空则默认采用当前访问地址)" />
+                            <input name="probe_master_address" value="{{ .MasterAddress }}" placeholder="例如：https://panel.example.com (留空则默认采用当前访问地址)" />
                             <div class="muted">留空则默认采用当前浏览的域名。将在控制台中用作探针服务热更新的 host 依据</div>
                         </div>
                         <div class="field" style="flex: 1; min-width: 150px;">
