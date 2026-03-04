@@ -86,24 +86,31 @@
             {{ end }}
             {{ $isShell := eq .Tab "shell" }}
             {{ $isLog := eq .Tab "log" }}
-            {{ $isDetail := and (not $isShell) (not $isLog) }}
+            {{ $isAction := eq .Tab "action" }}
+            {{ $isDetail := and (not $isShell) (not $isLog) (not $isAction) }}
             <a href="/probe/node/detail?id={{ .Node.ID }}" target="manage_frame" id="tab-detail" class="{{ if $isDetail }}active{{ end }}" onclick="switchTab('tab-detail')">详情页</a>
             <a href="/probe/node/shell?id={{ .Node.ID }}" target="manage_frame" id="tab-shell" class="{{ if $isShell }}active{{ end }}" onclick="switchTab('tab-shell')">远程 Shell</a>
             <a href="/probe/node/log?id={{ .Node.ID }}" target="manage_frame" id="tab-log" class="{{ if $isLog }}active{{ end }}" onclick="switchTab('tab-log')">探针日志</a>
+            <a href="javascript:void(0);" id="tab-action" class="{{ if $isAction }}active{{ end }}" onclick="switchTab('tab-action')">快捷操作</a>
             <a href="/probe/nodes" style="margin-top: 20px; background: transparent; color: var(--color-text-muted); border-color: transparent;">&larr; 返回列表</a>
         </div>
         
         <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
-            <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center; margin-bottom: 12px; padding: 12px; background: var(--color-bg-alt); border-radius: var(--radius); border: 1px solid var(--color-border);">
-                <span style="margin-right: auto; font-weight: bold; color: var(--color-text-muted);">快捷操作</span>
-                <form method="post" action="/probe/node/manage" style="margin:0;">
-                    <input type="hidden" name="id" value="{{ .Node.ID }}" />
-                    <input type="hidden" name="tab" value="{{ .Tab }}" />
-                    <button class="ghost" style="padding:6px 12px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; color: #2563eb; cursor:pointer;" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')">🚀 升级探针</button>
-                </form>
-                <button class="ghost" style="padding:6px 12px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; cursor:pointer;" type="button" onclick="openEditModal('{{.Node.ID}}', '{{.Node.Name}}', '{{.Node.Note}}', '{{.Node.Vendor}}', '{{.Node.VendorUrl}}', '{{.Node.Price}}', '{{.Node.ExpiredAt}}', '{{.Node.ReportInterval}}')">⚙️ 节点设置</button>
+            <iframe id="manage_frame" name="manage_frame" src="/probe/node/{{ if $isShell }}shell{{ else if $isLog }}log{{ else }}detail{{ end }}?id={{ .Node.ID }}" class="content-frame" onload="resizeIframe(this)" style="width: 100%; {{ if $isAction }}display:none;{{ else }}display:block;{{ end }}"></iframe>
+            
+            <div id="action_container" style="padding: 24px; background: var(--color-bg-alt); border-radius: var(--radius); border: 1px solid var(--color-border); {{ if $isAction }}display:block;{{ else }}display:none;{{ end }}">
+                <h3 style="margin-top: 0; margin-bottom: 8px;">快捷操作</h3>
+                <p class="muted" style="margin-bottom: 24px;">管理该探针节点的高级或快捷操作功能。</p>
+                
+                <div style="display: flex; gap: 16px;">
+                    <form method="post" action="/probe/node/manage" style="margin:0;">
+                        <input type="hidden" name="id" value="{{ .Node.ID }}" />
+                        <input type="hidden" name="tab" value="action" />
+                        <button class="ghost" style="padding:16px 24px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; color: #2563eb; cursor:pointer;" type="submit" name="action" value="upgrade" onclick="return confirm('确认向该探针下发自动升级指令吗？')">🚀 升级探针</button>
+                    </form>
+                    <button class="ghost" style="padding:16px 24px; border:1px solid var(--color-border); border-radius:var(--radius); font-weight:bold; cursor:pointer;" type="button" onclick="openEditModal('{{.Node.ID}}', '{{.Node.Name}}', '{{.Node.Note}}', '{{.Node.Vendor}}', '{{.Node.VendorUrl}}', '{{.Node.Price}}', '{{.Node.ExpiredAt}}', '{{.Node.ReportInterval}}')">⚙️ 节点设置</button>
+                </div>
             </div>
-            <iframe name="manage_frame" src="/probe/node/{{ if $isShell }}shell{{ else if $isLog }}log{{ else }}detail{{ end }}?id={{ .Node.ID }}" class="content-frame" onload="resizeIframe(this)" style="width: 100%;"></iframe>
         </div>
     </main>
 
@@ -187,6 +194,18 @@
         function switchTab(tabId) {
             document.querySelectorAll('.sidebar a[id^="tab-"]').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
+            
+            let frame = document.getElementById('manage_frame');
+            let actionDiv = document.getElementById('action_container');
+            if (frame && actionDiv) {
+                if (tabId === 'tab-action') {
+                    frame.style.display = 'none';
+                    actionDiv.style.display = 'block';
+                } else {
+                    frame.style.display = 'block';
+                    actionDiv.style.display = 'none';
+                }
+            }
             
             // Rewrite URL context so that refresh stays on same tab
             let newTab = tabId.replace('tab-', '');
