@@ -1,4 +1,4 @@
-﻿/* VpsHelper – shared stylesheet */
+/* VpsHelper – shared stylesheet */
 
 :root {
     color-scheme: light;
@@ -167,4 +167,28 @@ td {
 th {
     color: var(--muted);
     font-weight: 600;
+}
+
+/* ── GitHub Promo ──────────────────────────────────────────────── */
+.github-promo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #24292e;
+    color: #fff;
+    border-radius: 999px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.github-promo:hover {
+    background: #000;
+    transform: translateY(-1px);
+}
+
+.github-promo svg {
+    fill: currentColor;
 }
