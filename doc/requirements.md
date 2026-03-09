@@ -1,4 +1,4 @@
-﻿## 探针 (Server Probe) 架构规划
+## 探针 (Server Probe) 架构规划
 
 ### 1. 分布式探针与服务发现 (Distributed Probe Architecture)
 - **探针独立部署**: 探针作为独立的被控端（Agent），运行在不暴露端口的内网或任意其他 VPS 上。
@@ -44,3 +44,54 @@
   - **v2rayN / NekoBox**: 非常纯粹且专业的 WebSocket 直连代理客户端，对上述衍生协议支持度极好。
 - **运行机制**: 
   - 通过控制板下发指令，任意公网探针即可瞬时开启 `Trojan over WebSocket` 监听，控制中心生成 `trojan://密码@探针IP:端口?security=tls&type=ws` 的标准订阅链接，本地 Windows 的 Clash 等软件导入即可无缝中继上网。
+
+---
+
+## 通用代理管理 需求规划
+
+> Draft v0.2 | 2026-03-09
+
+### 背景
+
+现有 `/tg/proxy` 仅为 Telegram 模块提供单条 `ALL_PROXY` 配置，本次新增**通用代理模块**与 TG 完全解耦，供所有模块（AI、Cloudflare、更新检测等）复用。
+
+### 层次 A — 代理池管理（优先）
+
+路由前缀 `/proxy`，支持多条代理地址的增删改查 + 连通性测速 + 全局默认选择。
+
+**数据库表（新）**:
+```sql
+CREATE TABLE proxies (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL,
+    url         TEXT    NOT NULL,           -- socks5://user:pass@host:port
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    is_default  INTEGER NOT NULL DEFAULT 0,
+    latency_ms  INTEGER,
+    tested_at   TEXT,
+    note        TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL
+);
+```
+
+**路由**:
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| GET | `/proxy` | 代理列表主页 |
+| POST | `/proxy/add` | 新增代理 |
+| POST | `/proxy/edit/:id` | 编辑代理 |
+| POST | `/proxy/delete/:id` | 删除代理 |
+| POST | `/proxy/test/:id` | 立即测速（JSON） |
+| POST | `/proxy/set_default/:id` | 设为全局默认 |
+
+### 层次 B — 全局出站代理注入（中期）
+
+在 `net/http` Transport 层统一注入全局默认代理，各模块（AI、CF）可在自身设置页单独覆盖。
+
+### 层次 C — 系统级代理软件管理（低优）
+
+在界面内管理 VPS 上 Xray / Sing-box 进程，包括启停、配置文件编辑、流量统计。需 root/sudo 权限，受限环境需给出 UI 提示。
+
+> **兼容性**：现有 `tg_all_proxy`（`app_settings` key）保留不动，新模块完全独立。
+
