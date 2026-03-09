@@ -1,0 +1,331 @@
+/* ============================================================
+   NetHelper — F7 全局样式
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+    --bg-base:    #0f1117;
+    --bg-panel:   #171923;
+    --bg-row:     #1a1f2e;
+    --bg-row-alt: #1e2436;
+    --bg-hover:   #252d42;
+    --bg-group:   #141929;
+
+    --accent:     #4c8ef7;
+    --accent-dim: rgba(76, 142, 247, 0.15);
+    --success:    #34d399;
+    --warning:    #fbbf24;
+    --danger:     #f87171;
+    --muted:      #4a5568;
+
+    --text-primary:   #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-muted:     #64748b;
+
+    --border:     rgba(255,255,255,0.07);
+    --border-acc: rgba(76,142,247,0.3);
+
+    --radius:   8px;
+    --radius-sm: 4px;
+
+    --font-ui:   'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    height: 100%;
+    font-family: var(--font-ui);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-size: 13px;
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ── 顶栏 ── */
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 16px;
+    height: 48px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    -webkit-app-region: drag;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    -webkit-app-region: no-drag;
+}
+
+.brand-icon { font-size: 18px; }
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    -webkit-app-region: no-drag;
+}
+
+#search-input {
+    background: var(--bg-row);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    padding: 5px 10px;
+    width: 220px;
+    outline: none;
+    transition: border-color .2s;
+}
+#search-input:focus { border-color: var(--accent); }
+#search-input::placeholder { color: var(--text-muted); }
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+}
+.toggle-label input[type=checkbox] { accent-color: var(--accent); }
+
+.status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background .3s;
+}
+.status-dot.ok   { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.status-dot.err  { background: var(--danger);  box-shadow: 0 0 6px var(--danger); }
+
+.status-text { font-size: 11px; color: var(--text-muted); }
+
+/* ── 主区域 ── */
+main {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+
+#connection-panel {
+    height: 100%;
+    overflow: auto;
+}
+
+/* ── 表格 ── */
+#conn-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+#conn-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    z-index: 10;
+}
+#conn-table thead th:hover { color: var(--text-primary); }
+#conn-table thead th.sort-asc::after  { content: ' ↑'; }
+#conn-table thead th.sort-desc::after { content: ' ↓'; }
+
+.col-expand { width: 28px; }
+.col-proc   { width: 18%; }
+.col-pid    { width: 7%; }
+.col-proto  { width: 7%; }
+.col-local  { width: 22%; }
+.col-remote { width: 28%; }
+.col-state  { width: 12%; }
+
+/* ── 分组行（进程行） ── */
+tr.group-row {
+    background: var(--bg-group);
+    border-bottom: 1px solid var(--border);
+}
+tr.group-row td {
+    padding: 6px 10px;
+    font-weight: 600;
+    color: var(--accent);
+    cursor: pointer;
+}
+tr.group-row:hover { background: var(--bg-hover); }
+
+.proc-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.proc-icon {
+    width: 16px; height: 16px;
+    border-radius: 3px;
+    background: var(--accent-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+.expand-btn {
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform .15s;
+}
+.expand-btn.open { transform: rotate(90deg); }
+
+.badge {
+    font-size: 10px;
+    font-weight: 700;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-radius: 10px;
+    padding: 1px 7px;
+    margin-left: auto;
+}
+
+/* ── 连接行 ── */
+tr.conn-row {
+    background: var(--bg-row);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    transition: background .12s;
+}
+tr.conn-row:nth-child(even) { background: var(--bg-row-alt); }
+tr.conn-row:hover { background: var(--bg-hover); }
+tr.conn-row.hidden { display: none; }
+
+tr.conn-row td {
+    padding: 5px 10px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+/* ── 协议徽章 ── */
+.proto-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+.proto-badge.tcp { background: rgba(76,142,247,0.15); color: #60a5fa; }
+.proto-badge.udp { background: rgba(251,191,36,0.15); color: #fbbf24; }
+
+/* ── 状态徽章 ── */
+.state-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+.state-badge.established { background: rgba(52,211,153,0.12); color: #34d399; }
+.state-badge.listen      { background: rgba(76,142,247,0.12); color: #60a5fa; }
+.state-badge.time-wait   { background: rgba(251,191,36,0.12); color: #fbbf24; }
+.state-badge.close-wait  { background: rgba(248,113,113,0.12); color: #f87171; }
+.state-badge.other       { background: rgba(148,163,184,0.08); color: #94a3b8; }
+
+/* ── Loading ── */
+.loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(15,17,23,0.85);
+    z-index: 20;
+    color: var(--text-secondary);
+}
+.spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-hint {
+    text-align: center;
+    padding: 60px 0;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+/* ── 状态栏 ── */
+.statusbar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 16px;
+    height: 28px;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+/* ── 右键菜单 ── */
+#ctx-menu {
+    position: fixed;
+    display: none;
+    z-index: 100;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    min-width: 160px;
+    overflow: hidden;
+}
+#ctx-menu .menu-item {
+    padding: 8px 14px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 12px;
+    transition: background .1s, color .1s;
+}
+#ctx-menu .menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+#ctx-menu .menu-sep { height: 1px; background: var(--border); }
+
+/* ── 滚动条 ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #718096; }

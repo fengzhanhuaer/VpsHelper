@@ -1,4 +1,4 @@
-﻿name: release
+name: release
 
 on:
   push:
@@ -18,6 +18,7 @@ env:
   TAG_NAME: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
 
 jobs:
+  # ── 1. 校验 tag 格式 ───────────────────────────────────────
   validate:
     runs-on: ubuntu-latest
     outputs:
@@ -33,26 +34,44 @@ jobs:
             exit 1
           fi
 
+  # ── 2. 测试（goapp on Linux + NetHelper conntrack on Windows）─
   test:
-    runs-on: ubuntu-latest
     needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: goapp
+            runner: ubuntu-latest
+            dir: goapp
+            mod: goapp/go.mod
+            sum: goapp/go.sum
+            cmd: go test ./...
+          - name: nethelper-conntrack
+            runner: windows-latest
+            dir: NetHelper
+            mod: NetHelper/go.mod
+            sum: NetHelper/go.sum
+            cmd: go test ./internal/conntrack/... -v -timeout 30s
+    name: test / ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
-          go-version-file: goapp/go.mod
-          cache-dependency-path: goapp/go.sum
+          go-version-file: ${{ matrix.mod }}
+          cache-dependency-path: ${{ matrix.sum }}
 
       - name: Test
-        working-directory: goapp
-        run: go test ./...
+        working-directory: ${{ matrix.dir }}
+        run: ${{ matrix.cmd }}
 
-  build:
+  # ── 3. goapp 多平台构建（server + probe）─────────────────────
+  build-goapp:
+    name: build / goapp / ${{ matrix.goos }}-${{ matrix.goarch }}
     runs-on: ubuntu-latest
     needs: validate
     strategy:
@@ -62,20 +81,18 @@ jobs:
           - goos: linux
             goarch: amd64
             ext: ''
-#          - goos: linux
-#            goarch: arm64
-#            ext: ''
-#          - goos: windows
-#            goarch: amd64
-#            ext: '.exe'
+          - goos: linux
+            goarch: arm64
+            ext: ''
+          - goos: windows
+            goarch: amd64
+            ext: '.exe'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: goapp/go.mod
           cache-dependency-path: goapp/go.sum
@@ -90,37 +107,80 @@ jobs:
           mkdir -p dist
           SRV_OUT="dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
           PRB_OUT="dist/vpsprobe_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
-          go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}" -o "${SRV_OUT}" ./cmd/server
-          go build -trimpath -ldflags "-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}" -o "${PRB_OUT}" ./cmd/probe
+          go build -trimpath \
+            -ldflags "-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}" \
+            -o "${SRV_OUT}" ./cmd/server
+          go build -trimpath \
+            -ldflags "-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}" \
+            -o "${PRB_OUT}" ./cmd/probe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: binaries_${{ matrix.goos }}_${{ matrix.goarch }}
+          name: goapp_${{ matrix.goos }}_${{ matrix.goarch }}
           path: goapp/dist/*
           if-no-files-found: error
 
+  # ── 4. NetHelper GUI 构建（Wails，windows-latest）─────────────
+  build-nethelper:
+    name: build / NetHelper GUI (windows)
+    runs-on: windows-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: NetHelper/go.mod
+          cache-dependency-path: NetHelper/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Wails app
+        # wails build 内部会自动执行 wails.json 中配置的 frontend:install + frontend:build
+        working-directory: NetHelper
+        run: wails build -ldflags "-s -w"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethelper_windows_amd64
+          path: NetHelper/build/bin/NetHelper.exe
+          if-no-files-found: error
+
+  # ── 5. 发布 Release ──────────────────────────────────────────
   release:
+    name: publish release
     runs-on: ubuntu-latest
     needs:
       - validate
       - test
-      - build
+      - build-goapp
+      - build-nethelper
     permissions:
       contents: write
     steps:
-      - name: Download build artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: binaries_*
-          path: goapp/dist
+          path: dist
           merge-multiple: true
 
-      - name: Release
+      - name: List artifacts
+        run: ls -lR dist/
+
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate.outputs.tag_name }}
           name: ${{ needs.validate.outputs.tag_name }}
           generate_release_notes: true
           overwrite_files: true
-          files: goapp/dist/*
+          files: dist/*

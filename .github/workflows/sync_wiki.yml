@@ -32,8 +32,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Check if there are changes
-          if git diff --quiet && git diff --staged --quiet; then
+          # Check if there are changes (including new/untracked files)
+          git add .
+          if git diff --staged --quiet; then
             echo "No changes to commit to Wiki."
             exit 0
           fi

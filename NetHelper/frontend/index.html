@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>NetHelper — 网络连接查看器</title>
+    <link rel="stylesheet" href="./src/style.css"/>
+</head>
+<body>
+<div id="app">
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-icon">🌐</span>
+            <span class="brand-name">NetHelper</span>
+        </div>
+        <div class="toolbar">
+            <input type="text" id="search-input" placeholder="搜索进程 / IP / 端口…" autocomplete="off"/>
+            <label class="toggle-label">
+                <input type="checkbox" id="toggle-udp" checked/>
+                显示 UDP
+            </label>
+            <label class="toggle-label">
+                <input type="checkbox" id="toggle-listen" checked/>
+                显示 LISTEN
+            </label>
+            <span id="status-indicator" class="status-dot"></span>
+            <span id="status-text" class="status-text">连接中…</span>
+        </div>
+    </header>
+
+    <main>
+        <div id="connection-panel">
+            <div class="loading-overlay" id="loading">
+                <div class="spinner"></div>
+                <p>正在获取连接数据…</p>
+            </div>
+            <table id="conn-table">
+                <thead>
+                    <tr>
+                        <th class="col-expand"></th>
+                        <th class="col-proc" data-sort="procName">进程</th>
+                        <th class="col-pid" data-sort="pid">PID</th>
+                        <th class="col-proto" data-sort="protocol">协议</th>
+                        <th class="col-local" data-sort="localAddr">本地地址</th>
+                        <th class="col-remote" data-sort="remoteAddr">远端地址</th>
+                        <th class="col-state" data-sort="state">状态</th>
+                    </tr>
+                </thead>
+                <tbody id="conn-tbody"></tbody>
+            </table>
+            <div id="empty-hint" style="display:none" class="empty-hint">📭 暂无连接数据</div>
+        </div>
+    </main>
+
+    <footer class="statusbar">
+        <span id="conn-count">连接总数: —</span>
+        <span id="proc-count">进程数: —</span>
+        <span id="last-update">上次刷新: —</span>
+    </footer>
+</div>
+<script src="./src/main.js" type="module"></script>
+</body>
+</html>
