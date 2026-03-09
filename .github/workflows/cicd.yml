@@ -76,6 +76,12 @@ jobs:
           go-version-file: NetHelper/go.mod
           cache-dependency-path: NetHelper/go.sum
 
+      - name: Mock frontend for go embed
+        working-directory: NetHelper
+        run: |
+          mkdir -p frontend/dist
+          echo "mock" > frontend/dist/index.html
+
       - run: go vet ./...
         working-directory: NetHelper
 
