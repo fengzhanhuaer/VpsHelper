@@ -2950,16 +2950,29 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 	ctxTest, cancelTest := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelTest()
 	cmd := exec.CommandContext(ctxTest, bin, os.Args[1:]...)
-	// Filter out any pre-existing VPSHELPER_UPDATE_TEST so the appended "1"
-	// is the first (and only) match. Go's os.Getenv reads the *first* matching
-	// entry in cmd.Env, so a stale value from the parent env would shadow ours.
+	// Build a clean env for the self-check child process:
+	//   - VPSHELPER_UPDATE_TEST=1 : tells the binary to run health checks only
+	//   - VPSHELPER_LISTEN=127.0.0.1:0 : force a random free port so the child
+	//     never conflicts with the parent's :15018, even on older binaries that
+	//     don't handle VPSHELPER_UPDATE_TEST yet.
+	// We strip pre-existing values for both keys first because Go's os.Getenv
+	// reads the *first* matching entry in cmd.Env, so duplicates from the parent
+	// env would shadow our overrides.
+	const (
+		kUpdateTest = "VPSHELPER_UPDATE_TEST="
+		kListen     = "VPSHELPER_LISTEN="
+	)
 	filteredEnv := make([]string, 0, len(os.Environ()))
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "VPSHELPER_UPDATE_TEST=") {
-			filteredEnv = append(filteredEnv, e)
+		if strings.HasPrefix(e, kUpdateTest) || strings.HasPrefix(e, kListen) {
+			continue
 		}
+		filteredEnv = append(filteredEnv, e)
 	}
-	cmd.Env = append(filteredEnv, "VPSHELPER_UPDATE_TEST=1")
+	cmd.Env = append(filteredEnv,
+		"VPSHELPER_UPDATE_TEST=1",
+		"VPSHELPER_LISTEN=127.0.0.1:0",
+	)
 	out, errTest := cmd.CombinedOutput()
 
 	if errTest != nil || ctxTest.Err() == context.DeadlineExceeded {
