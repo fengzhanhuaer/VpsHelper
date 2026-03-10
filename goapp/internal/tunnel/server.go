@@ -118,20 +118,33 @@ func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 		return
 	}
 
-	secret := c.Param("secret")
-	if secret == "" {
-		secret = c.GetHeader("X-Probe-Secret")
-	}
-	if secret == "" {
-		security.RecordFailure(dbConn, ip)
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
+	var node store.ProbeNode
+	var authErr error
+
+	// 1. Check if the WebSocket upgrade request has New Anti-Replay Headers
+	probeID := c.GetHeader("X-Probe-ID")
+	probeNonce := c.GetHeader("X-Probe-Nonce")
+	probeSig := c.GetHeader("X-Probe-Signature")
+
+	if probeID != "" && probeNonce != "" && probeSig != "" {
+		node, authErr = store.AuthenticateProbeNodeBySignature(dbConn, probeID, probeNonce, probeSig)
+	} else {
+		// 2. Fallback for old agents
+		secret := c.Param("secret")
+		if secret == "" {
+			secret = c.GetHeader("X-Probe-Secret")
+		}
+		if secret == "" {
+			security.RecordFailure(dbConn, ip)
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		node, authErr = store.GetProbeNodeBySecret(dbConn, secret)
 	}
 
-	node, err := store.GetProbeNodeBySecret(dbConn, secret)
-	if err != nil {
+	if authErr != nil {
 		security.RecordFailure(dbConn, ip)
-		log.Printf("[Tunnel] Unauthorized probe connection attempt: invalid secret")
+		log.Printf("[Tunnel] Unauthorized probe connection attempt: %v", authErr)
 		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}

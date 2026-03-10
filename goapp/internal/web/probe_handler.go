@@ -389,6 +389,16 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	})
 }
 
+// probeChallenge returns a temporary random nonce for the Challenge-Response auth mechanism.
+func (h *Handler) probeChallenge(c *gin.Context) {
+	nonce, err := store.GenerateChallengeNonce()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate nonce"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"nonce": nonce})
+}
+
 // probeDiscover is the public API endpoint for probes to dynamically discover the WebSocket connection address.
 func (h *Handler) probeDiscover(c *gin.Context) {
 	ip := c.ClientIP()
@@ -397,18 +407,32 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		return
 	}
 
-	authHeader := c.GetHeader("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		security.RecordFailure(h.dbConn, ip)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid authorization header"})
-		return
-	}
-	secret := strings.TrimPrefix(authHeader, "Bearer ")
+	var node store.ProbeNode
+	var authErr error
 
-	node, err := store.GetProbeNodeBySecret(h.dbConn, secret)
-	if err != nil {
+	// Check if the client is using the new Anti-Replay HTTP Headers
+	probeID := c.GetHeader("X-Probe-ID")
+	probeNonce := c.GetHeader("X-Probe-Nonce")
+	probeSig := c.GetHeader("X-Probe-Signature")
+
+	if probeID != "" && probeNonce != "" && probeSig != "" {
+		// New Auth: HMAC-SHA256 Anti-Replay Signature Verification
+		node, authErr = store.AuthenticateProbeNodeBySignature(h.dbConn, probeID, probeNonce, probeSig)
+	} else {
+		// Fallback to legacy backward compatible auth
+		authHeader := c.GetHeader("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			security.RecordFailure(h.dbConn, ip)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid authorization header"})
+			return
+		}
+		secret := strings.TrimPrefix(authHeader, "Bearer ")
+		node, authErr = store.GetProbeNodeBySecret(h.dbConn, secret)
+	}
+
+	if authErr != nil {
 		security.RecordFailure(h.dbConn, ip)
-		c.JSON(http.StatusForbidden, gin.H{"error": "invalid secret"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "authentication failed: " + authErr.Error()})
 		return
 	}
 
@@ -472,9 +496,9 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 	}
 	address = strings.TrimSuffix(address, "/")
 	if strings.HasSuffix(address, "/tunnel") {
-		address = address + "/" + secret
+		address = address + "/" + node.Secret
 	} else {
-		address = address + "/tunnel/" + secret
+		address = address + "/tunnel/" + node.Secret
 	}
 
 	tasksRaw, _ := store.GetProbeTasksForNode(h.dbConn, node.ID)

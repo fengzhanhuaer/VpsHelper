@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -109,7 +112,56 @@ func fetchOutboundIPs(ctx context.Context) string {
 	return ""
 }
 
+// fetchChallengeNonce retrieves a short-lived nonce from the master server.
+func fetchChallengeNonce(ctx context.Context, serverHost string) (string, error) {
+	url := serverHost
+	if !strings.HasPrefix(url, "http") {
+		url = "https://" + url
+	}
+	url = strings.TrimRight(url, "/") + "/api/probe/challenge"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("bad status code: %d", resp.StatusCode)
+	}
+	var res struct {
+		Nonce string `json:"nonce"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", err
+	}
+	return res.Nonce, nil
+}
+
 func connectAndServe(ctx context.Context, serverHost, secret string) error {
+	// 0. Fetch Challenge Nonce
+	nonce, err := fetchChallengeNonce(ctx, serverHost)
+	if err != nil {
+		log.Printf("[Agent] Failed to fetch challenge nonce, will try without it: %v", err)
+	}
+	
+	// Create Public ID: Hex(SHA256(secret))
+	hID := sha256.Sum256([]byte(secret))
+	probeID := hex.EncodeToString(hID[:])
+	
+	// Create Signature: HMAC-SHA256(secret, nonce)
+	var sig string
+	if nonce != "" {
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(nonce))
+		sig = hex.EncodeToString(mac.Sum(nil))
+	}
+
 	// 1. Discover Real Address
 	if !strings.HasPrefix(serverHost, "http") {
 		serverHost = "https://" + serverHost
@@ -120,7 +172,12 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	if err != nil {
 		return fmt.Errorf("create discover request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+secret)
+	req.Header.Set("Authorization", "Bearer "+secret) // For backward compatibility
+	if nonce != "" {
+		req.Header.Set("X-Probe-ID", probeID)
+		req.Header.Set("X-Probe-Nonce", nonce)
+		req.Header.Set("X-Probe-Signature", sig)
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -154,8 +211,26 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	// 2. Establish WebSocket direct to private port
 	dialer := websocket.DefaultDialer
 	wsHeader := http.Header{}
-	wsHeader.Set("X-Probe-Secret", secret)
+	
+	// Re-calculate nonce and sig for WS handshake to avoid replay
+	wsNonce, err := fetchChallengeNonce(ctx, serverHost)
+	if err != nil {
+		log.Printf("[Agent] Failed to fetch nonce for tunnel: %v", err)
+	}
+	var wsSig string
+	if wsNonce != "" {
+		wsMac := hmac.New(sha256.New, []byte(secret))
+		wsMac.Write([]byte(wsNonce))
+		wsSig = hex.EncodeToString(wsMac.Sum(nil))
+	}
+
+	wsHeader.Set("X-Probe-Secret", secret) // Backward compatibility
 	wsHeader.Set("X-Probe-Version", version.Version)
+	if wsNonce != "" {
+		wsHeader.Set("X-Probe-ID", probeID)
+		wsHeader.Set("X-Probe-Nonce", wsNonce)
+		wsHeader.Set("X-Probe-Signature", wsSig)
+	}
 
 	reportedIP := fetchOutboundIPs(ctx)
 	if reportedIP != "" {

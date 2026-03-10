@@ -1,7 +1,11 @@
 package store
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +14,53 @@ import (
 	"time"
 )
 
-var geoCache sync.Map
+var (
+	geoCache sync.Map
+	nonceCache sync.Map
+)
+
+// GenerateChallengeNonce generates a short-lived random nonce for probe anti-replay auth.
+func GenerateChallengeNonce() (string, error) {
+	b := make([]byte, 16) // 128-bit
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	nonce := hex.EncodeToString(b)
+	nonceCache.Store(nonce, time.Now().Add(60*time.Second)) // valid for 60s
+	return nonce, nil
+}
+
+// ConsumeChallengeNonce checks if the nonce exists and is valid, then deletes it to prevent replay.
+func ConsumeChallengeNonce(nonce string) bool {
+	val, ok := nonceCache.Load(nonce)
+	if !ok {
+		return false
+	}
+	nonceCache.Delete(nonce) // Consume immediately
+
+	expiry := val.(time.Time)
+	if time.Now().After(expiry) {
+		return false
+	}
+	return true
+}
+
+func init() {
+	// Cleanup expired nonces periodically
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		for range ticker.C {
+			now := time.Now()
+			nonceCache.Range(func(key, value any) bool {
+				expiry := value.(time.Time)
+				if now.After(expiry) {
+					nonceCache.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
+}
 
 func getGeoForIP(ip string) string {
 	if val, ok := geoCache.Load(ip); ok {
@@ -440,3 +490,45 @@ func UpdateProbeNodeUpgradeProgress(nodeID int64, progress string) {
 	}
 	_, _ = probeDB.Exec(`UPDATE probe_node_status SET upgrade_progress = ? WHERE node_id = ?`, progress, nodeID)
 }
+
+// AuthenticateProbeNodeBySignature validates the Anti-Replay HMAC signature.
+// It uses a random nonce instead of a timestamp to prevent NTP drift issues.
+func AuthenticateProbeNodeBySignature(dbConn *sql.DB, probeIDHex, nonce, signatureHex string) (ProbeNode, error) {
+	// 1. Consume nonce
+	if !ConsumeChallengeNonce(nonce) {
+		return ProbeNode{}, fmt.Errorf("invalid or expired nonce")
+	}
+
+	// 2. Fetch all nodes to match Public ID
+	// Because Public ID is SHA256(secret) and we don't store it natively in DB, 
+	// we iterate through the nodes (usually < 100 for a personal dashboard).
+	nodes, err := ListProbeNodes(dbConn)
+	if err != nil {
+		return ProbeNode{}, fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	var matchedNode *ProbeNode
+	for i, n := range nodes {
+		hID := sha256.Sum256([]byte(n.Secret))
+		if hex.EncodeToString(hID[:]) == probeIDHex {
+			matchedNode = &nodes[i]
+			break
+		}
+	}
+
+	if matchedNode == nil {
+		return ProbeNode{}, fmt.Errorf("probe identity not found")
+	}
+
+	// 3. Verify HMAC Signature
+	mac := hmac.New(sha256.New, []byte(matchedNode.Secret))
+	mac.Write([]byte(nonce))
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+
+	if hmac.Equal([]byte(signatureHex), []byte(expectedSig)) {
+		return *matchedNode, nil
+	}
+
+	return ProbeNode{}, fmt.Errorf("invalid hmac signature")
+}
+
