@@ -45,30 +45,98 @@ html, body {
 
 #app {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     height: 100vh;
 }
 
-/* ── 顶栏 ── */
+/* ── 侧边栏 ── */
+#sidebar {
+    width: 220px;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    -webkit-app-region: drag;
+}
+
+#sidebar .brand {
+    height: 56px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.brand-icon { font-size: 18px; }
+
+.nav-menu {
+    list-style: none;
+    padding: 12px;
+    flex: 1;
+    -webkit-app-region: no-drag;
+}
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    cursor: pointer;
+    margin-bottom: 4px;
+    transition: background 0.2s, color 0.2s;
+    font-weight: 500;
+}
+.nav-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.nav-item.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+}
+.nav-icon {
+    font-size: 15px; width: 22px; text-align: center; opacity: 0.9;
+}
+
+.sidebar-footer {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    -webkit-app-region: no-drag;
+}
+.global-status { 
+    display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500;
+}
+
+/* ── 右侧主内容 ── */
+#main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg-base);
+}
+
+/* ── 顶栏（内容区内） ── */
 .topbar {
     display: flex;
     align-items: center;
-    gap: 16px;
     padding: 0 16px;
-    height: 48px;
+    height: 56px;
     background: var(--bg-panel);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     -webkit-app-region: drag;
 }
 
-.brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 700;
+.view-title {
+    font-weight: 600;
     font-size: 15px;
-    letter-spacing: 0.02em;
+    color: var(--text-primary);
     -webkit-app-region: no-drag;
 }
 
@@ -119,15 +187,20 @@ html, body {
 
 .status-text { font-size: 11px; color: var(--text-muted); }
 
-/* ── 主区域 ── */
-main {
+/* ── 视图 Body ── */
+.view-body {
     flex: 1;
-    overflow: hidden;
+    overflow: auto;
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 #connection-panel {
-    height: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
     overflow: auto;
 }
 

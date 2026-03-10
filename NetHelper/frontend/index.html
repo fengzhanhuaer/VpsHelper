@@ -8,11 +8,57 @@
 </head>
 <body>
 <div id="app">
-    <header class="topbar">
+    <!-- 侧边导航栏 -->
+    <nav id="sidebar">
         <div class="brand">
             <span class="brand-icon">🌐</span>
             <span class="brand-name">NetHelper</span>
         </div>
+        <ul class="nav-menu">
+            <li class="nav-item" data-target="dashboard">
+                <span class="nav-icon">🏠</span> 概览
+            </li>
+            <li class="nav-item" data-target="proxies">
+                <span class="nav-icon">🌐</span> 节点配置
+            </li>
+            <li class="nav-item active" data-target="connections">
+                <span class="nav-icon">📈</span> 活动连接
+            </li>
+            <li class="nav-item" data-target="settings">
+                <span class="nav-icon">⚙️</span> 系统设置
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="global-status">
+                <span id="global-status-dot" class="status-dot ok"></span>
+                <span id="global-status-text" class="status-text">系统直连中</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 右侧动态内容区 -->
+    <div id="main-content">
+        <!-- 路由视图将挂载于此 -->
+    </div>
+</div>
+
+<!-- ================= 模板区 ================= -->
+
+<!-- Dashboard 模板 -->
+<template id="tpl-dashboard">
+    <header class="topbar">
+        <div class="view-title">概览 Dashboard</div>
+    </header>
+    <main class="view-body dashboard-body">
+        <h2 style="color:var(--text-primary); margin-bottom:10px;">系统状态</h2>
+        <p style="color:var(--text-secondary);">等待流量统计模块接入...</p>
+    </main>
+</template>
+
+<!-- Connections (F7) 模板 -->
+<template id="tpl-connections">
+    <header class="topbar">
+        <div class="view-title">活动连接</div>
         <div class="toolbar">
             <input type="text" id="search-input" placeholder="搜索进程 / IP / 端口…" autocomplete="off"/>
             <label class="toggle-label">
@@ -23,12 +69,9 @@
                 <input type="checkbox" id="toggle-listen" checked/>
                 显示 LISTEN
             </label>
-            <span id="status-indicator" class="status-dot"></span>
-            <span id="status-text" class="status-text">连接中…</span>
         </div>
     </header>
-
-    <main>
+    <main class="view-body">
         <div id="connection-panel">
             <div class="loading-overlay" id="loading">
                 <div class="spinner"></div>
@@ -48,16 +91,15 @@
                 </thead>
                 <tbody id="conn-tbody"></tbody>
             </table>
-            <div id="empty-hint" style="display:none" class="empty-hint">📭 暂无连接数据</div>
+            <div id="empty-hint" style="display:none" class="empty-hint">📭 暂无活动连接</div>
         </div>
     </main>
-
     <footer class="statusbar">
-        <span id="conn-count">连接总数: —</span>
-        <span id="proc-count">进程数: —</span>
-        <span id="last-update">上次刷新: —</span>
+        <span id="conn-count">活动连接: —</span>
+        <span id="proc-count">置顶常驻: 0 | 瞬时进程: —</span>
+        <span id="last-update">上次采集: —</span>
     </footer>
-</div>
+</template>
 <script src="./src/main.js" type="module"></script>
 </body>
 </html>
