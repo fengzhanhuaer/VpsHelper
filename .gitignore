@@ -7,6 +7,14 @@
 *.swo
 *.exe
 *~
+
+# Compiled binaries / build output - NEVER commit these
+goapp/dist/
+goapp/bin/
+NetHelper/build/bin/
+goapp/*.exe
+goapp/probe.exe
+goapp/server.exe
 .env
 *.session
 *.session-journal
