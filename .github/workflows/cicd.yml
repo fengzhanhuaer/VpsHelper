@@ -142,8 +142,8 @@ jobs:
           SRV="dist/vpshelper_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
           PRB="dist/vpsprobe_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
           LDFLAGS="-s -w -X vpshelper-go/internal/version.Version=${TAG_NAME}"
-          go build -trimpath -ldflags "$LDFLAGS" -o "$SRV" ./cmd/server
-          go build -trimpath -ldflags "$LDFLAGS" -o "$PRB" ./cmd/probe
+          go build -trimpath -a -ldflags "$LDFLAGS" -o "$SRV" ./cmd/server
+          go build -trimpath -a -ldflags "$LDFLAGS" -o "$PRB" ./cmd/probe
       - uses: actions/upload-artifact@v4
         with:
           name: goapp_${{ matrix.goos }}_${{ matrix.goarch }}
