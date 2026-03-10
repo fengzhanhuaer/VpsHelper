@@ -130,6 +130,12 @@ jobs:
         with:
           go-version-file: goapp/go.mod
           cache-dependency-path: goapp/go.sum
+          # Disable Go *build* cache to prevent stale compiled binaries from
+          # being reused across workflow runs (module download cache is kept).
+          cache: false
+      - name: Verify build commit
+        run: |
+          echo "Building from commit: $(git rev-parse HEAD) ($(git log -1 --format='%ai %s'))"
       - name: Build server + probe
         working-directory: goapp
         env:
