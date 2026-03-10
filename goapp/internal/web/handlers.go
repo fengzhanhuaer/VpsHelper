@@ -2950,7 +2950,16 @@ func (h *Handler) systemUpdateStream(c *gin.Context) {
 	ctxTest, cancelTest := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelTest()
 	cmd := exec.CommandContext(ctxTest, bin, os.Args[1:]...)
-	cmd.Env = append(os.Environ(), "VPSHELPER_UPDATE_TEST=1")
+	// Filter out any pre-existing VPSHELPER_UPDATE_TEST so the appended "1"
+	// is the first (and only) match. Go's os.Getenv reads the *first* matching
+	// entry in cmd.Env, so a stale value from the parent env would shadow ours.
+	filteredEnv := make([]string, 0, len(os.Environ()))
+	for _, e := range os.Environ() {
+		if !strings.HasPrefix(e, "VPSHELPER_UPDATE_TEST=") {
+			filteredEnv = append(filteredEnv, e)
+		}
+	}
+	cmd.Env = append(filteredEnv, "VPSHELPER_UPDATE_TEST=1")
 	out, errTest := cmd.CombinedOutput()
 
 	if errTest != nil || ctxTest.Err() == context.DeadlineExceeded {
