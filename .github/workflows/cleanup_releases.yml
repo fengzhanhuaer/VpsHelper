@@ -1,0 +1,75 @@
+name: Cleanup Old Releases
+
+# 每次有新 release 发布后自动触发，也可手动触发
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: '保留最近几个 Release（默认 3）'
+        required: false
+        default: '10'
+        type: string
+
+permissions:
+  contents: write  # 需要删除 release 和 tag 的权限
+
+jobs:
+  cleanup:
+    name: 🧹 Keep latest N releases
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old releases and tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO:     ${{ github.repository }}
+          KEEP:     ${{ inputs.keep || '10' }}
+        run: |
+          set -euo pipefail
+
+          echo "仓库: $REPO，保留最近 $KEEP 个 Release"
+
+          # 按发布时间降序获取所有 release（最多 100 个）
+          releases=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/releases?per_page=100" \
+            --jq '.[].id')
+
+          total=$(echo "$releases" | wc -l)
+          echo "共找到 $total 个 Release"
+
+          if [[ $total -le $KEEP ]]; then
+            echo "Release 数量 ($total) 不超过保留数 ($KEEP)，无需清理。"
+            exit 0
+          fi
+
+          # 跳过前 KEEP 个，删除剩余的
+          to_delete=$(echo "$releases" | tail -n +$((KEEP + 1)))
+          count=$(echo "$to_delete" | wc -l)
+          echo "将删除 $count 个旧 Release..."
+
+          while IFS= read -r release_id; do
+            [[ -z "$release_id" ]] && continue
+
+            # 获取该 release 对应的 tag
+            tag=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${REPO}/releases/${release_id}" \
+              --jq '.tag_name')
+
+            echo "  删除 Release #${release_id} (tag: ${tag})"
+
+            # 删除 release
+            gh api --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${REPO}/releases/${release_id}" || true
+
+            # 同时删除对应的 git tag（远端）
+            gh api --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${REPO}/git/refs/tags/${tag}" || true
+
+          done <<< "$to_delete"
+
+          echo "清理完成！"
