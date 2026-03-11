@@ -402,9 +402,9 @@
             } else {
                 // Windows
                 if (method === 'direct') {
-                    cmd = 'irm https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.ps1 | iex';
+                    cmd = 'irm https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.ps1 | iex; install-probe.ps1 -secret ' + secret + ' -host ' + host;
                 } else {
-                    cmd = 'irm "' + host + '/api/probe/install.ps1?secret=' + secret + '" | iex';
+                    cmd = 'irm "' + host + '/api/probe/install.ps1?secret=' + secret + '" | iex; install-probe.ps1 -secret ' + secret + ' -host ' + host;
                 }
             }
 
