@@ -48,12 +48,8 @@ func StartServer(ctx context.Context, dbConn *sql.DB) error {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
-	// New: auth via headers only (no secret in URL)
+	// Auth via headers only (X-Probe-ID / X-Probe-Nonce / X-Probe-Signature)
 	r.GET("/tunnel", func(c *gin.Context) {
-		handleTunnelConnect(c, dbConn)
-	})
-	// Legacy: secret in URL path — kept for backward compatibility, to be removed later
-	r.GET("/tunnel/:secret", func(c *gin.Context) {
 		handleTunnelConnect(c, dbConn)
 	})
 
@@ -123,29 +119,17 @@ func handleTunnelConnect(c *gin.Context, dbConn *sql.DB) {
 		return
 	}
 
-	var node store.ProbeNode
-	var authErr error
-
-	// 1. Check if the WebSocket upgrade request has New Anti-Replay Headers
+	// Authenticate via HMAC anti-replay headers only
 	probeID := c.GetHeader("X-Probe-ID")
 	probeNonce := c.GetHeader("X-Probe-Nonce")
 	probeSig := c.GetHeader("X-Probe-Signature")
 
-	if probeID != "" && probeNonce != "" && probeSig != "" {
-		node, authErr = store.AuthenticateProbeNodeBySignature(dbConn, probeID, probeNonce, probeSig)
-	} else {
-		// 2. Fallback for old agents
-		secret := c.Param("secret")
-		if secret == "" {
-			secret = c.GetHeader("X-Probe-Secret")
-		}
-		if secret == "" {
-			security.RecordFailure(dbConn, ip)
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		node, authErr = store.GetProbeNodeBySecret(dbConn, secret)
+	if probeID == "" || probeNonce == "" || probeSig == "" {
+		security.RecordFailure(dbConn, ip)
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
+	node, authErr := store.AuthenticateProbeNodeBySignature(dbConn, probeID, probeNonce, probeSig)
 
 	if authErr != nil {
 		security.RecordFailure(dbConn, ip)

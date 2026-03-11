@@ -29,7 +29,7 @@ func RefreshDialogs(ctx context.Context, dbConn *sql.DB, owner string, accountID
 			return 0, "初始化 Telegram 客户端失败：" + err2.Error()
 		}
 		client := telegram.NewClient(apiID, apiHash, opts)
-		
+
 		err = client.Run(ctx, func(ctx context.Context) error {
 			var err3 error
 			dialogs, err3 = execRefreshDialogs(ctx, client.API(), accountID, onProgress)
@@ -107,7 +107,6 @@ func execRefreshDialogs(ctx context.Context, api *tg.Client, accountID int64, on
 
 	return dialogs, nil
 }
-
 
 func resolveDialogPeer(peer tg.PeerClass, users map[int64]*tg.User, chats map[int64]*tg.Chat, channels map[int64]*tg.Channel) (dialogID, username, title string, outPeer tg.InputPeerClass) {
 	switch p := peer.(type) {

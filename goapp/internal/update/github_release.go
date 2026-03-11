@@ -100,7 +100,6 @@ func FetchLatestGitHubRelease(ctx context.Context, owner, repo, token string) (G
 	info.Name = rel.Name
 	info.PublishedAt = formatPublishedAt(rel.PublishedAt)
 
-
 	return info, &rel, nil
 }
 

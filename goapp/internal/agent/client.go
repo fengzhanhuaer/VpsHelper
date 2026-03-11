@@ -177,7 +177,6 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	if err != nil {
 		return fmt.Errorf("create discover request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+secret) // For backward compatibility
 	AddProbeAuthHeaders(req, secret, nonce)
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -229,7 +228,6 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 		wsSig = hex.EncodeToString(wsMac.Sum(nil))
 	}
 
-	wsHeader.Set("X-Probe-Secret", secret) // Backward compatibility
 	wsHeader.Set("X-Probe-Version", version.Version)
 	if wsNonce != "" {
 		wsHeader.Set("X-Probe-ID", wsProbeID)

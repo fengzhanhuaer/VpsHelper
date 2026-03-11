@@ -70,7 +70,7 @@ func execFetchAndStoreDialogHistory(ctx context.Context, api *gotdtg.Client, acc
 	}
 	raw := historyMessagesFromResponse(res)
 	nameMap := buildSenderNameMap(historyUsersFromResponse(res))
-	
+
 	var msgs []store.ChatMessage
 	// Telegram returns newest-first; store oldest-first.
 	for i := len(raw) - 1; i >= 0; i-- {

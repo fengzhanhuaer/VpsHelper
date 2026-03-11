@@ -253,7 +253,7 @@ func OpenExecStream(nodeID int64, cwd string, cmd string) (string, error) {
 		"cwd":     cwd,
 		"command": cmd,
 	})
-	
+
 	msg := ControlMsg{
 		Type:    "exec_cmd",
 		Payload: payload,

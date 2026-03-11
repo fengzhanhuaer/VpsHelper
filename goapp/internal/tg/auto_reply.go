@@ -73,7 +73,6 @@ func StartAutoReply(ctx context.Context, dbConn *sql.DB) {
 				// All TG accounts: always use tg_accounts as the unified source of truth.
 				accounts, _ := store.ListAllTGAccountsAsOwnerAccounts(dbConn)
 
-
 				want := map[autoReplyKey]bool{}
 				for _, a := range accounts {
 					want[autoReplyKey{owner: a.Owner, accountID: a.AccountID}] = true

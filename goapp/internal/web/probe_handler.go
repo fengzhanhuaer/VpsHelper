@@ -481,23 +481,16 @@ func (h *Handler) probeChallenge(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"nonce": nonce})
 }
 
-// verifyProbeAuth is a helper to authenticate a probe request.
-// It prioritizes the Anti-Replay HMAC headers if present, and falls back to Bearer token.
+// verifyProbeAuth authenticates a probe request via HMAC anti-replay headers.
 func (h *Handler) verifyProbeAuth(c *gin.Context) (store.ProbeNode, error) {
 	probeID := c.GetHeader("X-Probe-ID")
 	probeNonce := c.GetHeader("X-Probe-Nonce")
 	probeSig := c.GetHeader("X-Probe-Signature")
 
-	if probeID != "" && probeNonce != "" && probeSig != "" {
-		return store.AuthenticateProbeNodeBySignature(h.dbConn, probeID, probeNonce, probeSig)
+	if probeID == "" || probeNonce == "" || probeSig == "" {
+		return store.ProbeNode{}, fmt.Errorf("missing HMAC authentication headers")
 	}
-
-	authHeader := c.GetHeader("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return store.ProbeNode{}, fmt.Errorf("missing or invalid authorization header")
-	}
-	secret := strings.TrimPrefix(authHeader, "Bearer ")
-	return store.GetProbeNodeBySecret(h.dbConn, secret)
+	return store.AuthenticateProbeNodeBySignature(h.dbConn, probeID, probeNonce, probeSig)
 }
 
 // probeDiscover is the public API endpoint for probes to dynamically discover the WebSocket connection address.

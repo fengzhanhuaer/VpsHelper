@@ -89,4 +89,3 @@ func SendOnceWithResolvedDialogID(ctx context.Context, dbConn *sql.DB, owner str
 	}
 	return true, "已发送", resolvedDialogID
 }
-

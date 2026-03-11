@@ -342,14 +342,14 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 
 		if ddnsZoneID != "" {
 			ddnsClient := NewAPIClient(cfToken, accountID, ddnsZoneID)
-			
+
 			nodes, err := store.ListProbeNodes(dbConn)
 			if err == nil {
 				for _, n := range nodes {
 					if !n.Online || len(n.IPInfos) == 0 {
 						continue
 					}
-					
+
 					var ips PublicIPs
 					for _, ipInfo := range n.IPInfos {
 						if strings.Contains(ipInfo.Raw, ":") {
@@ -362,11 +362,11 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 							}
 						}
 					}
-					
+
 					if ips.IPv4 == "" && ips.IPv6 == "" {
 						continue
 					}
-					
+
 					currentIPKey := ips.IPv4 + "|" + ips.IPv6
 					cacheKey := fmt.Sprintf("node_ddns_last_ip_%d", n.ID)
 					lastIPKey := store.GetLocalSetting(cacheKey)

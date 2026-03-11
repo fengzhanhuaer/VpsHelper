@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	geoCache sync.Map
+	geoCache   sync.Map
 	nonceCache sync.Map
 )
 
@@ -500,7 +500,7 @@ func AuthenticateProbeNodeBySignature(dbConn *sql.DB, probeIDHex, nonce, signatu
 	}
 
 	// 2. Fetch all nodes to match Public ID
-	// Because Public ID is SHA256(secret) and we don't store it natively in DB, 
+	// Because Public ID is SHA256(secret) and we don't store it natively in DB,
 	// we iterate through the nodes (usually < 100 for a personal dashboard).
 	nodes, err := ListProbeNodes(dbConn)
 	if err != nil {
@@ -531,4 +531,3 @@ func AuthenticateProbeNodeBySignature(dbConn *sql.DB, probeIDHex, nonce, signatu
 
 	return ProbeNode{}, fmt.Errorf("invalid hmac signature")
 }
-

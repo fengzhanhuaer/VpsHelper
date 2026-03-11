@@ -58,9 +58,9 @@ type ChatRequest struct {
 
 // TokenUsage holds token count info from a single API call
 type TokenUsage struct {
-	PromptTokens    int `json:"prompt_tokens"`
-	ResponseTokens  int `json:"response_tokens"`
-	TotalTokens     int `json:"total_tokens"`
+	PromptTokens   int `json:"prompt_tokens"`
+	ResponseTokens int `json:"response_tokens"`
+	TotalTokens    int `json:"total_tokens"`
 }
 
 // ChatResponse represents the response to send to frontend

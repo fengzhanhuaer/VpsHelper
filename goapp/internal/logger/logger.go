@@ -63,7 +63,7 @@ func (b *RingBuffer) Write(p []byte) (n int, err error) {
 		if i == len(parts)-1 && len(part) == 0 {
 			continue // skip trailing newline
 		}
-		
+
 		line := make([]byte, len(part))
 		copy(line, part)
 

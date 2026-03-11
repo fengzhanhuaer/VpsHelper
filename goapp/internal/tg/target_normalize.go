@@ -90,7 +90,6 @@ func ResolveDialogIDForAccount(ctx context.Context, dbConn *sql.DB, owner string
 	return dialogID, nil
 }
 
-
 func NormalizeStoredTargetsByDialogs(dbConn *sql.DB, owner string, accountID int64) (int, error) {
 	dialogs, err := store.ListTGDialogs(dbConn, accountID)
 	if err != nil {
