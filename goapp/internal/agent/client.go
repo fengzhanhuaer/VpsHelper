@@ -143,23 +143,28 @@ func fetchChallengeNonce(ctx context.Context, serverHost string) (string, error)
 	return res.Nonce, nil
 }
 
+// AddProbeAuthHeaders injects the Anti-Replay HMAC verification headers into the given request.
+func AddProbeAuthHeaders(req *http.Request, secret, nonce string) {
+	if nonce == "" {
+		return
+	}
+	hID := sha256.Sum256([]byte(secret))
+	probeID := hex.EncodeToString(hID[:])
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(nonce))
+	sig := hex.EncodeToString(mac.Sum(nil))
+
+	req.Header.Set("X-Probe-ID", probeID)
+	req.Header.Set("X-Probe-Nonce", nonce)
+	req.Header.Set("X-Probe-Signature", sig)
+}
+
 func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	// 0. Fetch Challenge Nonce
 	nonce, err := fetchChallengeNonce(ctx, serverHost)
 	if err != nil {
 		log.Printf("[Agent] Failed to fetch challenge nonce, will try without it: %v", err)
-	}
-	
-	// Create Public ID: Hex(SHA256(secret))
-	hID := sha256.Sum256([]byte(secret))
-	probeID := hex.EncodeToString(hID[:])
-	
-	// Create Signature: HMAC-SHA256(secret, nonce)
-	var sig string
-	if nonce != "" {
-		mac := hmac.New(sha256.New, []byte(secret))
-		mac.Write([]byte(nonce))
-		sig = hex.EncodeToString(mac.Sum(nil))
 	}
 
 	// 1. Discover Real Address
@@ -173,11 +178,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 		return fmt.Errorf("create discover request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+secret) // For backward compatibility
-	if nonce != "" {
-		req.Header.Set("X-Probe-ID", probeID)
-		req.Header.Set("X-Probe-Nonce", nonce)
-		req.Header.Set("X-Probe-Signature", sig)
-	}
+	AddProbeAuthHeaders(req, secret, nonce)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -211,14 +212,18 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	// 2. Establish WebSocket direct to private port
 	dialer := websocket.DefaultDialer
 	wsHeader := http.Header{}
-	
+
 	// Re-calculate nonce and sig for WS handshake to avoid replay
 	wsNonce, err := fetchChallengeNonce(ctx, serverHost)
 	if err != nil {
 		log.Printf("[Agent] Failed to fetch nonce for tunnel: %v", err)
 	}
 	var wsSig string
+	var wsProbeID string
 	if wsNonce != "" {
+		hID := sha256.Sum256([]byte(secret))
+		wsProbeID = hex.EncodeToString(hID[:])
+
 		wsMac := hmac.New(sha256.New, []byte(secret))
 		wsMac.Write([]byte(wsNonce))
 		wsSig = hex.EncodeToString(wsMac.Sum(nil))
@@ -227,7 +232,7 @@ func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	wsHeader.Set("X-Probe-Secret", secret) // Backward compatibility
 	wsHeader.Set("X-Probe-Version", version.Version)
 	if wsNonce != "" {
-		wsHeader.Set("X-Probe-ID", probeID)
+		wsHeader.Set("X-Probe-ID", wsProbeID)
 		wsHeader.Set("X-Probe-Nonce", wsNonce)
 		wsHeader.Set("X-Probe-Signature", wsSig)
 	}
@@ -403,11 +408,15 @@ func handleIncomingControlStream(stream *yamux.Stream, session *yamux.Session, i
 
 	case "upgrade":
 		var payload struct {
-			Secret string `json:"secret"`
-			Host   string `json:"host"`
+			Secret   string `json:"secret"`
+			Host     string `json:"host"`
+			UseProxy string `json:"use_proxy"`
+			Version  string `json:"version"`
+			URLs     string `json:"urls"`
 		}
 		if err := json.Unmarshal(msg.Payload, &payload); err == nil && payload.Secret != "" {
-			handleAgentUpgradeTrigger(payload.Secret, payload.Host, session)
+			useProxy := payload.UseProxy == "proxy"
+			handleAgentUpgradeTrigger(payload.Secret, payload.Host, useProxy, payload.Version, payload.URLs, session)
 		}
 
 	case "update_master_address":

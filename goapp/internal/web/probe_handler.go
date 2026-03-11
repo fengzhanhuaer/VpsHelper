@@ -160,7 +160,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			host := c.Request.Host
 			baseURL := fmt.Sprintf("%s://%s", scheme, host)
 
-			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address"})
+			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address", "probe_install_method"})
 			if settings["probe_master_address"] != "" {
 				addr := strings.TrimRight(settings["probe_master_address"], "/")
 				// 确保始终携带 scheme，避免老版本探针收到无协议的地址后拼出非法 URL
@@ -169,6 +169,40 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				}
 				baseURL = addr
 			}
+			useProxy := settings["probe_install_method"]
+			if useProxy == "" {
+				useProxy = "direct"
+			}
+
+			info, rel, fetchErr := update.FetchLatestGitHubRelease(c.Request.Context(), "fengzhanhuaer", "VpsHelper", "")
+			if fetchErr != nil || !info.OK {
+				message = "无法获取 GitHub 最新版本信息，下发升级指令失败。"
+				break
+			}
+			urlsMap := make(map[string]string)
+			for _, asset := range rel.Assets {
+				name := strings.ToLower(asset.Name)
+				if !strings.Contains(name, "vpsprobe") {
+					continue
+				}
+				osName := "linux"
+				if strings.Contains(name, "windows") {
+					osName = "windows"
+				} else if strings.Contains(name, "darwin") {
+					osName = "darwin"
+				}
+				archName := "amd64"
+				if strings.Contains(name, "arm64") || strings.Contains(name, "aarch64") {
+					archName = "arm64"
+				} else if strings.Contains(name, "386") {
+					archName = "386"
+				} else if strings.Contains(name, "arm") {
+					archName = "arm"
+				}
+				urlsMap[osName+"_"+archName] = asset.BrowserDownload
+			}
+			urlsJSON, _ := json.Marshal(urlsMap)
+			urlsStr := string(urlsJSON)
 
 			if idStr == "all" {
 				nodes, err := store.ListProbeNodes(h.dbConn)
@@ -179,7 +213,13 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				count := 0
 				for _, n := range nodes {
 					if n.Online {
-						payload := map[string]string{"secret": n.Secret, "host": baseURL}
+						payload := map[string]string{
+							"secret":    n.Secret,
+							"host":      baseURL,
+							"use_proxy": useProxy,
+							"version":   info.TagName,
+							"urls":      urlsStr,
+						}
 						if err := tunnel.PushConfigToNode(n.ID, "upgrade", payload); err == nil {
 							count++
 						}
@@ -205,7 +245,13 @@ func (h *Handler) probeNodes(c *gin.Context) {
 					}
 				}
 
-				payload := map[string]string{"secret": node.Secret, "host": baseURL}
+				payload := map[string]string{
+					"secret":    node.Secret,
+					"host":      baseURL,
+					"use_proxy": useProxy,
+					"version":   info.TagName,
+					"urls":      urlsStr,
+				}
 				pushErr := tunnel.PushConfigToNode(id, "upgrade", payload)
 				if pushErr != nil {
 					message = "节点当前没在线，请确保在线后再操作。"
@@ -218,7 +264,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		case "save_master_settings":
 			masterAddress := strings.TrimSpace(c.PostForm("probe_master_address"))
 			masterAddress = strings.TrimRight(masterAddress, "/") // 清理末尾反斜杠
-			
+
 			historyDays := strings.TrimSpace(c.PostForm("probe_history_days"))
 			if historyDays == "" {
 				historyDays = "90"
@@ -312,9 +358,15 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			installOS := strings.TrimSpace(c.PostForm("install_os"))
 			installType := strings.TrimSpace(c.PostForm("install_type"))
 			installMethod := strings.TrimSpace(c.PostForm("install_method"))
-			if installOS == "" { installOS = "linux" }
-			if installType == "" { installType = "vpsprobe" }
-			if installMethod == "" { installMethod = "direct" }
+			if installOS == "" {
+				installOS = "linux"
+			}
+			if installType == "" {
+				installType = "vpsprobe"
+			}
+			if installMethod == "" {
+				installMethod = "direct"
+			}
 			_ = store.SetSetting(h.dbConn, "probe_install_os", installOS)
 			_ = store.SetSetting(h.dbConn, "probe_install_type", installType)
 			_ = store.SetSetting(h.dbConn, "probe_install_method", installMethod)
@@ -384,32 +436,38 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	}
 
 	installOS := settings["probe_install_os"]
-	if installOS == "" { installOS = "linux" }
+	if installOS == "" {
+		installOS = "linux"
+	}
 	installType := settings["probe_install_type"]
-	if installType == "" { installType = "vpsprobe" }
+	if installType == "" {
+		installType = "vpsprobe"
+	}
 	installMethod := settings["probe_install_method"]
-	if installMethod == "" { installMethod = "direct" }
+	if installMethod == "" {
+		installMethod = "direct"
+	}
 
 	c.HTML(http.StatusOK, templateName, gin.H{
-		"Title":         "探针管理",
-		"Message":       message,
-		"MsgOK":         msgOK,
-		"Nodes":         nodes,
-		"BaseURL":       baseURL,
-		"PrivatePort":   privatePort,
-		"Address":       combinedAddress,
-		"EnableDDNS":    enableDDNS,
-		"EnableAutoTLS": enableAutoTLS,
-		"CertInfo":      certInfo,
-		"CertReqStatus": certReqStatus,
-		"CertReqError":  certReqError,
-		"CertReqAt":     certReqAt,
-		"HistoryDays":   historyDays,
-		"MasterAddress": masterAddress,
+		"Title":          "探针管理",
+		"Message":        message,
+		"MsgOK":          msgOK,
+		"Nodes":          nodes,
+		"BaseURL":        baseURL,
+		"PrivatePort":    privatePort,
+		"Address":        combinedAddress,
+		"EnableDDNS":     enableDDNS,
+		"EnableAutoTLS":  enableAutoTLS,
+		"CertInfo":       certInfo,
+		"CertReqStatus":  certReqStatus,
+		"CertReqError":   certReqError,
+		"CertReqAt":      certReqAt,
+		"HistoryDays":    historyDays,
+		"MasterAddress":  masterAddress,
 		"NodeDDNSDomain": nodeDDNSDomain,
-		"InstallOS":     installOS,
-		"InstallType":   installType,
-		"InstallMethod": installMethod,
+		"InstallOS":      installOS,
+		"InstallType":    installType,
+		"InstallMethod":  installMethod,
 	})
 }
 
@@ -423,6 +481,25 @@ func (h *Handler) probeChallenge(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"nonce": nonce})
 }
 
+// verifyProbeAuth is a helper to authenticate a probe request.
+// It prioritizes the Anti-Replay HMAC headers if present, and falls back to Bearer token.
+func (h *Handler) verifyProbeAuth(c *gin.Context) (store.ProbeNode, error) {
+	probeID := c.GetHeader("X-Probe-ID")
+	probeNonce := c.GetHeader("X-Probe-Nonce")
+	probeSig := c.GetHeader("X-Probe-Signature")
+
+	if probeID != "" && probeNonce != "" && probeSig != "" {
+		return store.AuthenticateProbeNodeBySignature(h.dbConn, probeID, probeNonce, probeSig)
+	}
+
+	authHeader := c.GetHeader("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return store.ProbeNode{}, fmt.Errorf("missing or invalid authorization header")
+	}
+	secret := strings.TrimPrefix(authHeader, "Bearer ")
+	return store.GetProbeNodeBySecret(h.dbConn, secret)
+}
+
 // probeDiscover is the public API endpoint for probes to dynamically discover the WebSocket connection address.
 func (h *Handler) probeDiscover(c *gin.Context) {
 	ip := c.ClientIP()
@@ -431,29 +508,7 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		return
 	}
 
-	var node store.ProbeNode
-	var authErr error
-
-	// Check if the client is using the new Anti-Replay HTTP Headers
-	probeID := c.GetHeader("X-Probe-ID")
-	probeNonce := c.GetHeader("X-Probe-Nonce")
-	probeSig := c.GetHeader("X-Probe-Signature")
-
-	if probeID != "" && probeNonce != "" && probeSig != "" {
-		// New Auth: HMAC-SHA256 Anti-Replay Signature Verification
-		node, authErr = store.AuthenticateProbeNodeBySignature(h.dbConn, probeID, probeNonce, probeSig)
-	} else {
-		// Fallback to legacy backward compatible auth
-		authHeader := c.GetHeader("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			security.RecordFailure(h.dbConn, ip)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid authorization header"})
-			return
-		}
-		secret := strings.TrimPrefix(authHeader, "Bearer ")
-		node, authErr = store.GetProbeNodeBySecret(h.dbConn, secret)
-	}
-
+	node, authErr := h.verifyProbeAuth(c)
 	if authErr != nil {
 		security.RecordFailure(h.dbConn, ip)
 		c.JSON(http.StatusForbidden, gin.H{"error": "authentication failed: " + authErr.Error()})
@@ -615,13 +670,7 @@ func (h *Handler) probePingHistory(c *gin.Context) {
 
 // probeLatestBinary proxies the download of the latest probe binary to bypass GitHub blockades.
 func (h *Handler) probeLatestBinary(c *gin.Context) {
-	authHeader := c.GetHeader("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	secret := strings.TrimPrefix(authHeader, "Bearer ")
-	_, err := store.GetProbeNodeBySecret(h.dbConn, secret)
+	_, err := h.verifyProbeAuth(c)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
@@ -724,6 +773,56 @@ func (h *Handler) probeInstallScript(c *gin.Context) {
 	c.DataFromReader(resp.StatusCode, resp.ContentLength, "text/plain; charset=utf-8", resp.Body, nil)
 }
 
+// probeDownload is a generic authenticated file-download proxy.
+// Probes call this when use_proxy=proxy to download any whitelisted URL through the master.
+// GET /api/probe/download?url=<encoded>
+// Authorization: Bearer <probe_secret>
+func (h *Handler) probeDownload(c *gin.Context) {
+	_, err := h.verifyProbeAuth(c)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "authentication failed: " + err.Error()})
+		return
+	}
+
+	rawURL := strings.TrimSpace(c.Query("url"))
+	if rawURL == "" {
+		c.String(http.StatusBadRequest, "missing url parameter")
+		return
+	}
+
+	parsed, parseErr := url.Parse(rawURL)
+	if parseErr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		c.String(http.StatusBadRequest, "invalid url")
+		return
+	}
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", rawURL, nil)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed to build request")
+		return
+	}
+	req.Header.Set("User-Agent", "VpsHelper-Proxy/1.0")
+
+	client := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.String(http.StatusBadGateway, "upstream request failed: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.String(resp.StatusCode, "upstream returned non-OK status")
+		return
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	c.DataFromReader(resp.StatusCode, resp.ContentLength, contentType, resp.Body, nil)
+}
+
 // isIPAddress returns true if addr is a raw IPv4/IPv6 address (not a domain name).
 func isIPAddress(addr string) bool {
 	host := addr
@@ -807,18 +906,59 @@ func (h *Handler) probeNodeManage(c *gin.Context) {
 				scheme = "https"
 			}
 			baseURL := fmt.Sprintf("%s://%s", scheme, c.Request.Host)
-			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address"})
+			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address", "probe_install_method"})
 			if ma := strings.TrimRight(settings["probe_master_address"], "/"); ma != "" {
 				if !strings.HasPrefix(ma, "http://") && !strings.HasPrefix(ma, "https://") {
 					ma = "https://" + ma
 				}
 				baseURL = ma
 			}
+			useProxy := settings["probe_install_method"]
+			if useProxy == "" {
+				useProxy = "direct"
+			}
+
+			info, rel, fetchErr := update.FetchLatestGitHubRelease(c.Request.Context(), "fengzhanhuaer", "VpsHelper", "")
+			if fetchErr != nil || !info.OK {
+				msg = "无法获取 GitHub 最新版本信息，下发升级指令失败。"
+				break
+			}
+			urlsMap := make(map[string]string)
+			for _, asset := range rel.Assets {
+				name := strings.ToLower(asset.Name)
+				if !strings.Contains(name, "vpsprobe") {
+					continue
+				}
+				osName := "linux"
+				if strings.Contains(name, "windows") {
+					osName = "windows"
+				} else if strings.Contains(name, "darwin") {
+					osName = "darwin"
+				}
+				archName := "amd64"
+				if strings.Contains(name, "arm64") || strings.Contains(name, "aarch64") {
+					archName = "arm64"
+				} else if strings.Contains(name, "386") {
+					archName = "386"
+				} else if strings.Contains(name, "arm") {
+					archName = "arm"
+				}
+				urlsMap[osName+"_"+archName] = asset.BrowserDownload
+			}
+			urlsJSON, _ := json.Marshal(urlsMap)
+			urlsStr := string(urlsJSON)
+
 			node, err := store.GetProbeNodeByID(h.dbConn, id)
 			if err != nil {
 				msg = "节点不存在"
 			} else {
-				payload := map[string]string{"secret": node.Secret, "host": baseURL}
+				payload := map[string]string{
+					"secret":    node.Secret,
+					"host":      baseURL,
+					"use_proxy": useProxy,
+					"version":   info.TagName,
+					"urls":      urlsStr,
+				}
 				if pushErr := tunnel.PushConfigToNode(id, "upgrade", payload); pushErr != nil {
 					msg = "探针当前不在线，请确保在线后再操作"
 				} else {
@@ -893,7 +1033,6 @@ func (h *Handler) probeNodeManage(c *gin.Context) {
 	})
 }
 
-
 // probeNodeDetail renders the details specific to one node.
 func (h *Handler) probeNodeDetail(c *gin.Context) {
 	if h.currentUser(c) == "" {
@@ -965,7 +1104,7 @@ func (h *Handler) probeNodeShellExec(c *gin.Context) {
 	nodeID, _ := strconv.ParseInt(nodeIDStr, 10, 64)
 
 	command := strings.TrimSpace(c.PostForm("command"))
-	
+
 	sess := sessions.Default(c)
 	sessionKey := fmt.Sprintf("probe_cwd_%d", nodeID)
 	cwd, _ := sess.Get(sessionKey).(string)
