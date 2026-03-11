@@ -158,6 +158,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/api/probe/ping_history", h.probePingHistory)
 	router.GET("/api/probe/latest_binary", h.probeLatestBinary)
 	router.GET("/api/probe/install", h.probeInstallScript)
+	router.GET("/api/probe/install.ps1", h.probeInstallScriptPS1)
 	router.GET("/api/probe/download", h.probeDownload)
 	router.POST("/api/:secret", h.tgBotWebhook)
 

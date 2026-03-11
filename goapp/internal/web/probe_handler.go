@@ -768,6 +768,44 @@ func (h *Handler) probeInstallScript(c *gin.Context) {
 	c.DataFromReader(resp.StatusCode, resp.ContentLength, "text/plain; charset=utf-8", resp.Body, nil)
 }
 
+// probeInstallScriptPS1 downloads the Windows install script from GitHub and proxies it
+func (h *Handler) probeInstallScriptPS1(c *gin.Context) {
+	secret := c.Query("secret")
+	if secret == "" {
+		c.String(http.StatusUnauthorized, "Write-Host 'Error: secret parameter is required'; exit 1")
+		return
+	}
+
+	_, err := store.GetProbeNodeBySecret(h.dbConn, secret)
+	if err != nil {
+		c.String(http.StatusForbidden, "Write-Host 'Error: invalid secret or node not found'; exit 1")
+		return
+	}
+
+	scriptURL := fmt.Sprintf("https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install-probe.ps1?t=%d", time.Now().Unix())
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", scriptURL, nil)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Write-Host 'Error: Failed to construct proxy request'; exit 1")
+		return
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.String(http.StatusBadGateway, "Write-Host 'Failed to download installation script from upstream: %s'", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.String(resp.StatusCode, "Write-Host 'Upstream returned non-OK status: %d'", resp.StatusCode)
+		return
+	}
+
+	c.DataFromReader(resp.StatusCode, resp.ContentLength, "text/plain; charset=utf-8", resp.Body, nil)
+}
+
 // probeDownload is a generic authenticated file-download proxy.
 // Probes call this when use_proxy=proxy to download any whitelisted URL through the master.
 // GET /api/probe/download?url=<encoded>
