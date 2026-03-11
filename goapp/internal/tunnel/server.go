@@ -48,6 +48,11 @@ func StartServer(ctx context.Context, dbConn *sql.DB) error {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
+	// New: auth via headers only (no secret in URL)
+	r.GET("/tunnel", func(c *gin.Context) {
+		handleTunnelConnect(c, dbConn)
+	})
+	// Legacy: secret in URL path — kept for backward compatibility, to be removed later
 	r.GET("/tunnel/:secret", func(c *gin.Context) {
 		handleTunnelConnect(c, dbConn)
 	})

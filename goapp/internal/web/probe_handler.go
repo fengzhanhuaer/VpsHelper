@@ -574,10 +574,10 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		}
 	}
 	address = strings.TrimSuffix(address, "/")
-	if strings.HasSuffix(address, "/tunnel") {
-		address = address + "/" + node.Secret
-	} else {
-		address = address + "/tunnel/" + node.Secret
+	// New: return /tunnel without secret in URL; auth is done via X-Probe-* headers.
+	// Legacy format was: address + "/tunnel/" + node.Secret
+	if !strings.HasSuffix(address, "/tunnel") {
+		address = address + "/tunnel"
 	}
 
 	tasksRaw, _ := store.GetProbeTasksForNode(h.dbConn, node.ID)

@@ -68,20 +68,6 @@ func FetchLatestGitHubRelease(ctx context.Context, owner, repo, token string) (G
 		return info, nil, errors.New("missing owner/repo")
 	}
 
-	cacheKey := owner + "/" + repo + "|" + token
-
-	val, _ := globalGHCaches.LoadOrStore(cacheKey, &githubReleaseCache{})
-	cache := val.(*githubReleaseCache)
-
-	cache.mu.Lock()
-	if time.Now().Before(cache.expiresAt) {
-		info = cache.info
-		rel := cache.rel
-		cache.mu.Unlock()
-		return info, rel, nil
-	}
-	cache.mu.Unlock()
-
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -114,11 +100,6 @@ func FetchLatestGitHubRelease(ctx context.Context, owner, repo, token string) (G
 	info.Name = rel.Name
 	info.PublishedAt = formatPublishedAt(rel.PublishedAt)
 
-	cache.mu.Lock()
-	cache.info = info
-	cache.rel = &rel
-	cache.expiresAt = time.Now().Add(10 * time.Minute)
-	cache.mu.Unlock()
 
 	return info, &rel, nil
 }
