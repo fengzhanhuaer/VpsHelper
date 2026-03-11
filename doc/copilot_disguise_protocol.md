@@ -147,6 +147,30 @@ WebSocket 建立后，协议转入底层帧结构通信，用以支持高并发�
 
 依托 `conn_id` 字段，单根物理 WebSocket 链接能够完美支撑成百上千的独立并发逻辑流。
 
+### 3.4 非法请求与主动探测防御（Active Probing Defense）
+
+针对互联网审查扫描或非预期的**主动探测（Active Probing）**，探针服务端采取全景静默防御策略，避免暴露任何非常规网关的异常特征（禁止出现诸如"直接 RST 强制断开"或"无响应"等反常抓包特征）：
+
+1. **未授权存取（缺少 Token、HMAC 校验失败或过期）**：
+   收到针对 `/v1/models` 或 `/v1/realtime` 的非法鉴权请求时，服务端严格按照标准的 OAuth 失败进行响应，返回 HTTP `401 Unauthorized`，并附带符合标准 OpenAI 格式的错误 JSON 体：
+   ```json
+   HTTP/1.1 401 Unauthorized
+   Content-Type: application/json
+   
+   {"error": {"message": "Invalid authentication token.", "type": "invalid_request_error", "param": null, "code": "invalid_api_key"}}
+   ```
+
+2. **未知路由或根目录扫描（例如 GET /）**：
+   对于恶意或随机的路径猜解，按照常规 API 网关的行为响应 HTTP `404 Not Found`：
+   ```json
+   HTTP/1.1 404 Not Found
+   Content-Type: application/json
+   
+   {"error": {"message": "Invalid URL (GET /unknown)", "type": "invalid_request_error", "param": null, "code": "invalid_url"}}
+   ```
+
+该回退策略能够使得在无关的 DPI 审查或扫描器视角中，无论怎么发包测试，这个位于云端的探针节点都表现为一个**正规、需要授权的 API 服务端**，极大降低受到主动阻断拦截的概率。
+
 ---
 
 ## 四、本地协议栈集成（NetHelper 侧）
