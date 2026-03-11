@@ -38,21 +38,25 @@
 
 为了确保通信特征在网络层与标准客户端行为完全一致，我们不仅在 HTTP 应用层做对齐，同时深化到 TLS 握手层面。
 
-### 2.1 SNI 设定
+### 2.1 SNI 设定（防止真实域名明文泄漏）
 
-网络助手在建立建立出站 TLS 连接时，将 ClientHello 中的 SNI 字段显式声明为目标网关域名：
+在标准的 HTTPS 通信握手早期（ClientHello 阶段），由于加密尚未建立，SNI (Server Name Indication) 会以**明文形式**在网络中传输，这是极易遭受特征捕获的环节。
+
+为确保探针的真实身份和关联的私有域名绝对不在网络明文中曝光，网络助手在建立出站 TLS 连接时，将 ClientHello 中的 SNI 字段显式强行声明为目标网关域名：
 
 ```
-TLS ClientHello:
+TLS ClientHello (明文捕获区):
   SNI: api.githubcopilot.com
-  实际 TCP 目标: <探针 IP 或内网入口>:443
+  实际 TCP 目标: <探针 IP 或内网入口 IP>:443
 ```
 
-基于 Go 标准库 `tls.Config` 的 `ServerName` 字段，实现了寻址与 SNI 验证逻辑的分离。
+基于 Go 标准库 `tls.Config` 的 `ServerName` 字段，实现了**TCP寻址目标与 TLS 握手身份声明验证逻辑的彻底分离**。整个通信周期内，流量监听者完全无法观察到探针的真实域名。
 
 ### 2.2 客户端指纹（JA3/JA4）对齐
 
-由于 Go 标准库的 TLS ClientHello 握手序列与真实 Electron（Chromium 内核）客户端相去甚远。为保障连接质量与特征一致性，采用 [`utls`](https://github.com/refraction-networking/utls) 库精细定制 TLS 握手参数：
+VS Code 基于 Electron 框架，其底层网络栈（无论前端进程还是 Node.js 环境的现代 fetch 实现）均由 **Chromium 及其内置的 BoringSSL 引擎**驱动。因此，从网络流量特征上看，VS Code 的 TLS ClientHello（包含 Cipher Suites、扩展列表、椭圆曲线顺序等）与标准的 **Google Chrome 浏览器指纹**是完全一致的。
+
+由于 Go 标准库的 TLS 握手序列与 Chrome 相去甚远，无法骗过 DPI。为保障连接特征一致性，采用 [`utls`](https://github.com/refraction-networking/utls) 库精细接管并定制 TLS 握手参数：
 
 ```go
 import utls "github.com/refraction-networking/utls"
@@ -60,7 +64,7 @@ import utls "github.com/refraction-networking/utls"
 conn, _ := net.Dial("tcp", probeAddr)
 uConn := utls.UClient(conn, &utls.Config{
     ServerName: "api.githubcopilot.com",  
-}, utls.HelloChrome_Auto)                 // 自动拉平 Chrome 系列指纹
+}, utls.HelloChrome_Auto)                 // 完美复刻 Chromium 底层网络栈的 TLS 指纹
 ```
 
 该配置将拉平以下 TLS 参数：
@@ -75,14 +79,14 @@ uConn := utls.UClient(conn, &utls.Config{
 
 ALPN 协商明确优先 `h2`。探针服务端提供原生 HTTP/2 支持，确保通信（包含 `/v1/models` 等接口以及后续升级）都在高效的 H2 流上运作。
 
-### 2.4 服务端证书建设
+### 2.4 服务端证书建设（主控统一下发）
 
-对于探针侧的证书建设方案：
+考虑到探针是分布式的无状态执行节点，探针自身**不执行**域名的验证申请机制。所有 TLS 证书资源的建立统一由主控系统代为申请或签发，通过 WebSocket 心跳或配置更新通道下发给各探针在内存中加载：
 
-| 方案 | 细节 | 适用环境 |
+| 方案 | 细节下发机制 | 适用环境 |
 |---|---|---|
-| **私有根签发 (mTLS)** | 主控作为私有 CA，签发主题包含目标域名的证书，客户端预置根证书 | 通用节点、内网隔离环境 |
-| **公网 ACME 证书** | 探针绑定真实域名，自动签发 Let's Encrypt 证书，服务端解除严格入站 SNI 验证 | 边缘公网暴露节点 |
+| **私有根签发 (mTLS)** | 主控作为私有 CA，即时为探针签发主题包含目标域名的证书，连同私钥一并下发；客户端预置根证书即可完成闭环信任 | 通用节点、内网隔离环境 |
+| **公网 ACME 证书** | 主控代为向 Let's Encrypt 申请真实域名证书，签发完成后将证书链下发至目标探针加载；服务端解除严格入站 SNI 验证 | 边缘公网暴露节点 |
 
 ---
 
