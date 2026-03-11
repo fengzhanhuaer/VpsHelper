@@ -307,6 +307,19 @@ func (h *Handler) probeNodes(c *gin.Context) {
 
 			// Optional: Trigger immediately in a goroutine
 			go cloudflare.TriggerNodeDDNS(h.dbConn)
+
+		case "save_install_settings":
+			installOS := strings.TrimSpace(c.PostForm("install_os"))
+			installType := strings.TrimSpace(c.PostForm("install_type"))
+			installMethod := strings.TrimSpace(c.PostForm("install_method"))
+			if installOS == "" { installOS = "linux" }
+			if installType == "" { installType = "vpsprobe" }
+			if installMethod == "" { installMethod = "direct" }
+			_ = store.SetSetting(h.dbConn, "probe_install_os", installOS)
+			_ = store.SetSetting(h.dbConn, "probe_install_type", installType)
+			_ = store.SetSetting(h.dbConn, "probe_install_method", installMethod)
+			message = "安装配置已保存。"
+			msgOK = true
 		}
 	}
 
@@ -315,6 +328,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"probe_history_days", "probe_auto_tls",
 		"probe_tls_cert_status", "probe_tls_cert_error", "probe_tls_cert_updated_at",
 		"probe_master_address", "probe_node_ddns_domain",
+		"probe_install_os", "probe_install_type", "probe_install_method",
 	})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "加载设置失败")
@@ -369,6 +383,13 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		templateName = "probe_nodes_comm.html"
 	}
 
+	installOS := settings["probe_install_os"]
+	if installOS == "" { installOS = "linux" }
+	installType := settings["probe_install_type"]
+	if installType == "" { installType = "vpsprobe" }
+	installMethod := settings["probe_install_method"]
+	if installMethod == "" { installMethod = "direct" }
+
 	c.HTML(http.StatusOK, templateName, gin.H{
 		"Title":         "探针管理",
 		"Message":       message,
@@ -386,6 +407,9 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"HistoryDays":   historyDays,
 		"MasterAddress": masterAddress,
 		"NodeDDNSDomain": nodeDDNSDomain,
+		"InstallOS":     installOS,
+		"InstallType":   installType,
+		"InstallMethod": installMethod,
 	})
 }
 
