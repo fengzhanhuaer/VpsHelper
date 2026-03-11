@@ -128,26 +128,159 @@ NetHelper → 探针:
   101 Switching Protocols
 ```
 
-### 阶段 3 — 隧道多路复用帧协议
+### 3.1 — 帧格式定义
 
-WebSocket 建立后，协议转入底层帧结构通信，用以支持高并发的 TCP/UDP 会话承载。
+WebSocket 建立后，协议转入底层帧结构通信，用以支持高并发的 TCP/UDP/ICMP 会话承载。固定头部合计 **10 字节** = cmd(1) + subcmd(1) + conn_id(4) + len(4)。
 
 ```
 通信帧结构:
-┌──────────┬──────────────┬──────────┬───────────────────────┐
-│ cmd (1B) │ conn_id (4B) │ len (4B) │ payload               │
-└──────────┴──────────────┴──────────┴───────────────────────┘
+┌──────────┬─────────────┬──────────────┬──────────┬────────────────┐
+│ cmd (1B) │ subcmd (1B) │ conn_id (4B) │ len (4B) │ payload        │
+└──────────┴─────────────┴──────────────┴──────────┴────────────────┘
 
-控制指令 (cmd):
-  0x01  CONNECT   申请建立逻辑流（payload 为目标通信地址 "host:port"）
-  0x02  DATA      双向数据传输流
-  0x03  CLOSE     逻辑流结束指令
-  0x04  ACK       建立确认（探针分配并回传流状态）
+cmd   — 操作类型（一级分类）
+subcmd — 该操作的具体子态或扩展参数（未定义时置 0x00）
+
+── cmd=0x01  CONNECT 建立连接 ──────────────────────────────────
+  subcmd=0x00  TCP       建立 TCP 逻辑流（payload = "host:port"）
+  subcmd=0x01  UDP       建立 UDP 关联（payload = "host:port"）
+  subcmd=0x02  ICMP      建立 ICMP 会话（payload = "host"，需 CAP_NET_RAW）
+  subcmd=0x03  RAW       建立 RAW IP 关联（payload = "host"，需 CAP_NET_RAW）
+
+── cmd=0x02  DATA 数据传输 ─────────────────────────────────────
+  subcmd=0x00  STREAM    TCP 流式数据片段
+  subcmd=0x01  DGRAM     UDP 数据报（每帧 = 一个独立 UDP 包）
+  subcmd=0x02  ICMP_PKT  ICMP 报文（payload = 完整 ICMP 包，不含 IP 头）
+  subcmd=0x03  RAW_PKT   原始 IP 包（payload = 完整 IP 数据包，含协议头）
+
+── cmd=0x03  CLOSE 关闭 ────────────────────────────────────────
+  subcmd=0x00  NORMAL    正常关闭
+  subcmd=0x01  RESET     异常重置（类似 TCP RST）
+
+── cmd=0x04  ACK 确认 ──────────────────────────────────────────
+  subcmd=0x00  OK        建立成功
+  subcmd=0x01  CAP_OK    探针确认具备请求的 subcmd 连接类型权限
+
+── cmd=0xF0  PING / cmd=0xF1  PONG ─────────────────────────────
+  subcmd=0x00  KEEPALIVE  心跳保活（payload = 8B uint64 LE, Unix 微秒时间戳）
+  subcmd=0x01  LATENCY    主动延迟采样（客户端可任意时刻发起，不限于 30s 周期）
+
+── cmd=0xFF  ERROR 错误 ─────────────────────────────────────────
+  subcmd=0x00            通用错误（payload = <u8 错误码> + <UTF-8 描述>）
 ```
 
-依托 `conn_id` 字段，单根物理 WebSocket 链接能够完美支撑成百上千的独立并发逻辑流。
+依托 `conn_id` 字段，单根物理 WebSocket 链接能够同时承载数百条独立的 TCP 逻辑流、UDP 关联和 ICMP 会话（conn_id 空间各协议类型共享，互不干扰）。
 
-### 3.4 非法请求与主动探测防御（Active Probing Defense）
+
+---
+
+### 3.2 — TCP 逻辑流行为
+
+- `CONNECT`：探针收到后向目标发起 TCP 拨号，成功后以 `ACK` 回传；失败以 `CLOSE` 回传。
+- `DATA`：探针将 payload 写入对应 TCP 连接的发送缓冲区；反向亦然。
+- `CLOSE`：任一端可发起，探针/客户端均应释放对应连接资源。
+
+---
+
+### 3.3 — UDP 数据报行为（WireGuard 等协议支持）
+
+UDP 的核心差异在于**无连接、有边界**：每个 DGRAM 帧对应一个独立的 UDP 数据包，必须整包发送，不可分割。
+
+**工作机制**：
+
+```
+客户端侧:
+  1. 拦截上层 UDP 包（如 WireGuard 发出的加密 UDP 报文）
+  2. 封装为 DGRAM 帧（conn_id 标识该 UDP 目标的关联）
+  3. 通过 WebSocket 发送给探针
+
+探针侧:
+  1. 收到 CONNECT_UDP 后，建立到目标的 UDP conn 并以 ACK 确认
+  2. 收到 DGRAM 帧，执行一次 net.UDP.WriteTo(target)
+  3. 同时监听该 UDP conn 的上行数据报，封装为 DGRAM 帧回传客户端
+```
+
+**MTU 约束**：UDP 载荷需保持在 1400 字节以内（留 WebSocket/TLS 帧头余量），WireGuard 的 MTU 应配置为 1280~1360，与此自然兼容。
+
+**上层业务接入示例**：
+
+| 上层业务 | 接入方式 | 所需帧指令 |
+|---|---|---|
+| SOCKS5 / HTTP 转发 | NetHelper 提供本地接入点，出站 TCP | `CONNECT` + `DATA` |
+| WireGuard | 客户端侧监听本地 WireGuard UDP 端口，截获后封装 | `CONNECT_UDP` + `DGRAM` |
+| Xray（TCP 模式） | CONNECT 至探针本地 Xray 监听端口 | `CONNECT` + `DATA` |
+| Xray XUDP / DNS(UDP) | UDP 数据报封装 | `CONNECT_UDP` + `DGRAM` |
+| Ping / 连通性检测 | 客户端构造 ICMP Echo 报文交由探针发出 | `ICMP` |
+| GRE / ESP 封装 | 发送完整 IP 数据包，适用餍长隔离场景 | `RAW` |
+| 隧道保活检测 | 双向周期性心跳，避免 NAT 失活切断 | `PING` / `PONG` |
+
+---
+
+### 3.4 — ICMP 与 RAW 帧行为
+
+**权限要求**：ICMP 和 RAW IP 需要探针进程具备系统级 Raw Socket 权限（Linux 下需 `CAP_NET_RAW` 能力）。探针在初始化时应自检是否具备该权限，并通过 `ACK`/`ERROR` 帧告知客户端当前节点支持能力。
+
+**ICMP 指令工作流程**：
+
+```
+cmd = 0x07  ICMP
+  conn_id: 回射 ID（用于匹配 ICMP Echo Reply 与请求）
+  payload: 完整 ICMP 报文（从 Type 字段开始，不含 IP 头）
+
+为探针目标发送 ICMPv4 Echo Request (ping):
+  客户端构造: Type=8, Code=0, Identifier, Sequence, Data
+  封装为 ICMP 帧，探针用 raw socket 发送并等待 ICMP Echo Reply
+  探针收到 Reply 后封装回一个 ICMP 帧回传客户端
+```
+
+**RAW 指令工作流程**：
+
+```
+cmd = 0x08  RAW
+  conn_id: 0（RAW 包无状态，每帧独立发送）
+  payload: 完整 IP 数据包（含 IPv4/IPv6 头 + 载荷）
+
+适用场景: GRE 封装、ESP（IPsec）、自定义 IP 协议
+探针将 payload 发往 raw socket
+```
+
+**心跳与延迟测量（PING/PONG）**：
+
+```
+PING 帧格式:
+  cmd    = 0xF0
+  conn_id = 0
+  payload = <8 bytes, uint64 little-endian, Unix 微秒时间戳（发送时）>
+
+PONG 帧格式:
+  cmd    = 0xF1
+  conn_id = 0
+  payload = <8 bytes, uint64 little-endian, 原封回收到的 PING 时间戳>
+
+RTT 计算（客户端侧）:
+  RTT (微秒) = now_us - payload_us
+  可转换为毫秒展示: RTT_ms = RTT_us / 1000.0
+
+心跳策略:
+  客户端每 30s 发送 PING
+  探针收到 PING 后必须在 1s 内回应 PONG，副本原 PING payload 不加任何修改
+  90s 未收到 PONG 则判定隐道断开，触发重连逻辑
+```
+
+**错误帧**：
+
+```
+cmd = 0xFF  ERROR
+  conn_id: 出错的递感 conn_id（全局错误时为 0）
+  payload: <u8 错误码> + <UTF-8 错误描述>
+
+常用错误码:
+  0x01  CONN_REFUSED    目标主机拒绝连接
+  0x02  CONN_TIMEOUT    连接超时
+  0x03  DNS_FAILURE     DNS 解析失败
+  0x04  NO_PERMISSION   探针缺少 raw socket 权限
+  0x05  PAYLOAD_TOO_BIG 载荷超出 MTU 限制
+```
 
 针对互联网审查扫描或非预期的**主动探测（Active Probing）**，探针服务端采取全景静默防御策略，避免暴露任何非常规网关的异常特征（禁止出现诸如"直接 RST 强制断开"或"无响应"等反常抓包特征）：
 
