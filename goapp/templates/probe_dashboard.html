@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -15,14 +16,19 @@
         }
     </style>
 </head>
+
 <body>
     <header>
         <strong>VpsHelper</strong>
         <nav>
-            <a class="ghost" href="/probe/nodes">探针管理</a>
             <a class="ghost" href="/probe/dashboard" style="color:var(--color-primary); font-weight:bold;">探针监视</a>
-            <a class="ghost" href="/home" target="_blank">主页</a>
+            {{ if not .IsGuest }}
+            <a class="ghost" href="/probe/nodes">探针管理</a>
+            <a class="ghost" href="/home" target="_blank">节点主页</a>
             <a class="ghost" href="/logout">退出登录</a>
+            {{ else }}
+            <a class="ghost" href="/login">登录管理</a>
+            {{ end }}
         </nav>
     </header>
 
@@ -38,7 +44,8 @@
                             <option value="netstatus" {{ if $isNet }}selected{{ end }}>网络状态</option>
                         </select>
                     </h1>
-                    <p class="muted" id="view-desc">{{ if eq .Tab "netstatus" }}实时监控各探针执行 Ping 任务的网络丢包与延迟曲线{{ else }}实时监控所有在线节点的系统负载与网络情况{{ end }}</p>
+                    <p class="muted" id="view-desc">{{ if eq .Tab "netstatus" }}实时监控各探针执行 Ping 任务的网络丢包与延迟曲线{{ else
+                        }}实时监控所有在线节点的系统负载与网络情况{{ end }}</p>
                 </div>
                 <div style="margin-bottom: 16px; font-size: 0.9em; color: var(--color-text-muted);">
                     <span id="update-timer-outer"></span>
@@ -73,7 +80,7 @@
                 if (frameBody) {
                     obj.style.height = (frameBody.scrollHeight + 50) + 'px';
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
 
         // Periodically resize iframe to fit content
@@ -82,4 +89,5 @@
         }, 1000);
     </script>
 </body>
+
 </html>

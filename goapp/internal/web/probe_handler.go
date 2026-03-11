@@ -601,16 +601,14 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 
 // probeDashboard renders either the wrapper layout or the specific iframe content
 func (h *Handler) probeDashboard(c *gin.Context) {
-	if h.currentUser(c) == "" {
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
+	isGuest := h.currentUser(c) == ""
 
 	content := c.Query("content")
 	if content == "" {
 		c.HTML(http.StatusOK, "probe_dashboard.html", gin.H{
-			"Title": "探针监视",
-			"Tab":   c.Query("tab"),
+			"Title":   "探针监视",
+			"Tab":     c.Query("tab"),
+			"IsGuest": isGuest,
 		})
 		return
 	}
@@ -625,28 +623,25 @@ func (h *Handler) probeDashboard(c *gin.Context) {
 
 	if content == "netstatus" {
 		c.HTML(http.StatusOK, "probe_dashboard_netstatus.html", gin.H{
-			"Title": "网络状态",
-			"Nodes": nodes,
-			"Tasks": tasks,
+			"Title":   "网络状态",
+			"Nodes":   nodes,
+			"Tasks":   tasks,
+			"IsGuest": isGuest,
 		})
 		return
 	}
 
 	// Default to status
 	c.HTML(http.StatusOK, "probe_dashboard_status.html", gin.H{
-		"Title": "探针状态",
-		"Nodes": nodes,
-		"Tasks": tasks,
+		"Title":   "探针状态",
+		"Nodes":   nodes,
+		"Tasks":   tasks,
+		"IsGuest": isGuest,
 	})
 }
 
 // probePingHistory returns historical ping latency and loss for a specific node to draw charts.
 func (h *Handler) probePingHistory(c *gin.Context) {
-	if h.currentUser(c) == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	nodeIDStr := c.Query("node_id")
 	hoursStr := c.Query("hours")
 

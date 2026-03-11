@@ -21,11 +21,7 @@ var dashboardUpgrader = websocket.Upgrader{
 // probeDashboardWS upgrades the dashboard HTTP connection to a WebSocket
 // and registers it with the global tunnel Hub to receive realtime stats.
 func (h *Handler) probeDashboardWS(c *gin.Context) {
-	// Simple session check (if they can't access panel, they can't access ws)
-	if h.currentUser(c) == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
+	isGuest := h.currentUser(c) == ""
 
 	conn, err := dashboardUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -37,31 +33,33 @@ func (h *Handler) probeDashboardWS(c *gin.Context) {
 
 	mode := c.Query("mode")
 
-	// User wants rapid updates (5s) for 5 minutes when a dashboard is opened
-	go func() {
-		log.Printf("[Web] Dashboard opened (mode=%s). Rapid 5s refresh mode enabled for 5 minutes.", mode)
+	if !isGuest {
+		// User wants rapid updates (5s) for 5 minutes when an authenticated dashboard is opened
+		go func() {
+			log.Printf("[Web] Dashboard opened (mode=%s). Rapid 5s refresh mode enabled for 5 minutes.", mode)
 
-		changeKey := "report_interval"
-		if mode == "netstatus" {
-			changeKey = "ping_report_interval"
-		}
-
-		tunnel.PushConfigToAllNodes("config", map[string]interface{}{
-			changeKey: 5,
-		})
-
-		time.Sleep(5 * time.Minute)
-
-		log.Printf("[Web] Rapid refresh mode elapsed (mode=%s). Restoring original node intervals.", mode)
-		nodes, err := store.ListProbeNodes(h.dbConn)
-		if err == nil {
-			for _, n := range nodes {
-				go tunnel.PushConfigToNode(n.ID, "config", map[string]interface{}{
-					changeKey: n.ReportInterval,
-				})
+			changeKey := "report_interval"
+			if mode == "netstatus" {
+				changeKey = "ping_report_interval"
 			}
-		}
-	}()
+
+			tunnel.PushConfigToAllNodes("config", map[string]interface{}{
+				changeKey: 5,
+			})
+
+			time.Sleep(5 * time.Minute)
+
+			log.Printf("[Web] Rapid refresh mode elapsed (mode=%s). Restoring original node intervals.", mode)
+			nodes, err := store.ListProbeNodes(h.dbConn)
+			if err == nil {
+				for _, n := range nodes {
+					go tunnel.PushConfigToNode(n.ID, "config", map[string]interface{}{
+						changeKey: n.ReportInterval,
+					})
+				}
+			}
+		}()
+	}
 
 	// We just need to keep the connection open and read to detect disconnects.
 	// The tunnel's Broadcast loop will handle writing stats to it.
