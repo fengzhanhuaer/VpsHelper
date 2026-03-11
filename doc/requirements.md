@@ -35,15 +35,19 @@
   - 新版本拉起后，须在预设超时窗口（如 60 秒）内立刻尝试寻源并与控制中心系统重建多路复用的 WebSocket 连接。
   - 若发生程序 Crash、心跳超时或重连持续失败等任意严重异常，守护进程将立刻接管斩断新版本进程，自动覆盖并回滚至备份的稳定固件版本，以确保远程节点处于“永不失管”状态。
 
-### 6. 基于 WebSocket 的端到端代理与客户端接入 (WebSocket-based Proxy & Client Access)
-- **协议选型与内嵌服务端**:
-  - 由于探针本身利用 WebSocket 进行通信并具备防封锁特性，为了无缝衔接市面上成熟的各类流量代理客户端（供 PC 端如 Windows，或移动端全局代理翻墙），探针需在特定指令下动态启动兼容协议。
-  - **首推方案**：在 WebSocket 流之上承载 **Trojan** 或 **Vmess** / **Shadowsocks (Over WS)** 协议。这就意味着流量特征为标准的 WSS (WebSocket + TLS)，具有顶尖的穿墙留存率。
-- **推荐接入的第三方客户端**:
-  - **Clash Verge Rev** (基于 Mihomo 内核): 完美支持所有主流 WebSocket 承载的代理协议（Trojan-WS, Shadowsocks-WS, Vmess），支持极其强大的分流规则。
-  - **v2rayN / NekoBox**: 非常纯粹且专业的 WebSocket 直连代理客户端，对上述衍生协议支持度极好。
-- **运行机制**: 
-  - 通过控制板下发指令，任意公网探针即可瞬时开启 `Trojan over WebSocket` 监听，控制中心生成 `trojan://密码@探针IP:端口?security=tls&type=ws` 的标准订阅链接，本地 Windows 的 Clash 等软件导入即可无缝中继上网。
+### 6. 底层通信隧道与网络接入 (AI Gateway 协议族)
+
+- **协议选型（已定）**：
+  - **网络助手（GUI 客户端）↔ 探针** 采用**对齐业界标准 AI Gateway 通信**的底层隧道协议（详见 `proxy_client.md` §七）。
+  - 探针端点提供标准的 HTTPS + WebSocket 服务，路径与请求头全面适配 `api.githubcopilot.com` 流转规范（`GET /v1/models` 握手验证、`GET /v1/realtime` 建立 WS 链路），实际承载高并发多路复用会话，为本地应用提供安全网络接入支持。
+  - 接入认证复用现有 HMAC-SHA256 Challenge-Response 体系，以 Bearer Token 格式安全挂载（`node_id.nonce.hmac`）。
+
+- **备选方案（未采用）**：
+  - Trojan / Vmess-WS / Shadowsocks-WS：需依赖 Clash Verge / v2rayN 等第三方客户端导入订阅，无法原生集成进网络助手，不纳入首期。
+  - 如未来有向第三方代理客户端提供订阅的需求，可在探针侧额外开启标准 Trojan-WS 监听作为补充入口。
+
+- **本地暴露**：网络助手对外暴露 `127.0.0.1:1080`（SOCKS5）和 `127.0.0.1:8080`（HTTP 代理）供系统及应用使用。
+
 
 ---
 
@@ -89,9 +93,9 @@ CREATE TABLE proxies (
 
 在 `net/http` Transport 层统一注入全局默认代理，各模块（AI、CF）可在自身设置页单独覆盖。
 
-### 层次 C — 系统级代理软件管理（低优）
+### 层次 C — 底层网络路由引擎管理（低优）
 
-在界面内管理 VPS 上 Xray / Sing-box 进程，包括启停、配置文件编辑、流量统计。需 root/sudo 权限，受限环境需给出 UI 提示。
+在界面内管理 VPS 上系统级的网络通信内核进程（如 Xray / Sing-box 路由设施），包括生命周期启停、底层配置下发与流量监控。需 root/sudo 权限，受限环境需给出 UI 提示。
 
 > **兼容性**：现有 `tg_all_proxy`（`app_settings` key）保留不动，新模块完全独立。
 

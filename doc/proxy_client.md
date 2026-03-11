@@ -29,7 +29,7 @@
 
 - 配置主控地址与登录凭据（支持多主控 profile）
 - 从主控获取探针节点列表及状态（在线、延迟、代理是否开启）
-- 通过主控下发节点管理指令（开启/关闭探针代理服务）
+- 通过主控下发节点管理指令（开启/关闭探针隧道端点服务）
 
 ### F2 — 代理模式
 
@@ -38,7 +38,7 @@
 | 直连代理 | 网络助手直连单个探针代理出口 |
 | 链式代理 | 多个探针串联，流量逐跳透明代理（A → B → … → 出站），跳数不限，每跳仅知道直接上下游 |
 
-- 代理协议：待定
+- 隧道通讯协议：AI Gateway 标准连接（对齐 Copilot 特征，详见 §七）
 - 网络助手对外暴露本地 SOCKS5 / HTTP 代理端口供系统使用
 
 ### F3 — 本地代理接管
@@ -264,8 +264,8 @@ FINAL,,全球组
 | 方法 | 路由 | 说明 |
 |------|------|------|
 | GET | `/api/client/nodes` | 获取探针节点列表及代理状态 |
-| POST | `/api/client/node/:id/proxy/start` | 下发指令开启探针代理服务 |
-| POST | `/api/client/node/:id/proxy/stop` | 下发指令关闭探针代理服务 |
+| POST | `/api/client/node/:id/tunnel/start` | 下发指令开启探针隧道端点 |
+| POST | `/api/client/node/:id/tunnel/stop` | 下发指令关闭探针隧道端点 |
 | GET | `/api/client/node/:id/subscribe` | 获取该节点代理订阅链接 |
 
 认证：Bearer Token / API Key（独立于 Web 登录账号）
@@ -303,3 +303,19 @@ FINAL,,全球组
 | Q5 | TUN 模式是否纳入首期？ | **纳入首期** ✅ |
 | Q6 | F7 进程视图是否在首期实现？非 TUN 模式下仅做轮询读取，TUN 模式事件驱动延期？ | **最先实现**；TUN 模式下同步启用事件驱动 ✅ |
 | Q7 | 「屏蔽进程流量」是否需要 TUN/WFP 驱动支持，还是仅走规则分流黑名单？ | **首期不实现**；F7 仅做按进程查看连接，不做流量屏蔽 ✅ |
+
+---
+
+## 七、探针通讯隧道设计（AI Gateway 接入）
+
+为了提升网络助手（NetHelper）与探针（vpsprobe）之间底层数据流的兼容性和安全性，双方的通讯通道**全面对齐 VS Code 与 GitHub Copilot API 之间的业界标准交互协议**。
+
+本设计的详细通讯维度包括：
+- HTTP/2 路由、Header 结构（如 `Copilot-Integration-Id`）对齐标准生态
+- `Authorization` 认证机制（HMAC 安全握手，基于 `/v1/models` 端点）
+- TLS 层深度协议一致性：包含 SNI 与 JA3/JA4 客户端握手特征（Chromium/Electron 引擎层面对齐）
+- 依托 WebSocket 流的底层帧多路复用，支撑高并发的逻辑会话承载
+
+**完整的协议设计与网络层模块实现细节，见独立文档：**
+👉 **[copilot_disguise_protocol.md](copilot_disguise_protocol.md)**
+
