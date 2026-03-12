@@ -401,8 +401,13 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 
 					needsCertRequest := false
 
-					// Push DDNS to Cloudflare if IP changed
-					if currentIPKey != "|" && currentIPKey != lastIPKey {
+					// Request TLS Certificate if missing, domain changed, or expiring soon
+					if n.TLSCertPem == "" || n.Domain != subDomain {
+						needsCertRequest = true
+					}
+
+					// Push DDNS to Cloudflare if IP changed OR the domain has changed
+					if (currentIPKey != "|" && currentIPKey != lastIPKey) || needsCertRequest {
 						err := ddnsClient.SyncDDNSRecord(subDomain, ips)
 						if err != nil {
 							log.Printf("[ddns-watch] node %d DDNS sync failed: %v", n.ID, err)
