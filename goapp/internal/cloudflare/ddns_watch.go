@@ -416,18 +416,14 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 						}
 					}
 
-					// Push DDNS to Cloudflare if IP changed OR we need a cert OR if lastIPKey is totally empty
-					// Even if the cert was fully provisioned successfully in the past, if a node reappears
-					// or Cloudflare was out of sync, the lastIPKey will mismatch or be empty, driving a sync.
-					if (currentIPKey != "|" && currentIPKey != lastIPKey) || needsCertRequest || lastIPKey == "" {
-						_, err := ddnsClient.SyncDDNSRecord(subDomain, ips)
+					// Cloudflare 反查: 始终进行 SyncDDNSRecord 以确保节点记录不会丢失。
+					if currentIPKey != "|" {
+						updated, err := ddnsClient.SyncDDNSRecord(subDomain, ips)
 						if err != nil {
 							log.Printf("[ddns-watch] node %d DDNS sync failed: %v", n.ID, err)
-						} else {
+						} else if updated || currentIPKey != lastIPKey || lastIPKey == "" {
 							_ = store.SetLocalSetting(cacheKey, currentIPKey)
 							log.Printf("[ddns-watch] node %d DDNS updated for %s: v4=%s, v6=%s", n.ID, subDomain, ips.IPv4, ips.IPv6)
-							// If we successfully synced but it wasn't requested for cert renewal previously,
-							// we do NOT set needsCertRequest = true here to avoid unnecessary cert spam on plain IP changes
 						}
 					}
 
