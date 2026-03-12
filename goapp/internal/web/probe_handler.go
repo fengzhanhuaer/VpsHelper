@@ -113,12 +113,16 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				break
 			}
 
+			installOS := strings.TrimSpace(c.PostForm("install_os"))
+			installType := strings.TrimSpace(c.PostForm("install_type"))
+			installMethod := strings.TrimSpace(c.PostForm("install_method"))
+
 			intervalVal, _ := strconv.Atoi(intervalStr)
 			if intervalVal < 1 {
 				intervalVal = 60
 			}
 
-			if err := store.UpdateProbeNodeDetails(h.dbConn, id, name, note, vendor, vendorUrl, price, expiredAt, intervalVal); err != nil {
+			if err := store.UpdateProbeNodeDetails(h.dbConn, id, name, note, vendor, vendorUrl, price, expiredAt, intervalVal, installOS, installType, installMethod); err != nil {
 				message = "更新失败：" + err.Error()
 				break
 			}
@@ -357,24 +361,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			// Optional: Trigger immediately in a goroutine
 			go cloudflare.TriggerNodeDDNS(h.dbConn)
 
-		case "save_install_settings":
-			installOS := strings.TrimSpace(c.PostForm("install_os"))
-			installType := strings.TrimSpace(c.PostForm("install_type"))
-			installMethod := strings.TrimSpace(c.PostForm("install_method"))
-			if installOS == "" {
-				installOS = "linux"
-			}
-			if installType == "" {
-				installType = "vpsprobe"
-			}
-			if installMethod == "" {
-				installMethod = "direct"
-			}
-			_ = store.SetSetting(h.dbConn, "probe_install_os", installOS)
-			_ = store.SetSetting(h.dbConn, "probe_install_type", installType)
-			_ = store.SetSetting(h.dbConn, "probe_install_method", installMethod)
-			message = "安装配置已保存。"
-			msgOK = true
 		}
 	}
 
@@ -1048,7 +1034,11 @@ func (h *Handler) probeNodeManage(c *gin.Context) {
 			if intervalVal < 1 {
 				intervalVal = 60
 			}
-			if err := store.UpdateProbeNodeDetails(h.dbConn, id, name, note, vendor, vendorUrl, price, expiredAt, intervalVal); err != nil {
+			
+			// Retain existing install settings since this page might not edit them
+			existingNode, _ := store.GetProbeNodeByID(h.dbConn, id)
+			
+			if err := store.UpdateProbeNodeDetails(h.dbConn, id, name, note, vendor, vendorUrl, price, expiredAt, intervalVal, existingNode.InstallOS, existingNode.InstallType, existingNode.InstallMethod); err != nil {
 				msg = "保存失败：" + err.Error()
 			} else {
 				msg = "节点设置已更新"

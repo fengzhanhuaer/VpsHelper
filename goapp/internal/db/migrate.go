@@ -129,6 +129,14 @@ func Migrate(dbConn *sql.DB) error {
 	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN tls_key_pem TEXT NOT NULL DEFAULT '';")
 	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN tls_cert_expired_at TEXT NOT NULL DEFAULT '';")
 
+	// v8: per-node install settings
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN install_os TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN install_type TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN install_method TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN install_os TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN install_type TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN install_method TEXT NOT NULL DEFAULT '';")
+
 	// v4: probe tasks
 	_, _ = dbConn.Exec(`CREATE TABLE IF NOT EXISTS probe_tasks (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,

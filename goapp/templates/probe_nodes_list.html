@@ -211,11 +211,11 @@
                                         <a href="/probe/node/manage?id={{.ID}}" target="_blank" class="ghost btn-sm"
                                             style="text-decoration: none;">💻 单一管理</a>
                                         <button class="ghost btn-sm" type="button"
-                                            onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.VendorUrl}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}', '{{ .Secret }}', '{{ $.BaseURL }}')">⚙️
+                                            onclick="openEditModal('{{.ID}}', '{{.Name}}', '{{.Note}}', '{{.Vendor}}', '{{.VendorUrl}}', '{{.Price}}', '{{.ExpiredAt}}', '{{.ReportInterval}}', '{{ .Secret }}', '{{ $.BaseURL }}', '{{ .InstallOS }}', '{{ .InstallType }}', '{{ .InstallMethod }}')">⚙️
                                             设置</button>
                                         <button class="ghost btn-sm" type="button"
-                                            onclick="copyInstallCmd('{{ .Secret }}', '{{ $.BaseURL }}')"
-                                            title="根据设置面板中的选项生成安装命令并复制">📦 安装</button>
+                                            onclick="copyInstallCmd('{{ .Secret }}', '{{ $.BaseURL }}', '{{ .InstallOS }}', '{{ .InstallType }}', '{{ .InstallMethod }}')"
+                                            title="根据节点的安装配置生成安装命令并复制">📦 安装</button>
                                     </div>
                                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                                         <form method="post" action="/probe/nodes/list" style="margin:0;">
@@ -309,12 +309,11 @@
                     <input type="text" name="note" id="edit-note" />
                 </div>
 
-                <!-- 安装命令配置（独立表单，保存到数据库） -->
-                <form method="post" action="/probe/nodes/list"
-                    style="border-top: 1px solid var(--color-border); margin-top: 4px; padding-top: 14px;">
+                <!-- 安装命令配置 -->
+                <div style="border-top: 1px solid var(--color-border); margin-top: 4px; padding-top: 14px;">
                     <div
                         style="font-size: 0.85em; font-weight: 600; color: var(--color-text-muted); margin-bottom: 10px;">
-                        📦 安装配置 <span style="font-weight:normal;">（点击「安装」按钮时生效，持久化保存）</span></div>
+                        📦 安装配置 <span style="font-weight:normal;">（保存节点设置后生效）</span></div>
                     <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px;">
                         <div>
                             <div style="font-size: 0.8em; color: var(--color-text-muted); margin-bottom: 5px;">操作系统
@@ -322,13 +321,11 @@
                             <div style="display: flex; gap: 8px;">
                                 <label
                                     style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.9em;">
-                                    <input type="radio" name="install-os" value="linux" {{ if eq $.InstallOS "linux"
-                                        }}checked{{ end }} /> Linux
+                                    <input type="radio" name="install_os" value="linux" /> Linux
                                 </label>
                                 <label
                                     style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.9em;">
-                                    <input type="radio" name="install-os" value="windows" {{ if eq $.InstallOS "windows"
-                                        }}checked{{ end }} /> Windows
+                                    <input type="radio" name="install_os" value="windows" /> Windows
                                 </label>
                             </div>
                         </div>
@@ -338,13 +335,11 @@
                             <div style="display: flex; gap: 8px;">
                                 <label
                                     style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.9em;">
-                                    <input type="radio" name="install-type" value="vpsprobe" {{ if eq
-                                        $.InstallType "vpsprobe" }}checked{{ end }} /> vpsprobe 探针
+                                    <input type="radio" name="install_type" value="vpsprobe" /> vpsprobe 探针
                                 </label>
                                 <label
                                     style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.9em;">
-                                    <input type="radio" name="install-type" value="nethelper" {{ if eq
-                                        $.InstallType "nethelper" }}checked{{ end }} /> NetHelper 客户端
+                                    <input type="radio" name="install_type" value="nethelper" /> NetHelper 客户端
                                 </label>
                             </div>
                         </div>
@@ -354,26 +349,19 @@
                             <div style="display: flex; gap: 8px;">
                                 <label
                                     style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.9em;">
-                                    <input type="radio" name="install-method" value="direct" {{ if eq
-                                        $.InstallMethod "direct" }}checked{{ end }} /> 直连 GitHub
+                                    <input type="radio" name="install_method" value="direct" /> 直连 GitHub
                                 </label>
                                 <label
                                     style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.9em;">
-                                    <input type="radio" name="install-method" value="proxy" {{ if eq
-                                        $.InstallMethod "proxy" }}checked{{ end }} /> 主控代理
+                                    <input type="radio" name="install_method" value="proxy" /> 主控代理
                                 </label>
                             </div>
                         </div>
                     </div>
-                    <input type="hidden" name="install_os" id="hidden-install-os" value="{{ $.InstallOS }}" />
-                    <input type="hidden" name="install_type" id="hidden-install-type" value="{{ $.InstallType }}" />
-                    <input type="hidden" name="install_method" id="hidden-install-method"
-                        value="{{ $.InstallMethod }}" />
-                    <button class="ghost btn-sm" type="submit" name="action" value="save_install_settings">💾
-                        保存安装配置</button>
-                </form>
+                </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+
                     <button type="button" class="ghost" onclick="closeEditModal()">取消</button>
                     <button class="btn" type="submit" name="action" value="edit">保存设置</button>
                 </div>
@@ -382,10 +370,10 @@
     </div>
 
     <script>
-        function copyInstallCmd(secret, host) {
-            const os = (document.querySelector('input[name="install-os"]:checked') || { value: 'linux' }).value;
-            const type = (document.querySelector('input[name="install-type"]:checked') || { value: 'vpsprobe' }).value;
-            const method = (document.querySelector('input[name="install-method"]:checked') || { value: 'direct' }).value;
+        function copyInstallCmd(secret, host, os, type, method) {
+            if (!os) os = 'linux';
+            if (!type) type = 'vpsprobe';
+            if (!method) method = 'direct';
 
             let cmd = '';
             if (type === 'nethelper') {
@@ -415,25 +403,7 @@
             });
         }
 
-        // Sync radio changes → hidden inputs so the save-install-settings form always has current values
-        document.querySelectorAll('input[name="install-os"]').forEach(function (r) {
-            r.addEventListener('change', function () {
-                var h = document.getElementById('hidden-install-os');
-                if (h) h.value = this.value;
-            });
-        });
-        document.querySelectorAll('input[name="install-type"]').forEach(function (r) {
-            r.addEventListener('change', function () {
-                var h = document.getElementById('hidden-install-type');
-                if (h) h.value = this.value;
-            });
-        });
-        document.querySelectorAll('input[name="install-method"]').forEach(function (r) {
-            r.addEventListener('change', function () {
-                var h = document.getElementById('hidden-install-method');
-                if (h) h.value = this.value;
-            });
-        });
+
 
         function copyText(el, text) {
             navigator.clipboard.writeText(text).then(() => {
@@ -452,12 +422,23 @@
             });
         }
 
-        function openEditModal(id, name, note, vendor, vendorUrl, price, expiredAt, interval, secret, host) {
+        function openEditModal(id, name, note, vendor, vendorUrl, price, expiredAt, interval, secret, host, installOS, installType, installMethod) {
             document.getElementById('edit-id').value = id;
             document.getElementById('edit-name').value = name;
             document.getElementById('edit-note').value = note;
             document.getElementById('edit-vendor').value = vendor;
             document.getElementById('edit-vendor-url').value = vendorUrl;
+
+            if (!installOS) installOS = 'linux';
+            if (!installType) installType = 'vpsprobe';
+            if (!installMethod) installMethod = 'direct';
+
+            let osRadios = document.querySelectorAll('input[name="install_os"]');
+            for (let r of osRadios) { r.checked = (r.value === installOS); }
+            let typeRadios = document.querySelectorAll('input[name="install_type"]');
+            for (let r of typeRadios) { r.checked = (r.value === installType); }
+            let methodRadios = document.querySelectorAll('input[name="install_method"]');
+            for (let r of methodRadios) { r.checked = (r.value === installMethod); }
 
             let currency = "¥";
             let amount = "";
