@@ -80,9 +80,9 @@ func GetCertInfo(dbConn *sql.DB) *CertInfo {
 		return nil
 	}
 
-	domain := settings["probe_ddns_domain"]
+	domain := strings.ToLower(settings["probe_ddns_domain"])
 	if domain == "" {
-		domain = settings["probe_public_address"]
+		domain = strings.ToLower(settings["probe_public_address"])
 	}
 
 	certPEMStr := settings["probe_tls_cert_pem"]
@@ -184,6 +184,7 @@ func saveUserReg(cacheDir string, u *acmeUser) {
 
 // RequestCertificate requests a regular Let's Encrypt cert using DNS-01 via Cloudflare API.
 func RequestCertificate(dbConn *sql.DB, domain string) {
+	domain = strings.ToLower(domain)
 	log.Printf("[TLS] Requesting Let's Encrypt certificate via DNS-01 for domain: %s", domain)
 
 	// Mark as running in DB
@@ -213,6 +214,7 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 
 // RequestNodeCertificate retrieves a Let's Encrypt cert via DNS-01 for a specific Probe Node and securely stores it in its database record.
 func RequestNodeCertificate(dbConn *sql.DB, nodeID int64, domain string) {
+	domain = strings.ToLower(domain)
 	log.Printf("[TLS] Requesting Let's Encrypt certificate via DNS-01 for Probe Node %d: %s", nodeID, domain)
 
 	certRes, err := executeACMERequest(dbConn, domain)
@@ -322,9 +324,9 @@ func checkAndRenew(dbConn *sql.DB) {
 		return
 	}
 
-	domain := settings["probe_ddns_domain"]
+	domain := strings.ToLower(settings["probe_ddns_domain"])
 	if domain == "" {
-		domain = settings["probe_public_address"]
+		domain = strings.ToLower(settings["probe_public_address"])
 	}
 	if domain == "" {
 		return

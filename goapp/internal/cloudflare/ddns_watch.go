@@ -54,7 +54,7 @@ func TriggerProbeDDNS(dbConn *sql.DB) string {
 		return "Cloudflare API Token 未配置，请先在 Cloudflare 设置中填写。"
 	}
 
-	probeDDNSDomain := strings.TrimSpace(settings["probe_ddns_domain"])
+	probeDDNSDomain := strings.ToLower(strings.TrimSpace(settings["probe_ddns_domain"]))
 	if probeDDNSDomain == "" {
 		return "DDNS 域名为空，跳过更新。"
 	}
@@ -107,12 +107,12 @@ func TriggerNodeDDNS(dbConn *sql.DB) string {
 		return "Cloudflare API Token 未配置"
 	}
 
-	nodeDDNSDomain := strings.TrimSpace(settings["probe_node_ddns_domain"])
+	nodeDDNSDomain := strings.ToLower(strings.TrimSpace(settings["probe_node_ddns_domain"]))
 	if nodeDDNSDomain == "" {
 		return "未配置节点 DDNS 主域名"
 	}
 
-	nodeDDNSPrefix := strings.TrimSpace(settings["probe_node_ddns_prefix"])
+	nodeDDNSPrefix := strings.ToLower(strings.TrimSpace(settings["probe_node_ddns_prefix"]))
 	if nodeDDNSPrefix == "" {
 		nodeDDNSPrefix = "api.gateway.ai."
 	}
@@ -167,7 +167,7 @@ func TriggerNodeDDNS(dbConn *sql.DB) string {
 		_ = store.SetLocalSetting(cacheKey, "")
 
 		encodedID := base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(n.ID, 10)))
-		subDomain := fmt.Sprintf("%s%s.%s", nodeDDNSPrefix, encodedID, nodeDDNSDomain)
+		subDomain := strings.ToLower(fmt.Sprintf("%s%s.%s", nodeDDNSPrefix, encodedID, nodeDDNSDomain))
 		if err := client.SyncDDNSRecord(subDomain, ips); err != nil {
 			log.Printf("[ddns] TriggerNodeDDNS node %d failed: %v", n.ID, err)
 		} else {
@@ -318,7 +318,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 	}
 
 	// ── 3. Probe DDNS (Auto Update A/AAAA) ─────────────────
-	probeDDNSDomain := strings.TrimSpace(settings["probe_ddns_domain"])
+	probeDDNSDomain := strings.ToLower(strings.TrimSpace(settings["probe_ddns_domain"]))
 	if probeDDNSDomain != "" && cfToken != "" {
 		ddnsZoneID := ""
 		tempClient := NewAPIClient(cfToken, accountID, "")
@@ -348,8 +348,8 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 	}
 
 	// ── 4. Nodes Auto DDNS (prefix{ID}.domain) ────────────
-	nodeDDNSDomain := strings.TrimSpace(settings["probe_node_ddns_domain"])
-	nodeDDNSPrefix := strings.TrimSpace(settings["probe_node_ddns_prefix"])
+	nodeDDNSDomain := strings.ToLower(strings.TrimSpace(settings["probe_node_ddns_domain"]))
+	nodeDDNSPrefix := strings.ToLower(strings.TrimSpace(settings["probe_node_ddns_prefix"]))
 	if nodeDDNSPrefix == "" {
 		nodeDDNSPrefix = "api.gateway.ai."
 	}
@@ -397,7 +397,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 					lastIPKey := store.GetLocalSetting(cacheKey)
 
 					encodedID := base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(n.ID, 10)))
-					subDomain := fmt.Sprintf("%s%s.%s", nodeDDNSPrefix, encodedID, nodeDDNSDomain)
+					subDomain := strings.ToLower(fmt.Sprintf("%s%s.%s", nodeDDNSPrefix, encodedID, nodeDDNSDomain))
 
 					needsCertRequest := false
 
