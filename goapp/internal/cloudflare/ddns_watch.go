@@ -83,7 +83,7 @@ func TriggerProbeDDNS(dbConn *sql.DB) string {
 	// Reset the cached key so the background watcher also re-syncs on next tick
 	_ = store.SetLocalSetting("probe_ddns_last_ip", "")
 
-	if err := client.SyncDDNSRecord(probeDDNSDomain, ips); err != nil {
+	if _, err := client.SyncDDNSRecord(probeDDNSDomain, ips); err != nil {
 		log.Printf("[ddns] TriggerProbeDDNS failed: %v", err)
 		return "DDNS 更新失败: " + err.Error()
 	}
@@ -170,7 +170,7 @@ func TriggerNodeDDNS(dbConn *sql.DB) string {
 		subDomain := strings.ToLower(fmt.Sprintf("%s%s.%s", nodeDDNSPrefix, encodedID, nodeDDNSDomain))
 
 		// Push DDNS unconditionally if triggering manually or if local cache is empty
-		if err := client.SyncDDNSRecord(subDomain, ips); err != nil {
+		if _, err := client.SyncDDNSRecord(subDomain, ips); err != nil {
 			log.Printf("[ddns] TriggerNodeDDNS node %d failed: %v", n.ID, err)
 		} else {
 			_ = store.SetLocalSetting(cacheKey, ips.IPv4+"|"+ips.IPv6)
@@ -336,12 +336,14 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 			currentIPKey := ips.IPv4 + "|" + ips.IPv6
 			lastIPKey := store.GetLocalSetting("probe_ddns_last_ip")
 
-			if currentIPKey != "|" && currentIPKey != lastIPKey {
-				err := ddnsClient.SyncDDNSRecord(probeDDNSDomain, ips)
+			if currentIPKey != "|" {
+				// Cloudflare 反查: 始终进行 SyncDDNSRecord (其内部包含了查询现存记录的逻辑)。
+				// 如果 Cloudflare 上的记录不存在或与当前不符，将自动增加或更新。
+				updated, err := ddnsClient.SyncDDNSRecord(probeDDNSDomain, ips)
 				if err != nil {
 					log.Printf("[ddns-watch] probe DDNS sync failed: %v", err)
-
-				} else {
+				} else if updated || currentIPKey != lastIPKey {
+					// 仅当地 IP 变化，或 Cloudflare 侧记录发生变动时刷新并打印日志
 					_ = store.SetLocalSetting("probe_ddns_last_ip", currentIPKey)
 					log.Printf("[ddns-watch] probe DDNS updated for %s: v4=%s, v6=%s", probeDDNSDomain, ips.IPv4, ips.IPv6)
 				}
@@ -418,7 +420,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 					// Even if the cert was fully provisioned successfully in the past, if a node reappears
 					// or Cloudflare was out of sync, the lastIPKey will mismatch or be empty, driving a sync.
 					if (currentIPKey != "|" && currentIPKey != lastIPKey) || needsCertRequest || lastIPKey == "" {
-						err := ddnsClient.SyncDDNSRecord(subDomain, ips)
+						_, err := ddnsClient.SyncDDNSRecord(subDomain, ips)
 						if err != nil {
 							log.Printf("[ddns-watch] node %d DDNS sync failed: %v", n.ID, err)
 						} else {

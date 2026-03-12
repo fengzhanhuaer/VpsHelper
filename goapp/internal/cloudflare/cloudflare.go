@@ -502,19 +502,19 @@ func (c *APIClient) SyncReusablePolicy(policyID string, ips []string) (string, e
 }
 
 // SyncDDNSRecord updates or creates A and AAAA records for a specific domain pointing to the host's current IPs.
-func (c *APIClient) SyncDDNSRecord(domain string, ips PublicIPs) error {
+func (c *APIClient) SyncDDNSRecord(domain string, ips PublicIPs) (bool, error) {
 	if c.ZoneID == "" {
-		return fmt.Errorf("Zone ID is required for DDNS")
+		return false, fmt.Errorf("Zone ID is required for DDNS")
 	}
 	if domain == "" {
-		return fmt.Errorf("domain is required for DDNS")
+		return false, fmt.Errorf("domain is required for DDNS")
 	}
 
 	// Fetch existing records for the domain
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records?name=%s", c.ZoneID, domain)
 	respBytes, err := c.doRequest("GET", url, nil)
 	if err != nil {
-		return fmt.Errorf("fetch dns records for %s failed: %v", domain, err)
+		return false, fmt.Errorf("fetch dns records for %s failed: %v", domain, err)
 	}
 
 	type dnsRecord struct {
@@ -527,7 +527,7 @@ func (c *APIClient) SyncDDNSRecord(domain string, ips PublicIPs) error {
 		Result  []dnsRecord `json:"result"`
 	}
 	if err := json.Unmarshal(respBytes, &fetchResult); err != nil {
-		return fmt.Errorf("parse dns records failed: %v", err)
+		return false, fmt.Errorf("parse dns records failed: %v", err)
 	}
 
 	existingV4 := ""
@@ -577,18 +577,25 @@ func (c *APIClient) SyncDDNSRecord(domain string, ips PublicIPs) error {
 	}
 
 	var errV4, errV6 error
+	updated := false
 	if ips.IPv4 != "" && ips.IPv4 != existingV4 {
 		errV4 = upsertRecord("A", ips.IPv4, idV4)
+		if errV4 == nil {
+			updated = true
+		}
 	}
 	if ips.IPv6 != "" && ips.IPv6 != existingV6 {
 		errV6 = upsertRecord("AAAA", ips.IPv6, idV6)
+		if errV6 == nil {
+			updated = true
+		}
 	}
 
 	if errV4 != nil {
-		return fmt.Errorf("A record update failed: %v", errV4)
+		return updated, fmt.Errorf("A record update failed: %v", errV4)
 	}
 	if errV6 != nil {
-		return fmt.Errorf("AAAA record update failed: %v", errV6)
+		return updated, fmt.Errorf("AAAA record update failed: %v", errV6)
 	}
-	return nil
+	return updated, nil
 }
