@@ -154,6 +154,7 @@ func Register(router *gin.Engine, cfg config.Config, dbConn *sql.DB) {
 	router.GET("/probe/dashboard/netstatus", func(c *gin.Context) { c.Redirect(http.StatusFound, "/probe/dashboard?tab=netstatus") })
 	router.GET("/probe/ws", h.probeDashboardWS)
 	router.GET("/api/probe/discover", h.probeDiscover)
+	router.GET("/api/probe/cert", h.probeCert)
 	router.GET("/api/probe/challenge", h.probeChallenge)
 	router.GET("/api/probe/ping_history", h.probePingHistory)
 	router.GET("/api/probe/latest_binary", h.probeLatestBinary)

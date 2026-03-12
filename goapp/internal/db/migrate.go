@@ -118,6 +118,17 @@ func Migrate(dbConn *sql.DB) error {
 		deleted_at      TEXT    NOT NULL DEFAULT ''
 	)`)
 
+	// v7: domain and certificate storage for probe nodes
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN domain TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN tls_cert_pem TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN tls_key_pem TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes ADD COLUMN tls_cert_expired_at TEXT NOT NULL DEFAULT '';")
+
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN domain TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN tls_cert_pem TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN tls_key_pem TEXT NOT NULL DEFAULT '';")
+	_, _ = dbConn.Exec("ALTER TABLE probe_nodes_deleted ADD COLUMN tls_cert_expired_at TEXT NOT NULL DEFAULT '';")
+
 	// v4: probe tasks
 	_, _ = dbConn.Exec(`CREATE TABLE IF NOT EXISTS probe_tasks (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,

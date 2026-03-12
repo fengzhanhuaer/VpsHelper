@@ -49,15 +49,22 @@
 
             <!-- 节点自动 DDNS 设置 -->
             <div class="panel" style="margin-bottom: 24px; border: 1px solid #ddd;">
-                <h3 style="margin-top:0;">探针节点纯净 DDNS</h3>
+                <h3 style="margin-top:0;">节点 DDNS</h3>
                 <p class="muted" style="margin-top:-5px; margin-bottom: 12px; font-size: 0.9em;">
-                    填写托管在 Cloudflare 的主域名。系统将自动为所有在线探针下发维护 DDNS 记录，格式通常为 <code>ddnsgo_{节点ID}.主域名</code>。
+                    设置自动分配给节点的特定子域名格式与托管的主域名。系统将依据该设置自动派发形如 <code>[前缀][节点ID].[主域名]</code> 的受控 DDNS 解析地址并同步证书。
                 </p>
                 <form method="post" action="/probe/nodes/comm" style="display: flex; flex-direction: column; gap: 12px;">
-                    <div class="field">
-                        <label>节点 DDNS 主域名</label>
-                        <input name="probe_node_ddns_domain" value="{{ .NodeDDNSDomain }}" placeholder="例如：example.com（留空则关闭该功能）" />
-                        <div class="muted">必须是有效接入到您账户中 Cloudflare API 所绑定的同一主域名</div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <div class="field" style="flex: 1; min-width: 150px; max-width: 250px;">
+                            <label>子域前缀</label>
+                            <input name="probe_node_ddns_prefix" value="{{ .NodeDDNSPrefix }}" placeholder="默认：api.gateway.ai." />
+                            <div class="muted">留空使用默认，必须以点结尾以连结节点ID</div>
+                        </div>
+                        <div class="field" style="flex: 2; min-width: 250px;">
+                            <label>节点 DDNS 主域名</label>
+                            <input name="probe_node_ddns_domain" value="{{ .NodeDDNSDomain }}" placeholder="例如：example.com（留空则彻底关闭该自动化功能）" />
+                            <div class="muted">必须是有效接入到控制者 Cloudflare API 账户中的同名域名</div>
+                        </div>
                     </div>
                     <div>
                         <button class="btn" type="submit" name="action" value="save_node_ddns_settings">保存节点 DDNS 设置</button>

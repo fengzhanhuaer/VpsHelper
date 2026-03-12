@@ -39,6 +39,14 @@ type DiscoverResponse struct {
 	Error          string         `json:"error"`
 }
 
+type CertResponse struct {
+	Success    bool   `json:"success"`
+	Domain     string `json:"domain"`
+	TLSCertPem string `json:"tls_cert_pem"`
+	TLSKeyPem  string `json:"tls_key_pem"`
+	Error      string `json:"error"`
+}
+
 // Start manages the lifecycle of the probe connection to the control center
 func Start(ctx context.Context, serverHost, secret string) {
 	go func() {
@@ -160,11 +168,83 @@ func AddProbeAuthHeaders(req *http.Request, secret, nonce string) {
 	req.Header.Set("X-Probe-Signature", sig)
 }
 
+// fetchCertificate securely retrieves the TLS certificate assigned to this node by the Master Node.
+// It implements basic caching: if a valid certificate is already present locally, it skips the network request.
+func fetchCertificate(ctx context.Context, serverHost, secret, nonce string) error {
+	// Simple caching: check if cert already exists and is reasonably valid.
+	certPath := tunnel.GetLocalNodeCertPath()
+	keyPath := tunnel.GetLocalNodeKeyPath()
+	if _, err := os.Stat(certPath); err == nil {
+		if _, err := os.Stat(keyPath); err == nil {
+			// If files exist, we skip downloading to avoid hammering the control center.
+			// Detailed expiry checking can be added if the probe needs to independently renew,
+			// but currently the master handles renewal and pushes/pulls can be event-driven.
+			// For now, if we have a cert, we trust it's the latest pulled or will be updated on next restart.
+			log.Printf("[Agent] 本地已存在通过中心下发的归属证书缓存，跳过拉取 [%s]", certPath)
+			return nil
+		}
+	}
+
+	url := serverHost
+	if !strings.HasPrefix(url, "http") {
+		url = "https://" + url
+	}
+	url = strings.TrimRight(url, "/") + "/api/probe/cert"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("create cert request: %w", err)
+	}
+	AddProbeAuthHeaders(req, secret, nonce)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("do cert request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// No certificate provisioned yet, which is normal for a fresh node or if auto_tls is off.
+		log.Printf("[Agent] 该节点尚未在中心分配或生成专属证书。")
+		return nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("cert fetch failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var cResp CertResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cResp); err != nil {
+		return fmt.Errorf("decode cert response: %w", err)
+	}
+
+	if !cResp.Success || cResp.Domain == "" || cResp.TLSCertPem == "" {
+		return fmt.Errorf("cert fetch returned error or incomplete data: %s", cResp.Error)
+	}
+
+	// Save to local storage for the tunnel listener to use
+	if err := os.WriteFile(certPath, []byte(cResp.TLSCertPem), 0600); err != nil {
+		return fmt.Errorf("write cert_pem failed: %w", err)
+	}
+	if err := os.WriteFile(keyPath, []byte(cResp.TLSKeyPem), 0600); err != nil {
+		return fmt.Errorf("write key_pem failed: %w", err)
+	}
+
+	log.Printf("[Agent] 成功加载中心下发的专属 TLS 证书: %s", cResp.Domain)
+	return nil
+}
+
 func connectAndServe(ctx context.Context, serverHost, secret string) error {
 	// 0. Fetch Challenge Nonce
 	nonce, err := fetchChallengeNonce(ctx, serverHost)
 	if err != nil {
 		log.Printf("[Agent] Failed to fetch challenge nonce, will try without it: %v", err)
+	}
+
+	// 0.5. Fetch and Cache Assigned Certificate
+	if err := fetchCertificate(ctx, serverHost, secret, nonce); err != nil {
+		log.Printf("[Agent] 拉取证书时发生错误: %v", err)
 	}
 
 	// 1. Discover Real Address

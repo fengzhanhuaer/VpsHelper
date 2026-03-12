@@ -3,13 +3,16 @@ package cloudflare
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
 	"vpshelper-go/internal/store"
+	"vpshelper-go/internal/tunnel"
 )
 
 // StartDDNSWatch launches a background goroutine that periodically resolves
@@ -93,7 +96,7 @@ func TriggerProbeDDNS(dbConn *sql.DB) string {
 
 // TriggerNodeDDNS forces an immediate update of all online nodes' DDNS records
 func TriggerNodeDDNS(dbConn *sql.DB) string {
-	keys := []string{"cf_api_token", "cf_account_id", "probe_node_ddns_domain"}
+	keys := []string{"cf_api_token", "cf_account_id", "probe_node_ddns_domain", "probe_node_ddns_prefix"}
 	settings, err := store.GetSettings(dbConn, keys)
 	if err != nil {
 		return "读取设置失败: " + err.Error()
@@ -107,6 +110,14 @@ func TriggerNodeDDNS(dbConn *sql.DB) string {
 	nodeDDNSDomain := strings.TrimSpace(settings["probe_node_ddns_domain"])
 	if nodeDDNSDomain == "" {
 		return "未配置节点 DDNS 主域名"
+	}
+
+	nodeDDNSPrefix := strings.TrimSpace(settings["probe_node_ddns_prefix"])
+	if nodeDDNSPrefix == "" {
+		nodeDDNSPrefix = "api.gateway.ai."
+	}
+	if !strings.HasSuffix(nodeDDNSPrefix, ".") {
+		nodeDDNSPrefix += "."
 	}
 
 	accountID := strings.TrimSpace(settings["cf_account_id"])
@@ -155,12 +166,18 @@ func TriggerNodeDDNS(dbConn *sql.DB) string {
 		cacheKey := fmt.Sprintf("node_ddns_last_ip_%d", n.ID)
 		_ = store.SetLocalSetting(cacheKey, "")
 
-		subDomain := fmt.Sprintf("ddnsgo_%d.%s", n.ID, nodeDDNSDomain)
+		encodedID := base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(n.ID, 10)))
+		subDomain := fmt.Sprintf("%s%s.%s", nodeDDNSPrefix, encodedID, nodeDDNSDomain)
 		if err := client.SyncDDNSRecord(subDomain, ips); err != nil {
 			log.Printf("[ddns] TriggerNodeDDNS node %d failed: %v", n.ID, err)
 		} else {
 			_ = store.SetLocalSetting(cacheKey, ips.IPv4+"|"+ips.IPv6)
 			count++
+
+			// Check if we need to request a TLS cert for this new/updated domain
+			if n.TLSCertPem == "" || n.Domain != subDomain {
+				go tunnel.RequestNodeCertificate(dbConn, n.ID, subDomain)
+			}
 		}
 	}
 
@@ -219,7 +236,7 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 		"cf_api_token", "cf_account_id", "cf_zone_id", "cf_zone_domain",
 		"cf_allow_ips", "cf_policy_id",
 		"cf_block_ips", "cf_block_uris",
-		"probe_ddns_domain", "probe_node_ddns_domain",
+		"probe_ddns_domain", "probe_node_ddns_domain", "probe_node_ddns_prefix",
 	}
 	settings, err := store.GetSettings(dbConn, keys)
 	if err != nil {
@@ -330,8 +347,16 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 		}
 	}
 
-	// ── 4. Nodes Auto DDNS (ddnsgo_{ID}.domain) ────────────
+	// ── 4. Nodes Auto DDNS (prefix{ID}.domain) ────────────
 	nodeDDNSDomain := strings.TrimSpace(settings["probe_node_ddns_domain"])
+	nodeDDNSPrefix := strings.TrimSpace(settings["probe_node_ddns_prefix"])
+	if nodeDDNSPrefix == "" {
+		nodeDDNSPrefix = "api.gateway.ai."
+	}
+	if !strings.HasSuffix(nodeDDNSPrefix, ".") {
+		nodeDDNSPrefix += "."
+	}
+
 	if nodeDDNSDomain != "" && cfToken != "" {
 		ddnsZoneID := ""
 		tempClient := NewAPIClient(cfToken, accountID, "")
@@ -371,15 +396,36 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 					cacheKey := fmt.Sprintf("node_ddns_last_ip_%d", n.ID)
 					lastIPKey := store.GetLocalSetting(cacheKey)
 
+					encodedID := base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(n.ID, 10)))
+					subDomain := fmt.Sprintf("%s%s.%s", nodeDDNSPrefix, encodedID, nodeDDNSDomain)
+
+					needsCertRequest := false
+
+					// Push DDNS to Cloudflare if IP changed
 					if currentIPKey != "|" && currentIPKey != lastIPKey {
-						subDomain := fmt.Sprintf("ddnsgo_%d.%s", n.ID, nodeDDNSDomain)
 						err := ddnsClient.SyncDDNSRecord(subDomain, ips)
 						if err != nil {
 							log.Printf("[ddns-watch] node %d DDNS sync failed: %v", n.ID, err)
 						} else {
 							_ = store.SetLocalSetting(cacheKey, currentIPKey)
 							log.Printf("[ddns-watch] node %d DDNS updated for %s: v4=%s, v6=%s", n.ID, subDomain, ips.IPv4, ips.IPv6)
+							needsCertRequest = true
 						}
+					}
+
+					// Request TLS Certificate if missing, domain changed, or expiring soon
+					if n.TLSCertPem == "" || n.Domain != subDomain {
+						needsCertRequest = true
+					} else if n.TLSCertExpired != "" {
+						if t, err := time.Parse("2006-01-02 15:04:05", n.TLSCertExpired); err == nil {
+							if time.Until(t) < 30*24*time.Hour { // Renew if < 30 days
+								needsCertRequest = true
+							}
+						}
+					}
+
+					if needsCertRequest {
+						go tunnel.RequestNodeCertificate(dbConn, n.ID, subDomain)
 					}
 				}
 			}

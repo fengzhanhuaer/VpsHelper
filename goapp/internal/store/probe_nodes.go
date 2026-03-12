@@ -128,6 +128,10 @@ type ProbeNode struct {
 	Price          string
 	ExpiredAt      string
 	ExpireDaysStr  string
+	Domain         string
+	TLSCertPem     string
+	TLSKeyPem      string
+	TLSCertExpired string
 
 	// Runtime fields loaded from local DB (probe_node_status), not backed up.
 	Online          bool
@@ -144,7 +148,7 @@ type ProbeNode struct {
 // status from the local DB.
 func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 	rows, err := dbConn.Query(
-		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 60), COALESCE(vendor, ''), COALESCE(vendor_url, ''), COALESCE(price, ''), COALESCE(expired_at, '') FROM probe_nodes ORDER BY id ASC`,
+		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 60), COALESCE(vendor, ''), COALESCE(vendor_url, ''), COALESCE(price, ''), COALESCE(expired_at, ''), COALESCE(domain, ''), COALESCE(tls_cert_pem, ''), COALESCE(tls_key_pem, ''), COALESCE(tls_cert_expired_at, '') FROM probe_nodes ORDER BY id ASC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list probe nodes: %w", err)
@@ -154,7 +158,7 @@ func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 	var nodes []ProbeNode
 	for rows.Next() {
 		var n ProbeNode
-		if err := rows.Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt, &n.Domain, &n.TLSCertPem, &n.TLSKeyPem, &n.TLSCertExpired); err != nil {
 			return nil, err
 		}
 		if n.ReportInterval <= 0 {
@@ -219,8 +223,8 @@ func ListProbeNodes(dbConn *sql.DB) ([]ProbeNode, error) {
 func GetProbeNodeBySecret(dbConn *sql.DB, secret string) (ProbeNode, error) {
 	var n ProbeNode
 	err := dbConn.QueryRow(
-		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 60), COALESCE(vendor, ''), COALESCE(vendor_url, ''), COALESCE(price, ''), COALESCE(expired_at, '') FROM probe_nodes WHERE secret = ?`, secret,
-	).Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt)
+		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 60), COALESCE(vendor, ''), COALESCE(vendor_url, ''), COALESCE(price, ''), COALESCE(expired_at, ''), COALESCE(domain, ''), COALESCE(tls_cert_pem, ''), COALESCE(tls_key_pem, ''), COALESCE(tls_cert_expired_at, '') FROM probe_nodes WHERE secret = ?`, secret,
+	).Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt, &n.Domain, &n.TLSCertPem, &n.TLSKeyPem, &n.TLSCertExpired)
 	if err != nil {
 		return ProbeNode{}, fmt.Errorf("get probe node by secret: %w", err)
 	}
@@ -295,8 +299,8 @@ func DeleteProbeNode(dbConn *sql.DB, id int64) error {
 	defer tx.Rollback()
 
 	_, err = tx.Exec(`
-		INSERT INTO probe_nodes_deleted (name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, deleted_at)
-		SELECT name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, ?
+		INSERT INTO probe_nodes_deleted (name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, domain, tls_cert_pem, tls_key_pem, tls_cert_expired_at, deleted_at)
+		SELECT name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, domain, tls_cert_pem, tls_key_pem, tls_cert_expired_at, ?
 		FROM probe_nodes WHERE id = ?
 	`, now, id)
 	if err != nil {
@@ -329,13 +333,17 @@ type DeletedProbeNode struct {
 	VendorUrl      string
 	Price          string
 	ExpiredAt      string
+	Domain         string
+	TLSCertPem     string
+	TLSKeyPem      string
+	TLSCertExpired string
 	DeletedAt      string
 }
 
 // ListDeletedProbeNodes returns all soft-deleted nodes.
 func ListDeletedProbeNodes(dbConn *sql.DB) ([]DeletedProbeNode, error) {
 	rows, err := dbConn.Query(
-		`SELECT id, name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, deleted_at FROM probe_nodes_deleted ORDER BY deleted_at DESC`,
+		`SELECT id, name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, domain, tls_cert_pem, tls_key_pem, tls_cert_expired_at, deleted_at FROM probe_nodes_deleted ORDER BY deleted_at DESC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list deleted nodes: %w", err)
@@ -345,7 +353,7 @@ func ListDeletedProbeNodes(dbConn *sql.DB) ([]DeletedProbeNode, error) {
 	var nodes []DeletedProbeNode
 	for rows.Next() {
 		var n DeletedProbeNode
-		if err := rows.Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt, &n.DeletedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt, &n.Domain, &n.TLSCertPem, &n.TLSKeyPem, &n.TLSCertExpired, &n.DeletedAt); err != nil {
 			return nil, err
 		}
 		nodes = append(nodes, n)
@@ -357,8 +365,8 @@ func ListDeletedProbeNodes(dbConn *sql.DB) ([]DeletedProbeNode, error) {
 func GetProbeNodeByID(dbConn *sql.DB, id int64) (ProbeNode, error) {
 	var n ProbeNode
 	err := dbConn.QueryRow(
-		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 60), COALESCE(vendor, ''), COALESCE(vendor_url, ''), COALESCE(price, ''), COALESCE(expired_at, '') FROM probe_nodes WHERE id = ?`, id,
-	).Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt)
+		`SELECT id, name, note, secret, created_at, COALESCE(report_interval, 60), COALESCE(vendor, ''), COALESCE(vendor_url, ''), COALESCE(price, ''), COALESCE(expired_at, ''), COALESCE(domain, ''), COALESCE(tls_cert_pem, ''), COALESCE(tls_key_pem, ''), COALESCE(tls_cert_expired_at, '') FROM probe_nodes WHERE id = ?`, id,
+	).Scan(&n.ID, &n.Name, &n.Note, &n.Secret, &n.CreatedAt, &n.ReportInterval, &n.Vendor, &n.VendorUrl, &n.Price, &n.ExpiredAt, &n.Domain, &n.TLSCertPem, &n.TLSKeyPem, &n.TLSCertExpired)
 	if err != nil {
 		return ProbeNode{}, fmt.Errorf("get probe node by id: %w", err)
 	}
@@ -417,8 +425,8 @@ func RestoreDeletedProbeNode(dbConn *sql.DB, id int64) error {
 	defer tx.Rollback()
 
 	_, err = tx.Exec(`
-		INSERT INTO probe_nodes (name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at)
-		SELECT name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at
+		INSERT INTO probe_nodes (name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, domain, tls_cert_pem, tls_key_pem, tls_cert_expired_at)
+		SELECT name, note, secret, created_at, report_interval, vendor, vendor_url, price, expired_at, domain, tls_cert_pem, tls_key_pem, tls_cert_expired_at
 		FROM probe_nodes_deleted WHERE id = ?
 	`, id)
 	if err != nil {
@@ -449,6 +457,15 @@ func UpdateProbeNodeDetails(dbConn *sql.DB, id int64, name, note, vendor, vendor
 	_, err := dbConn.Exec(
 		`UPDATE probe_nodes SET name = ?, note = ?, vendor = ?, vendor_url = ?, price = ?, expired_at = ?, report_interval = ? WHERE id = ?`,
 		name, note, vendor, vendorUrl, price, expiredAt, interval, id,
+	)
+	return err
+}
+
+// UpdateProbeNodeTLS updates the automatically assigned Domain and generated TLS certificate materials.
+func UpdateProbeNodeTLS(dbConn *sql.DB, id int64, domain, certPem, keyPem, expiredAt string) error {
+	_, err := dbConn.Exec(
+		`UPDATE probe_nodes SET domain = ?, tls_cert_pem = ?, tls_key_pem = ?, tls_cert_expired_at = ? WHERE id = ?`,
+		domain, certPem, keyPem, expiredAt, id,
 	)
 	return err
 }

@@ -345,7 +345,10 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			}
 
 		case "save_node_ddns_settings":
+			nodeDDNSPrefix := strings.TrimSpace(c.PostForm("probe_node_ddns_prefix"))
 			nodeDDNSDomain := strings.TrimSpace(c.PostForm("probe_node_ddns_domain"))
+			
+			_ = store.SetSetting(h.dbConn, "probe_node_ddns_prefix", nodeDDNSPrefix)
 			_ = store.SetSetting(h.dbConn, "probe_node_ddns_domain", nodeDDNSDomain)
 
 			message = "探针节点 DDNS 设置已保存。"
@@ -379,7 +382,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"probe_private_port", "probe_public_address", "probe_ddns_domain",
 		"probe_history_days", "probe_auto_tls",
 		"probe_tls_cert_status", "probe_tls_cert_error", "probe_tls_cert_updated_at",
-		"probe_master_address", "probe_node_ddns_domain",
+		"probe_master_address", "probe_node_ddns_domain", "probe_node_ddns_prefix",
 		"probe_install_os", "probe_install_type", "probe_install_method",
 	})
 	if err != nil {
@@ -402,6 +405,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 	certReqAt := settings["probe_tls_cert_updated_at"]
 	masterAddress := settings["probe_master_address"]
 	nodeDDNSDomain := settings["probe_node_ddns_domain"]
+	nodeDDNSPrefix := settings["probe_node_ddns_prefix"]
 
 	// 读取证书详细状态
 	certInfo := tunnel.GetCertInfo(h.dbConn)
@@ -465,6 +469,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"HistoryDays":    historyDays,
 		"MasterAddress":  masterAddress,
 		"NodeDDNSDomain": nodeDDNSDomain,
+		"NodeDDNSPrefix": nodeDDNSPrefix,
 		"InstallOS":      installOS,
 		"InstallType":    installType,
 		"InstallMethod":  installMethod,
@@ -589,6 +594,37 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 		"address":         address,
 		"report_interval": node.ReportInterval,
 		"ping_tasks":      tasksRes,
+	})
+}
+
+// probeCert is the dedicated API endpoint for probes to securely pull their assigned DDNS domain and TLS certificates.
+func (h *Handler) probeCert(c *gin.Context) {
+	ip := c.ClientIP()
+	if security.IsBanned(ip) {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+
+	node, authErr := h.verifyProbeAuth(c)
+	if authErr != nil {
+		security.RecordFailure(h.dbConn, ip)
+		c.JSON(http.StatusForbidden, gin.H{"error": "authentication failed: " + authErr.Error()})
+		return
+	}
+
+	if node.Domain == "" || node.TLSCertPem == "" {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "no certificate provisioned for this node yet",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":      true,
+		"domain":       node.Domain,
+		"tls_cert_pem": node.TLSCertPem,
+		"tls_key_pem":  node.TLSKeyPem,
 	})
 }
 

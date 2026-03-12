@@ -48,6 +48,28 @@ func certCacheDir() string {
 	return filepath.Join(dataDir, "autocert_dns01")
 }
 
+// GetLocalNodeCertPath returns the path where the probe node caches its TLS cert_pem downloaded from the Master.
+func GetLocalNodeCertPath() string {
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "."
+	}
+	certDir := filepath.Join(dataDir, "probe_cert")
+	os.MkdirAll(certDir, 0o700)
+	return filepath.Join(certDir, "cert.pem")
+}
+
+// GetLocalNodeKeyPath returns the path where the probe node caches its TLS key_pem downloaded from the Master.
+func GetLocalNodeKeyPath() string {
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "."
+	}
+	certDir := filepath.Join(dataDir, "probe_cert")
+	os.MkdirAll(certDir, 0o700)
+	return filepath.Join(certDir, "key.pem")
+}
+
 // GetCertInfo reads the stored certificate from DB and returns parsed status info.
 func GetCertInfo(dbConn *sql.DB) *CertInfo {
 	settings, err := store.GetSettings(dbConn, []string{
@@ -170,32 +192,69 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 	_ = store.SetSetting(dbConn, "probe_tls_cert_error", "")
 	_ = store.SetSetting(dbConn, "probe_tls_cert_updated_at", now)
 
-	settings, err := store.GetSettings(dbConn, []string{"cf_api_token"})
-	if err != nil || strings.TrimSpace(settings["cf_api_token"]) == "" {
-		msg := "cf_api_token 未配置，无法使用 DNS-01 申请证书"
+	certRes, err := executeACMERequest(dbConn, domain)
+	if err != nil {
+		msg := fmt.Sprintf("DNS-01 验证或证书申请失败: %v", err)
 		log.Printf("[TLS] %s", msg)
 		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
 		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
 		return
+	}
+
+	// Save the obtained certificate & key straight to DB
+	_ = store.SetSetting(dbConn, "probe_tls_cert_pem", string(certRes.Certificate))
+	_ = store.SetSetting(dbConn, "probe_tls_key_pem", string(certRes.PrivateKey))
+	_ = store.SetSetting(dbConn, "probe_tls_cert_status", "success")
+	_ = store.SetSetting(dbConn, "probe_tls_cert_error", "")
+	_ = store.SetSetting(dbConn, "probe_tls_cert_updated_at", time.Now().Format("2006-01-02 15:04:05"))
+
+	log.Printf("[TLS] Certificate for %s successfully issued and stored in database", domain)
+}
+
+// RequestNodeCertificate retrieves a Let's Encrypt cert via DNS-01 for a specific Probe Node and securely stores it in its database record.
+func RequestNodeCertificate(dbConn *sql.DB, nodeID int64, domain string) {
+	log.Printf("[TLS] Requesting Let's Encrypt certificate via DNS-01 for Probe Node %d: %s", nodeID, domain)
+
+	certRes, err := executeACMERequest(dbConn, domain)
+	if err != nil {
+		log.Printf("[TLS] Failed to request cert for Probe Node %d (%s): %v", nodeID, domain, err)
+		return
+	}
+
+	// Parse cert to find exact expiration date
+	expiredAt := ""
+	block, _ := pem.Decode(certRes.Certificate)
+	if block != nil {
+		if leaf, err := x509.ParseCertificate(block.Bytes); err == nil {
+			expiredAt = leaf.NotAfter.Format("2006-01-02 15:04:05")
+		}
+	}
+
+	err = store.UpdateProbeNodeTLS(dbConn, nodeID, domain, string(certRes.Certificate), string(certRes.PrivateKey), expiredAt)
+	if err != nil {
+		log.Printf("[TLS] Failed to store cert for Probe Node %d (%s) into database: %v", nodeID, domain, err)
+		return
+	}
+
+	log.Printf("[TLS] Certificate for Probe Node %d (%s) successfully issued and securely stored in database", nodeID, domain)
+}
+
+// executeACMERequest holds the common lego DNS-01 ACME logic.
+func executeACMERequest(dbConn *sql.DB, domain string) (*certificate.Resource, error) {
+	settings, err := store.GetSettings(dbConn, []string{"cf_api_token"})
+	if err != nil || strings.TrimSpace(settings["cf_api_token"]) == "" {
+		return nil, fmt.Errorf("cf_api_token 未配置，无法使用 DNS-01 申请证书")
 	}
 	cfToken := strings.TrimSpace(settings["cf_api_token"])
 
 	cacheDir := certCacheDir()
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-		msg := fmt.Sprintf("创建缓存目录失败: %v", err)
-		log.Printf("[TLS] %s", msg)
-		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
-		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
-		return
+		return nil, fmt.Errorf("创建缓存目录失败: %v", err)
 	}
 
 	user, err := loadOrCreateUser(cacheDir, domain)
 	if err != nil {
-		msg := fmt.Sprintf("ACME 账号创建失败: %v", err)
-		log.Printf("[TLS] %s", msg)
-		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
-		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
-		return
+		return nil, fmt.Errorf("ACME 账号创建失败: %v", err)
 	}
 
 	// 1. ACME Configuration
@@ -205,11 +264,7 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 
 	client, err := lego.NewClient(config)
 	if err != nil {
-		msg := fmt.Sprintf("ACME 客户端创建失败: %v", err)
-		log.Printf("[TLS] %s", msg)
-		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
-		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
-		return
+		return nil, fmt.Errorf("ACME 客户端创建失败: %v", err)
 	}
 
 	// 2. Setup Cloudflare DNS Provider
@@ -217,11 +272,7 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 	cfConfig.AuthToken = cfToken
 	provider, err := cf_provider.NewDNSProviderConfig(cfConfig)
 	if err != nil {
-		msg := fmt.Sprintf("Cloudflare DNS Provider 创建失败（请检查 CF API Token 权限）: %v", err)
-		log.Printf("[TLS] %s", msg)
-		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
-		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
-		return
+		return nil, fmt.Errorf("Cloudflare DNS Provider 创建失败（请检查 CF API Token 权限）: %v", err)
 	}
 	client.Challenge.SetDNS01Provider(provider)
 
@@ -229,11 +280,7 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 	if user.Registration == nil {
 		reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 		if err != nil {
-			msg := fmt.Sprintf("Let's Encrypt 账号注册失败: %v", err)
-			log.Printf("[TLS] %s", msg)
-			_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
-			_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
-			return
+			return nil, fmt.Errorf("Let's Encrypt 账号注册失败: %v", err)
 		}
 		user.Registration = reg
 		saveUserReg(cacheDir, user)
@@ -245,23 +292,7 @@ func RequestCertificate(dbConn *sql.DB, domain string) {
 		Domains: []string{domain},
 		Bundle:  true,
 	}
-	certRes, err := client.Certificate.Obtain(request)
-	if err != nil {
-		msg := fmt.Sprintf("DNS-01 验证或证书申请失败: %v", err)
-		log.Printf("[TLS] %s", msg)
-		_ = store.SetSetting(dbConn, "probe_tls_cert_status", "error")
-		_ = store.SetSetting(dbConn, "probe_tls_cert_error", msg)
-		return
-	}
-
-	// 5. Save the obtained certificate & key straight to DB
-	_ = store.SetSetting(dbConn, "probe_tls_cert_pem", string(certRes.Certificate))
-	_ = store.SetSetting(dbConn, "probe_tls_key_pem", string(certRes.PrivateKey))
-	_ = store.SetSetting(dbConn, "probe_tls_cert_status", "success")
-	_ = store.SetSetting(dbConn, "probe_tls_cert_error", "")
-	_ = store.SetSetting(dbConn, "probe_tls_cert_updated_at", time.Now().Format("2006-01-02 15:04:05"))
-
-	log.Printf("[TLS] Certificate for %s successfully issued and stored in database", domain)
+	return client.Certificate.Obtain(request)
 }
 
 // StartRenewalWatcher starts a background goroutine that checks the certificate
