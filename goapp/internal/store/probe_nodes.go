@@ -30,13 +30,13 @@ func GenerateChallengeNonce() (string, error) {
 	return nonce, nil
 }
 
-// ConsumeChallengeNonce checks if the nonce exists and is valid, then deletes it to prevent replay.
+// ConsumeChallengeNonce checks if the nonce exists and is valid.
+// It does NOT delete the nonce immediately to allow reuse within the TTL window.
 func ConsumeChallengeNonce(nonce string) bool {
 	val, ok := nonceCache.Load(nonce)
 	if !ok {
 		return false
 	}
-	nonceCache.Delete(nonce) // Consume immediately
 
 	expiry := val.(time.Time)
 	if time.Now().After(expiry) {

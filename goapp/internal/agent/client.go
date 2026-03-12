@@ -170,7 +170,7 @@ func AddProbeAuthHeaders(req *http.Request, secret, nonce string) {
 
 // fetchCertificate securely retrieves the TLS certificate assigned to this node by the Master Node.
 // It implements basic caching: if a valid certificate is already present locally, it skips the network request.
-func fetchCertificate(ctx context.Context, serverHost, secret, nonce string) error {
+func fetchCertificate(ctx context.Context, serverHost, secret string) error {
 	// Simple caching: check if cert already exists and is reasonably valid.
 	certPath := tunnel.GetLocalNodeCertPath()
 	keyPath := tunnel.GetLocalNodeKeyPath()
@@ -190,6 +190,11 @@ func fetchCertificate(ctx context.Context, serverHost, secret, nonce string) err
 		url = "https://" + url
 	}
 	url = strings.TrimRight(url, "/") + "/api/probe/cert"
+
+	nonce, err := fetchChallengeNonce(ctx, serverHost)
+	if err != nil {
+		return fmt.Errorf("fetch cert nonce: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -236,18 +241,16 @@ func fetchCertificate(ctx context.Context, serverHost, secret, nonce string) err
 }
 
 func connectAndServe(ctx context.Context, serverHost, secret string) error {
-	// 0. Fetch Challenge Nonce
+	// 0.5. Fetch and Cache Assigned Certificate (Temporarily disabled)
+	// if err := fetchCertificate(ctx, serverHost, secret); err != nil {
+	// 	log.Printf("[Agent] 拉取证书时发生错误: %v", err)
+	// }
+
+	// 1. Discover Real Address
 	nonce, err := fetchChallengeNonce(ctx, serverHost)
 	if err != nil {
 		log.Printf("[Agent] Failed to fetch challenge nonce, will try without it: %v", err)
 	}
-
-	// 0.5. Fetch and Cache Assigned Certificate
-	if err := fetchCertificate(ctx, serverHost, secret, nonce); err != nil {
-		log.Printf("[Agent] 拉取证书时发生错误: %v", err)
-	}
-
-	// 1. Discover Real Address
 	if !strings.HasPrefix(serverHost, "http") {
 		serverHost = "https://" + serverHost
 	}
