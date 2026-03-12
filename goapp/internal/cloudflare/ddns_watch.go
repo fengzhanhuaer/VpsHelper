@@ -168,6 +168,8 @@ func TriggerNodeDDNS(dbConn *sql.DB) string {
 
 		encodedID := base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(n.ID, 10)))
 		subDomain := strings.ToLower(fmt.Sprintf("%s%s.%s", nodeDDNSPrefix, encodedID, nodeDDNSDomain))
+
+		// Push DDNS unconditionally if triggering manually or if local cache is empty
 		if err := client.SyncDDNSRecord(subDomain, ips); err != nil {
 			log.Printf("[ddns] TriggerNodeDDNS node %d failed: %v", n.ID, err)
 		} else {
@@ -404,28 +406,26 @@ func runDDNSWatchTick(ctx context.Context, dbConn *sql.DB) {
 					// Request TLS Certificate if missing, domain changed, or expiring soon
 					if n.TLSCertPem == "" || n.Domain != subDomain {
 						needsCertRequest = true
+					} else if n.TLSCertExpired != "" {
+						if t, err := time.Parse("2006-01-02 15:04:05", n.TLSCertExpired); err == nil {
+							if time.Until(t) < 30*24*time.Hour { // Renew if < 30 days
+								needsCertRequest = true
+							}
+						}
 					}
 
-					// Push DDNS to Cloudflare if IP changed OR the domain has changed
-					if (currentIPKey != "|" && currentIPKey != lastIPKey) || needsCertRequest {
+					// Push DDNS to Cloudflare if IP changed OR we need a cert OR if lastIPKey is totally empty
+					// Even if the cert was fully provisioned successfully in the past, if a node reappears
+					// or Cloudflare was out of sync, the lastIPKey will mismatch or be empty, driving a sync.
+					if (currentIPKey != "|" && currentIPKey != lastIPKey) || needsCertRequest || lastIPKey == "" {
 						err := ddnsClient.SyncDDNSRecord(subDomain, ips)
 						if err != nil {
 							log.Printf("[ddns-watch] node %d DDNS sync failed: %v", n.ID, err)
 						} else {
 							_ = store.SetLocalSetting(cacheKey, currentIPKey)
 							log.Printf("[ddns-watch] node %d DDNS updated for %s: v4=%s, v6=%s", n.ID, subDomain, ips.IPv4, ips.IPv6)
-							needsCertRequest = true
-						}
-					}
-
-					// Request TLS Certificate if missing, domain changed, or expiring soon
-					if n.TLSCertPem == "" || n.Domain != subDomain {
-						needsCertRequest = true
-					} else if n.TLSCertExpired != "" {
-						if t, err := time.Parse("2006-01-02 15:04:05", n.TLSCertExpired); err == nil {
-							if time.Until(t) < 30*24*time.Hour { // Renew if < 30 days
-								needsCertRequest = true
-							}
+							// If we successfully synced but it wasn't requested for cert renewal previously,
+							// we do NOT set needsCertRequest = true here to avoid unnecessary cert spam on plain IP changes
 						}
 					}
 
