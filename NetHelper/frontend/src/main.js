@@ -1,5 +1,6 @@
 import DashboardView from './views/DashboardView.js';
 import ConnectionsView from './views/ConnectionsView.js';
+import SettingsView from './views/SettingsView.js';
 
 // ── 简易路由配置 ──
 const routes = {
@@ -7,7 +8,7 @@ const routes = {
     'connections': ConnectionsView,
     // 其他占位:
     'proxies': class { mount() { document.getElementById('main-content').innerHTML = '<div style="padding:20px">节点配置开发中...</div>'; } unmount() {} },
-    'settings': class { mount() { document.getElementById('main-content').innerHTML = '<div style="padding:20px">系统设置开发中...</div>'; } unmount() {} }
+    'settings': SettingsView
 };
 
 let currentView = null;
