@@ -12,3 +12,5 @@ export function GetConnections():Promise<Array<conntrack.Connection>>;
 export function GetSettings():Promise<config.Config>;
 
 export function SaveSettings(arg1:string,arg2:string):Promise<void>;
+
+export function GetVersion():Promise<string>;

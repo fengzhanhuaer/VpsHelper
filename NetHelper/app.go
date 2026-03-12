@@ -7,6 +7,7 @@ import (
 	"NetHelper/internal/agent"
 	"NetHelper/internal/config"
 	"NetHelper/internal/conntrack"
+	"NetHelper/internal/version"
 )
 
 // App struct
@@ -80,4 +81,9 @@ func (a *App) CheckUpdate(useProxy bool) (map[string]interface{}, error) {
 // DoUpdate 执行版本更新
 func (a *App) DoUpdate(useProxy bool, targetVersion, urlsDict string) error {
 	return agent.DoUpdate(a.ctx, a.cfg, useProxy, targetVersion, urlsDict)
+}
+
+// GetVersion 返回当前版本号
+func (a *App) GetVersion() string {
+	return version.Version
 }

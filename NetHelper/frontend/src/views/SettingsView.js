@@ -1,4 +1,4 @@
-import { GetSettings, SaveSettings, CheckUpdate, DoUpdate } from '../../wailsjs/go/main/App.js';
+import { GetSettings, SaveSettings, CheckUpdate, DoUpdate, GetVersion } from '../../wailsjs/go/main/App.js';
 
 export default class SettingsView {
     constructor(container) {
@@ -27,7 +27,7 @@ export default class SettingsView {
                 </div>
 
                 <div class="card" style="background: rgba(40, 50, 70, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 20px;">
-                    <h3 style="margin-bottom: 15px; font-size: 16px;">检查更新</h3>
+                    <h3 style="margin-bottom: 15px; font-size: 16px;">检查更新<span id="current-version-display" style="font-size: 13px; font-weight: normal; color: #a1a1aa; margin-left: 10px;">当前版本: 获取中...</span></h3>
                     <div style="margin-bottom: 15px; color: #a1a1aa; font-size: 14px;">
                         <label style="margin-right: 15px;">
                             <input type="radio" name="update-mode" value="direct" checked> GitHub 直连下载
@@ -61,6 +61,13 @@ export default class SettingsView {
             if (cfg) {
                 document.getElementById('setting-server-url').value = cfg.server_url || '';
                 document.getElementById('setting-secret-key').value = cfg.secret_key || '';
+            }
+            try {
+                const ver = await GetVersion();
+                document.getElementById('current-version-display').innerText = `当前版本: ${ver}`;
+            } catch (verErr) {
+                console.error("Failed to load version:", verErr);
+                document.getElementById('current-version-display').innerText = "当前版本: 未知";
             }
         } catch (err) {
             console.error("Failed to load settings:", err);

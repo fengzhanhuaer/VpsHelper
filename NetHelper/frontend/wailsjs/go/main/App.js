@@ -21,3 +21,7 @@ export function GetSettings() {
 export function SaveSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveSettings'](arg1, arg2);
 }
+
+export function GetVersion() {
+  return window['go']['main']['App']['GetVersion']();
+}
