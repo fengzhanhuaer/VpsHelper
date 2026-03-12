@@ -7,9 +7,9 @@
 网络助手（NetHelper）与探针（vpsprobe）之间的底层流量通道架构设计为 **AI Gateway 标准通信链路**。
 
 **核心架构**：
-- 探针端点提供标准的 HTTPS + WebSocket 服务，请求头与规范参照业界标准的 AI Gateway（例如 GitHub Copilot 接口协议）。
+- 探针端点提供标准的 HTTPS + HTTP/2 原生 Stream 服务，请求头与规范参照业界标准的 AI Gateway（例如 GitHub Copilot 接口协议）。
 - 建立在 TLS（包括 SNI、JA3 客户端握手特征、ALPN）层面上，采用标准 HTTP/2 协议实现高性能链路。
-- 业务数据通过高频 WebSocket 帧进行多路复用透传，从而构建一条具备强兼容性和高并发能力的底层安全隧道。
+- 放弃传统的 WebSocket 升级机制，业务数据直接通过 HTTP/2 Stream 帧进行多路复用透传，从而构建一条具备强兼容性、消除冗余帧头特征且隐蔽性极高的底层安全隧道。
 - 该链路能够承载各类通用型网络通信，天然融入云原生 AI 服务生态中。
 
 ---
@@ -20,17 +20,17 @@
 
 | 属性 | 设定值 |
 |---|---|
-| 主机 | `api.githubcopilot.com`（作为示例对齐端点） |
+| 主机 | `<探针绑定的真实域名>`（例如 `api.my-gateway.com`，以下简称 `API_DOMAIN`） |
 | 协议 | HTTPS 443 |
-| **TLS SNI** | `api.githubcopilot.com` |
-| **TLS 版本** | TLS 1.3（向下兼容 1.2） |
+| **TLS SNI** | `API_DOMAIN` |
+| **TLS 版本** | TLS 1.3 强制（向下兼容 1.2，但核心特征为 1.3） |
 | **客户端指纹** | 标准 Electron/Chromium 特征（Cipher Suites 与扩展顺序） |
 | **ALPN** | `h2`, `http/1.1` |
 | 认证头 | `Authorization: Bearer <Token>` |
 | 客户端标识 | `Copilot-Integration-Id: vscode-chat` |
 | User-Agent | `GitHubCopilotChat/0.22.4` |
 | 状态查询端点 | `GET /v1/models` |
-| 实时通讯端点 | `GET /v1/realtime`（WebSocket Upgrade） |
+| 实时通讯端点 | `POST /v1/realtime`（HTTP/2 Native Stream） |
 
 ---
 
@@ -46,8 +46,8 @@
 
 ```
 TLS ClientHello (明文捕获区):
-  SNI: api.githubcopilot.com
-  实际 TCP 目标: <探针 IP 或内网入口 IP>:443
+  SNI: API_DOMAIN (探针绑定的真实合规域名)
+  实际 TCP 目标: <探针 IP>:443
 ```
 
 基于 Go 标准库 `tls.Config` 的 `ServerName` 字段，实现了**TCP寻址目标与 TLS 握手身份声明验证逻辑的彻底分离**。整个通信周期内，流量监听者完全无法观察到探针的真实域名。
@@ -63,7 +63,7 @@ import utls "github.com/refraction-networking/utls"
 
 conn, _ := net.Dial("tcp", probeAddr)
 uConn := utls.UClient(conn, &utls.Config{
-    ServerName: "api.githubcopilot.com",  
+    ServerName: "API_DOMAIN",  
 }, utls.HelloChrome_Auto)                 // 完美复刻 Chromium 底层网络栈的 TLS 指纹
 ```
 
@@ -79,14 +79,23 @@ uConn := utls.UClient(conn, &utls.Config{
 
 ALPN 协商明确优先 `h2`。探针服务端提供原生 HTTP/2 支持，确保通信（包含 `/v1/models` 等接口以及后续升级）都在高效的 H2 流上运作。
 
-### 2.4 服务端证书建设（主控统一下发）
+### 2.4 服务端证书建设与防嗅探应对策略
 
-考虑到探针是分布式的无状态执行节点，探针自身**不执行**域名的验证申请机制。所有 TLS 证书资源的建立统一由主控系统代为申请或签发，通过 WebSocket 心跳或配置更新通道下发给各探针在内存中加载：
+考虑到探针是分布式的无状态执行节点，TLS 证书的建设和下发尤为关键。针对**“采用私有根是否会被嗅探”**这一核心工程安全隐患，必须从两个维度进行防御拆解：
 
-| 方案 | 细节下发机制 | 适用环境 |
+1. **被动旁路嗅探 (Passive Sniffing)**：
+   - 致命缺陷：如果底层协商为 **TLS 1.2**，服务端的证书是向客户端**明文传输**的。审查系统通过旁路监听会直接看到一张由“未知私有 CA”签发的伪造证书，特征极其明显，会触发瞬间阻断。
+   - 解决方案：在 **TLS 1.3** 中，由于服务端的证书是在完成初始密钥交换后**完全加密传输**的，旁路设备只能看到明文的 ClientHello（合规的 SNI），后续交互全为密文。因此，我们必须**强制探针服务端最低 TLS 握手版本为 1.3**，即可在链路上绝对免疫被动嗅探。
+
+2. **主动探测 (Active Probing)**：
+   - 致命缺陷：审查系统的探针（DPI 防火墙）会伪装成正常的客户端，主动向探针 IP 的 443 端口发起一次 TLS 连接。因为它是握手的一方，必然能解密并拿到并验证你的服务端证书。审查器一旦发现返回的证书是“私有 CA 自签名”的，或者与大厂 SNI 不符，立刻就能断定其为代理并拉黑 IP。
+
+针对以上情况，本架构**明确采用公网真实证书 (ACME) 策略**作为核心基石：
+
+| 部署预设方案 | 机制与应对策略 | 适用环境与安全性 |
 |---|---|---|
-| **私有根签发 (mTLS)** | 主控作为私有 CA，即时为探针签发主题包含目标域名的证书，连同私钥一并下发；客户端预置根证书即可完成闭环信任 | 通用节点、内网隔离环境 |
-| **公网 ACME 证书** | 主控代为向 Let's Encrypt 申请真实域名证书，签发完成后将证书链下发至目标探针加载；服务端解除严格入站 SNI 验证 | 边缘公网暴露节点 |
+| **公网真实证书 (ACME)<br/>（网关伪装流派基石）** | 主控代为向 Let's Encrypt 申请真实自有域名的证书（如 `api.my-gateway.com`）下发探针；客户端的 SNI 也相应调整为该真实域名。结合上述 401/404 API 拦截策略，主动探测者只会看到一张**绝对合法合规的 CA 证书**和一个**标准的未授权 API 服务**。 | **全球公网暴露节点（首选）**。完美实现逻辑自洽，达成 AI Gateway 伪装的极致形态。 |
+| *(备选)* **真目标流量代答 <br/>(类 XTLS-Reality 方案)** | 探针不持有任何假证书私钥，直接透传流量给真正的 AI Gateway 提供商。 | 应对**最高级别严苛跨国审查**。工程复杂度极高，暂作二期备选。 |
 
 ---
 
@@ -114,32 +123,39 @@ NetHelper → 探针:
 - `nonce` = 16 字节随机串（对抗重放攻击）
 - `hmac` = HMAC-SHA256 计算结果
 
-### 阶段 2 — 传输层升级 (WebSocket)
+### 阶段 2 — 传输层流式复用 (HTTP/2 Native Stream)
+
+放弃传统且带有强特征的 WebSocket 握手，直接在已经建立的 HTTP/2 链路上建立**双向流 (Bidirectional Stream)**，在应用层行为上极度贴近 gRPC 或现代 AI 实时的流式返回特征，消除协议升级特征及 WS 额外的资源开销。
 
 ```
 NetHelper → 探针:
-  GET /v1/realtime  HTTP/1.1
-  Upgrade: websocket
-  Connection: Upgrade
+  POST /v1/realtime  HTTP/2
+  Content-Type: application/octet-stream
   Authorization: Bearer <session_token>
   Copilot-Integration-Id: vscode-chat
 
 探针 → NetHelper:
-  101 Switching Protocols
+  200 OK
+  Content-Type: application/octet-stream
+  (随后即进入无状态的持续双向字节流通信)
 ```
 
 ### 3.1 — 帧格式定义
 
-WebSocket 建立后，协议转入底层帧结构通信，用以支持高并发的 TCP/UDP/ICMP 会话承载。固定头部合计 **10 字节** = cmd(1) + subcmd(1) + conn_id(4) + len(4)。
+### 3.1 — 帧格式定义
+
+HTTP/2 Stream 建联后，协议进入底层硬核帧结构通信，用以支持高并发的 TCP/UDP/ICMP 会话承载。为了兼顾协议扩展性与基础的自校验能力，固定头部增加了两字节帧头与 4 字节校验和，合计 **16 字节** = magic(2) + cmd(1) + subcmd(1) + conn_id(4) + len(4) + crc32(4)。
 
 ```
-通信帧结构:
-┌──────────┬─────────────┬──────────────┬──────────┬────────────────┐
-│ cmd (1B) │ subcmd (1B) │ conn_id (4B) │ len (4B) │ payload        │
-└──────────┴─────────────┴──────────────┴──────────┴────────────────┘
+通信帧结构 (16 Bytes Header):
+┌────────────┬──────────┬─────────────┬──────────────┬──────────┬────────────┬────────────────┐
+│ magic (2B) │ cmd (1B) │ subcmd (1B) │ conn_id (4B) │ len (4B) │ crc32 (4B) │ payload        │
+└────────────┴──────────┴─────────────┴──────────────┴──────────┴────────────┴────────────────┘
 
-cmd   — 操作类型（一级分类）
+magic  — 帧起始同步标识（预留值，例如 0x7E 0x7E，用于校验错位或后续版本演进）
+cmd    — 操作类型（一级分类）
 subcmd — 该操作的具体子态或扩展参数（未定义时置 0x00）
+crc32  — 针对 Header(除自身外) + Payload 的 CRC32 校验和（对抗极小概率的应用层内存错乱或逻辑截断）
 
 ── cmd=0x01  CONNECT 建立连接 ──────────────────────────────────
   subcmd=0x00  TCP       建立 TCP 逻辑流（payload = "host:port"）
@@ -169,7 +185,7 @@ subcmd — 该操作的具体子态或扩展参数（未定义时置 0x00）
   subcmd=0x00            通用错误（payload = <u8 错误码> + <UTF-8 描述>）
 ```
 
-依托 `conn_id` 字段，单根物理 WebSocket 链接能够同时承载数百条独立的 TCP 逻辑流、UDP 关联和 ICMP 会话（conn_id 空间各协议类型共享，互不干扰）。
+依托 `conn_id` 字段，单根物理 HTTP/2 Stream 链路能够同时承载数百条独立的 TCP 逻辑流、UDP 关联和 ICMP 会话（conn_id 空间各协议类型共享，互不干扰）。
 
 
 ---
@@ -192,7 +208,7 @@ UDP 的核心差异在于**无连接、有边界**：每个 DGRAM 帧对应一�
 客户端侧:
   1. 拦截上层 UDP 包（如 WireGuard 发出的加密 UDP 报文）
   2. 封装为 DGRAM 帧（conn_id 标识该 UDP 目标的关联）
-  3. 通过 WebSocket 发送给探针
+  3. 通过 HTTP/2 Stream 发送给探针
 
 探针侧:
   1. 收到 CONNECT_UDP 后，建立到目标的 UDP conn 并以 ACK 确认
@@ -200,7 +216,7 @@ UDP 的核心差异在于**无连接、有边界**：每个 DGRAM 帧对应一�
   3. 同时监听该 UDP conn 的上行数据报，封装为 DGRAM 帧回传客户端
 ```
 
-**MTU 约束**：UDP 载荷需保持在 1400 字节以内（留 WebSocket/TLS 帧头余量），WireGuard 的 MTU 应配置为 1280~1360，与此自然兼容。
+**MTU 约束**：UDP 载荷需保持在 1400 字节以内（留 HTTP/2 及 TLS 帧头余量），WireGuard 的 MTU 应配置为 1280~1360，与此自然兼容。
 
 **上层业务接入示例**：
 
@@ -282,10 +298,14 @@ cmd = 0xFF  ERROR
   0x05  PAYLOAD_TOO_BIG 载荷超出 MTU 限制
 ```
 
-针对互联网审查扫描或非预期的**主动探测（Active Probing）**，探针服务端采取全景静默防御策略，避免暴露任何非常规网关的异常特征（禁止出现诸如"直接 RST 强制断开"或"无响应"等反常抓包特征）：
+针对互联网审查扫描或非预期的**主动探测（Active Probing）**，探针服务端采取全景防御策略，避免暴露任何非常规网关的异常特征（禁止出现诸如"直接 RST 强制断开"等机器级反常抓包特征）。
+
+**时序特征对抗（Timing Analysis Defense）与防 DDOS**：
+- 真实的 API 网关在返回 401 之前通常会经历鉴权中间件或 Redis 等服务查询链路。为了打破 Go 语言 HTTP 处理器“瞬间极速响应（<1ms）”的机器级时序特征，所有因鉴权失败等拦截触发的响应，在正式下发报错之前均须**引入 300ms ~ 500ms 的随机延迟**（`time.Sleep(time.Millisecond * time.Duration(rand.Intn(200)+300))`）。
+- 当服务端研判某一来源在极短时间内产生异常的**超量试探攻击（DDOS）**时，将自动越过 401/404 响应策略，切入**绝对静默黑洞丢弃**模式，不响应任何数据以保护本端资源不被过多消耗。
 
 1. **未授权存取（缺少 Token、HMAC 校验失败或过期）**：
-   收到针对 `/v1/models` 或 `/v1/realtime` 的非法鉴权请求时，服务端严格按照标准的 OAuth 失败进行响应，返回 HTTP `401 Unauthorized`，并附带符合标准 OpenAI 格式的错误 JSON 体：
+   收到针对 `/v1/models` 或 `/v1/realtime` 的非法鉴权请求时，服务端（在此时序延迟生效后）将严格按照标准的 OAuth 失败进行响应，返回 HTTP `401 Unauthorized`，并附带符合标准 OpenAI 格式的错误 JSON 体：
    ```json
    HTTP/1.1 401 Unauthorized
    Content-Type: application/json
@@ -333,7 +353,7 @@ NetHelper 在本地系统层暴露标准化网络接入断点，接管应用层�
 |---|---|---|
 | AI Gateway 接口层 | `copilot_server.go` | 监听 443 端口，处理基础路由及 HTTP/2 握手 |
 | 鉴权校验中心 | 重用 `AuthenticateProbeNodeBySignature` | 快速执行 HMAC 安全认证 |
-| 多路复用隧道转发 | `proxy_tunnel.go` | 处理 WebSocket 帧，并调度并发下游连接 |
+| 多路复用隧道转发 | `proxy_tunnel.go` | 处理底层 16 字节带校验的硬核帧协议，并调度并发下游连接 |
 | TLS 证书引擎 | `tls.go` | 根据部署类型载入私有 CA 或拉取 ACME 证书 |
 
 ### 客户端侧（NetHelper）
@@ -342,7 +362,7 @@ NetHelper 在本地系统层暴露标准化网络接入断点，接管应用层�
 |---|---|---|
 | 指纹级 TLS 引擎 | `internal/coproxy/tls.go` | 基于 `utls` 实施 SNI 声明与客户端特征定制 |
 | HTTP 会话构建 | `internal/coproxy/handshake.go` | 计算并组装 HMAC，保存并续期 Session |
-| WS 隧道维护 | `internal/coproxy/ws_client.go` | 负责隧道的保活、心跳与异常重连 |
+| H2 Stream 隧道维护 | `internal/coproxy/stream_client.go` | 负责隧道的保活、心跳与异常重连 |
 | 并发流状态机 | `internal/coproxy/mux.go` | 处理 `conn_id` 的分配、释放与乱序管理 |
 | 协议接入器 | `internal/coproxy/socks5.go`<br>`internal/coproxy/http_proxy.go` | 在本地构建协议解析及网关服务 |
 
