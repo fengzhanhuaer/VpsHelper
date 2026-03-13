@@ -20,6 +20,7 @@ func HandleProcessMode() (handled bool, err error) {
 	cleanupEnabled := hasArg(os.Args[1:], "--update-cleanup")
 	if cleanupEnabled {
 		runUpdateCleanup(os.Args[1:])
+		runUpdateCleanupAsync(os.Args[1:])
 		stripUpdateArgs()
 	}
 
@@ -70,14 +71,29 @@ func runUpdateWorker(args []string) error {
 
 func runUpdateCleanup(args []string) {
 	if backupPath, ok := findArgValue(args, "--update-backup"); ok && backupPath != "" {
-		_ = removeWithRetry(backupPath, 10)
+		_ = removeWithRetry(backupPath, 120, 500*time.Millisecond)
 	}
 	if tempPath, ok := findArgValue(args, "--update-temp"); ok && tempPath != "" {
-		_ = removeWithRetry(tempPath, 10)
+		_ = removeWithRetry(tempPath, 120, 500*time.Millisecond)
 	}
 	if downloadPath, ok := findArgValue(args, "--update-download"); ok && downloadPath != "" {
-		_ = removeWithRetry(downloadPath, 10)
+		_ = removeWithRetry(downloadPath, 120, 500*time.Millisecond)
 	}
+}
+
+func runUpdateCleanupAsync(args []string) {
+	go func() {
+		time.Sleep(3 * time.Second)
+		if backupPath, ok := findArgValue(args, "--update-backup"); ok && backupPath != "" {
+			_ = removeWithRetry(backupPath, 60, 1*time.Second)
+		}
+		if tempPath, ok := findArgValue(args, "--update-temp"); ok && tempPath != "" {
+			_ = removeWithRetry(tempPath, 60, 1*time.Second)
+		}
+		if downloadPath, ok := findArgValue(args, "--update-download"); ok && downloadPath != "" {
+			_ = removeWithRetry(downloadPath, 60, 1*time.Second)
+		}
+	}()
 }
 
 func waitAndMove(src, dst string, retries int) error {
@@ -100,7 +116,7 @@ func waitAndMove(src, dst string, retries int) error {
 	return lastErr
 }
 
-func removeWithRetry(path string, retries int) error {
+func removeWithRetry(path string, retries int, delay time.Duration) error {
 	var lastErr error
 	for i := 0; i < retries; i++ {
 		err := os.Remove(path)
@@ -108,7 +124,7 @@ func removeWithRetry(path string, retries int) error {
 			return nil
 		}
 		lastErr = err
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(delay)
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("remove timeout")
