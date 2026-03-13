@@ -177,11 +177,13 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
       - name: Build Wails app
         working-directory: NetHelper
-        run: wails build -ldflags "-s -w"
+        run: |
+          wails build -ldflags "-s -w -X NetHelper/internal/version.Version=${{ needs.check.outputs.tag_name }}"
+          Rename-Item -Path "build\bin\NetHelper.exe" -NewName "nethelper_windows_amd64.exe"
       - uses: actions/upload-artifact@v4
         with:
           name: nethelper_windows_amd64
-          path: NetHelper/build/bin/NetHelper.exe
+          path: NetHelper/build/bin/nethelper_windows_amd64.exe
           if-no-files-found: error
 
   # ════════════════════════════════════════════════════════════

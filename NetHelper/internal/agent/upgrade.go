@@ -108,7 +108,7 @@ func CheckUpdate(ctx context.Context, cfg *config.Config, useProxy bool) (map[st
 		
 		urlsJSON, _ := json.Marshal(urlsMap)
 		hasUpdate := false
-		if version.Version != "dev" && info.TagName != version.Version {
+		if info.TagName != version.Version {
 			hasUpdate = true
 		}
 
@@ -192,7 +192,7 @@ func CheckUpdate(ctx context.Context, cfg *config.Config, useProxy bool) (map[st
 	urlsJSON, _ := json.Marshal(urlsMap)
 	
 	hasUpdate := false
-	if version.Version != "dev" && rel.TagName != version.Version {
+	if rel.TagName != version.Version {
 		hasUpdate = true
 	}
 
@@ -334,7 +334,7 @@ func directDownload(ctx context.Context, targetURL, destPath string) (string, er
 func DoUpdate(ctx context.Context, cfg *config.Config, useProxy bool, targetVersion string, urlsDict string) error {
 	log.Printf("[Agent] 准备执行自更新流程 (version=%s, use_proxy=%v)...", targetVersion, useProxy)
 
-	if version.Version != "dev" && targetVersion == version.Version {
+	if targetVersion == version.Version {
 		log.Printf("[Agent] 当前版本 %s 已是目标版本，跳过升级", version.Version)
 		return nil
 	}
