@@ -103,18 +103,26 @@ func (a *App) GetRuntimeLogs(limit int) []string {
 
 // GetProbeNodeInfo 获取探针节点信息，forceRefresh=true 时强制从主控拉取并更新本地缓存
 func (a *App) GetProbeNodeInfo(forceRefresh bool) (map[string]interface{}, error) {
-	info, err := agent.GetProbeNodeInfo(a.ctx, a.cfg, forceRefresh)
+	nodes, err := agent.GetProbeNodesInfo(a.ctx, a.cfg, forceRefresh)
 	if err != nil {
 		return nil, err
 	}
+	items := make([]map[string]interface{}, 0, len(nodes))
+	for _, n := range nodes {
+		items = append(items, map[string]interface{}{
+			"node_id":         n.NodeID,
+			"name":            n.Name,
+			"address":         n.Address,
+			"ddns_address":    n.DDNSAddress,
+			"report_interval": n.ReportInterval,
+			"online":          n.Online,
+			"version":         n.Version,
+			"last_ping":       n.LastPing,
+			"last_ping_str":   n.LastPingStr,
+			"server_url":      n.ServerURL,
+			"updated_at":      n.UpdatedAt,
+		})
+	}
 
-	return map[string]interface{}{
-		"node_id":         info.NodeID,
-		"name":            info.Name,
-		"address":         info.Address,
-		"ddns_address":    info.DDNSAddress,
-		"report_interval": info.ReportInterval,
-		"server_url":      info.ServerURL,
-		"updated_at":      info.UpdatedAt,
-	}, nil
+	return map[string]interface{}{"nodes": items}, nil
 }

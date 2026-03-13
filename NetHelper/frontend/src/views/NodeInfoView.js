@@ -11,7 +11,7 @@ export default class NodeInfoView {
     async mount() {
         this.container.innerHTML = `
             <header class="topbar">
-                <div class="view-title">节点信息</div>
+                <div class="view-title">探针节点信息</div>
                 <div class="toolbar">
                     <button id="btn-node-refresh" style="padding: 6px 10px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
                         强制刷新
@@ -20,17 +20,25 @@ export default class NodeInfoView {
             </header>
             <main class="view-body" style="padding: 20px;">
                 <div class="card" style="background: rgba(40, 50, 70, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 20px; max-width: 900px;">
-                    <h3 style="margin-bottom: 12px; font-size: 16px; color: #e4e4e7;">探针节点详情</h3>
+                    <h3 style="margin-bottom: 12px; font-size: 16px; color: #e4e4e7;">探针节点列表</h3>
                     <div id="node-info-status" style="margin-bottom: 14px; color: #a1a1aa; font-size: 13px;">正在加载本地缓存...</div>
 
-                    <div style="display: grid; grid-template-columns: 180px 1fr; row-gap: 10px; column-gap: 10px; font-size: 13px;">
-                        <div style="color:#94a3b8;">节点ID</div><div id="node-field-id" style="color:#e2e8f0;">-</div>
-                        <div style="color:#94a3b8;">节点名称</div><div id="node-field-name" style="color:#e2e8f0;">-</div>
-                        <div style="color:#94a3b8;">IP地址</div><div id="node-field-address" style="color:#e2e8f0;">-</div>
-                        <div style="color:#94a3b8;">DDNS地址</div><div id="node-field-ddns" style="color:#e2e8f0;">-</div>
-                        <div style="color:#94a3b8;">主控地址</div><div id="node-field-server" style="color:#e2e8f0; word-break: break-all;">-</div>
-                        <div style="color:#94a3b8;">上报间隔(秒)</div><div id="node-field-interval" style="color:#e2e8f0;">-</div>
-                        <div style="color:#94a3b8;">最近更新时间</div><div id="node-field-updated" style="color:#e2e8f0;">-</div>
+                    <div style="overflow:auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;">
+                        <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+                            <thead>
+                                <tr style="background: rgba(15,23,42,0.65); color:#94a3b8;">
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">ID</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">名称</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">IP地址</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">DDNS地址</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">在线</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">版本</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">上报间隔</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">最近心跳</th>
+                                </tr>
+                            </thead>
+                            <tbody id="node-info-tbody"></tbody>
+                        </table>
                     </div>
                 </div>
             </main>
@@ -47,14 +55,7 @@ export default class NodeInfoView {
     bindElements() {
         this.statusEl = document.getElementById('node-info-status');
         this.btnRefresh = document.getElementById('btn-node-refresh');
-
-        this.fieldNodeID = document.getElementById('node-field-id');
-        this.fieldName = document.getElementById('node-field-name');
-        this.fieldAddress = document.getElementById('node-field-address');
-        this.fieldDDNS = document.getElementById('node-field-ddns');
-        this.fieldServer = document.getElementById('node-field-server');
-        this.fieldInterval = document.getElementById('node-field-interval');
-        this.fieldUpdated = document.getElementById('node-field-updated');
+        this.tbody = document.getElementById('node-info-tbody');
 
         this.btnRefresh.addEventListener('click', async () => {
             await this.loadNodeInfo(true);
@@ -95,15 +96,26 @@ export default class NodeInfoView {
     }
 
     renderData(data) {
+        const nodes = Array.isArray(data.nodes) ? data.nodes : [];
         const getText = (v) => (v === undefined || v === null || v === '' ? '-' : String(v));
 
-        this.fieldNodeID.innerText = getText(data.node_id);
-        this.fieldName.innerText = getText(data.name);
-        this.fieldAddress.innerText = getText(data.address);
-        this.fieldDDNS.innerText = getText(data.ddns_address);
-        this.fieldServer.innerText = getText(data.server_url);
-        this.fieldInterval.innerText = getText(data.report_interval);
-        this.fieldUpdated.innerText = getText(data.updated_at);
+        if (nodes.length === 0) {
+            this.tbody.innerHTML = `<tr><td colspan="8" style="padding: 12px; color:#94a3b8;">暂无探针节点数据</td></tr>`;
+            return;
+        }
+
+        this.tbody.innerHTML = nodes.map((n) => `
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+                <td style="padding:8px; color:#e2e8f0;">${getText(n.node_id)}</td>
+                <td style="padding:8px; color:#e2e8f0;">${getText(n.name)}</td>
+                <td style="padding:8px; color:#e2e8f0;">${getText(n.address)}</td>
+                <td style="padding:8px; color:#e2e8f0;">${getText(n.ddns_address)}</td>
+                <td style="padding:8px; color:${n.online ? '#4ade80' : '#f87171'};">${n.online ? '在线' : '离线'}</td>
+                <td style="padding:8px; color:#e2e8f0;">${getText(n.version)}</td>
+                <td style="padding:8px; color:#e2e8f0;">${getText(n.report_interval)}</td>
+                <td style="padding:8px; color:#e2e8f0;">${getText(n.last_ping_str)}</td>
+            </tr>
+        `).join('');
     }
 
     unmount() {

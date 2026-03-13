@@ -583,6 +583,51 @@ func (h *Handler) probeDiscover(c *gin.Context) {
 	})
 }
 
+// probeNodesAPI returns all probe nodes for authenticated probe-side clients.
+func (h *Handler) probeNodesAPI(c *gin.Context) {
+	ip := c.ClientIP()
+	if security.IsBanned(ip) {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+
+	if _, authErr := h.verifyProbeAuth(c); authErr != nil {
+		security.RecordFailure(h.dbConn, ip)
+		c.JSON(http.StatusForbidden, gin.H{"error": "authentication failed: " + authErr.Error()})
+		return
+	}
+
+	nodes, err := store.ListProbeNodes(h.dbConn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list nodes"})
+		return
+	}
+
+	res := make([]gin.H, 0, len(nodes))
+	for _, n := range nodes {
+		address := strings.TrimSpace(n.IP)
+		if address == "" {
+			address = strings.TrimSpace(n.Domain)
+		}
+		res = append(res, gin.H{
+			"node_id":         n.ID,
+			"name":            n.Name,
+			"address":         address,
+			"ddns_address":    n.Domain,
+			"report_interval": n.ReportInterval,
+			"online":          n.Online,
+			"version":         n.Version,
+			"last_ping":       n.LastPing,
+			"last_ping_str":   n.LastPingStr,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"nodes":   res,
+	})
+}
+
 // probeCert is the dedicated API endpoint for probes to securely pull their assigned DDNS domain and TLS certificates.
 func (h *Handler) probeCert(c *gin.Context) {
 	ip := c.ClientIP()

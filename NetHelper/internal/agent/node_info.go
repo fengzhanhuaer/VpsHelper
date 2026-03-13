@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	nurl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,34 +21,38 @@ type ProbeNodeInfo struct {
 	Address        string `json:"address"`
 	DDNSAddress    string `json:"ddns_address"`
 	ReportInterval int    `json:"report_interval"`
+	Online         bool   `json:"online"`
+	Version        string `json:"version"`
+	LastPing       int64  `json:"last_ping"`
+	LastPingStr    string `json:"last_ping_str"`
 	ServerURL      string `json:"server_url"`
 	UpdatedAt      string `json:"updated_at"`
 }
 
 type cachedProbeNodeInfo struct {
-	NodeID    int64  `json:"node_id"`
-	Name      string `json:"name"`
-	Address   string `json:"address"`
+	NodeID      int64  `json:"node_id"`
+	Name        string `json:"name"`
+	Address     string `json:"address"`
 	DDNSAddress string `json:"ddns_address"`
-	ServerURL string `json:"server_url"`
+	ServerURL   string `json:"server_url"`
 }
 
 var (
-	nodeInfoCacheMu     sync.RWMutex
-	nodeInfoCacheLoaded bool
-	nodeInfoCache       *cachedProbeNodeInfo
+	probeNodesCacheMu     sync.RWMutex
+	probeNodesCacheLoaded bool
+	probeNodesCache       []cachedProbeNodeInfo
 )
 
-func GetProbeNodeInfo(ctx context.Context, cfg *config.Config, forceRefresh bool) (*ProbeNodeInfo, error) {
+func GetProbeNodesInfo(ctx context.Context, cfg *config.Config, forceRefresh bool) ([]ProbeNodeInfo, error) {
 	if !forceRefresh {
-		cached, err := loadCachedProbeNodeInfo()
+		cached, err := loadCachedProbeNodesInfo()
 		if err == nil {
 			return cached, nil
 		}
 	}
 
 	if cfg == nil || strings.TrimSpace(cfg.ServerUrl) == "" || strings.TrimSpace(cfg.SecretKey) == "" {
-		cached, err := loadCachedProbeNodeInfo()
+		cached, err := loadCachedProbeNodesInfo()
 		if err == nil {
 			return cached, nil
 		}
@@ -62,18 +65,18 @@ func GetProbeNodeInfo(ctx context.Context, cfg *config.Config, forceRefresh bool
 	}
 
 	nonce, _ := fetchChallengeNonce(ctx, serverHost)
-	discoverURL := strings.TrimSuffix(serverHost, "/") + "/api/probe/discover"
+	apiURL := strings.TrimSuffix(serverHost, "/") + "/api/probe/nodes"
 
-	req, err := http.NewRequestWithContext(ctx, "GET", discoverURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create discover request: %w", err)
+		return nil, fmt.Errorf("create probe nodes request: %w", err)
 	}
 	AddProbeAuthHeaders(req, cfg.SecretKey, nonce)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch probe node info failed: %w", err)
+		return nil, fmt.Errorf("fetch probe nodes failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -81,29 +84,55 @@ func GetProbeNodeInfo(ctx context.Context, cfg *config.Config, forceRefresh bool
 		return nil, fmt.Errorf("主控返回异常状态: %d", resp.StatusCode)
 	}
 
-	var dResp DiscoverResponse
-	if err := json.NewDecoder(resp.Body).Decode(&dResp); err != nil {
-		return nil, fmt.Errorf("decode discover response: %w", err)
+	var apiResp struct {
+		Success bool `json:"success"`
+		Nodes   []struct {
+			NodeID         int64  `json:"node_id"`
+			Name           string `json:"name"`
+			Address        string `json:"address"`
+			DDNSAddress    string `json:"ddns_address"`
+			ReportInterval int    `json:"report_interval"`
+			Online         bool   `json:"online"`
+			Version        string `json:"version"`
+			LastPing       int64  `json:"last_ping"`
+			LastPingStr    string `json:"last_ping_str"`
+		} `json:"nodes"`
+		Error string `json:"error"`
 	}
-	if !dResp.Success {
-		return nil, fmt.Errorf("discover returned error: %s", dResp.Error)
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("decode probe nodes response: %w", err)
+	}
+	if !apiResp.Success {
+		if apiResp.Error == "" {
+			apiResp.Error = "unknown error"
+		}
+		return nil, fmt.Errorf("probe nodes api error: %s", apiResp.Error)
 	}
 
-	info := &ProbeNodeInfo{
-		NodeID:         dResp.NodeID,
-		Name:           dResp.Name,
-		Address:        dResp.Address,
-		DDNSAddress:    deriveDDNSAddress(dResp.Address),
-		ReportInterval: dResp.ReportInterval,
-		ServerURL:      strings.TrimSpace(cfg.ServerUrl),
-		UpdatedAt:      time.Now().Format(time.RFC3339),
+	now := time.Now().Format(time.RFC3339)
+	serverURL := strings.TrimSpace(cfg.ServerUrl)
+	nodes := make([]ProbeNodeInfo, 0, len(apiResp.Nodes))
+	for _, n := range apiResp.Nodes {
+		nodes = append(nodes, ProbeNodeInfo{
+			NodeID:         n.NodeID,
+			Name:           n.Name,
+			Address:        n.Address,
+			DDNSAddress:    n.DDNSAddress,
+			ReportInterval: n.ReportInterval,
+			Online:         n.Online,
+			Version:        n.Version,
+			LastPing:       n.LastPing,
+			LastPingStr:    n.LastPingStr,
+			ServerURL:      serverURL,
+			UpdatedAt:      now,
+		})
 	}
 
-	if err := saveCachedProbeNodeInfo(info); err != nil {
-		return nil, fmt.Errorf("save cached node info failed: %w", err)
+	if err := saveCachedProbeNodesInfo(nodes); err != nil {
+		return nil, fmt.Errorf("save cached probe nodes failed: %w", err)
 	}
 
-	return info, nil
+	return nodes, nil
 }
 
 func nodeInfoFilePath() (string, error) {
@@ -116,17 +145,18 @@ func nodeInfoFilePath() (string, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return "", err
 	}
-	return filepath.Join(dataDir, "probe_node_info.json"), nil
+	return filepath.Join(dataDir, "probe_nodes_info.json"), nil
 }
 
-func loadCachedProbeNodeInfo() (*ProbeNodeInfo, error) {
-	nodeInfoCacheMu.RLock()
-	if nodeInfoCacheLoaded && nodeInfoCache != nil {
-		cache := *nodeInfoCache
-		nodeInfoCacheMu.RUnlock()
-		return cachedToProbeInfo(&cache), nil
+func loadCachedProbeNodesInfo() ([]ProbeNodeInfo, error) {
+	probeNodesCacheMu.RLock()
+	if probeNodesCacheLoaded {
+		cached := make([]cachedProbeNodeInfo, len(probeNodesCache))
+		copy(cached, probeNodesCache)
+		probeNodesCacheMu.RUnlock()
+		return cachedToProbeNodes(cached), nil
 	}
-	nodeInfoCacheMu.RUnlock()
+	probeNodesCacheMu.RUnlock()
 
 	path, err := nodeInfoFilePath()
 	if err != nil {
@@ -136,98 +166,80 @@ func loadCachedProbeNodeInfo() (*ProbeNodeInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	cache := &cachedProbeNodeInfo{}
-	if err := json.Unmarshal(data, cache); err != nil {
+	cached := make([]cachedProbeNodeInfo, 0)
+	if err := json.Unmarshal(data, &cached); err != nil {
 		return nil, err
 	}
 
-	nodeInfoCacheMu.Lock()
-	nodeInfoCacheLoaded = true
-	nodeInfoCache = &cachedProbeNodeInfo{
-		NodeID:      cache.NodeID,
-		Name:        cache.Name,
-		Address:     cache.Address,
-		DDNSAddress: cache.DDNSAddress,
-		ServerURL:   cache.ServerURL,
-	}
-	nodeInfoCacheMu.Unlock()
+	probeNodesCacheMu.Lock()
+	probeNodesCacheLoaded = true
+	probeNodesCache = make([]cachedProbeNodeInfo, len(cached))
+	copy(probeNodesCache, cached)
+	probeNodesCacheMu.Unlock()
 
-	return cachedToProbeInfo(cache), nil
+	return cachedToProbeNodes(cached), nil
 }
 
-func saveCachedProbeNodeInfo(info *ProbeNodeInfo) error {
+func saveCachedProbeNodesInfo(nodes []ProbeNodeInfo) error {
 	path, err := nodeInfoFilePath()
 	if err != nil {
 		return err
 	}
-	cache := &cachedProbeNodeInfo{
-		NodeID:    info.NodeID,
-		Name:      info.Name,
-		Address:   info.Address,
-		DDNSAddress: info.DDNSAddress,
-		ServerURL: info.ServerURL,
+
+	cached := make([]cachedProbeNodeInfo, 0, len(nodes))
+	for _, n := range nodes {
+		cached = append(cached, cachedProbeNodeInfo{
+			NodeID:      n.NodeID,
+			Name:        n.Name,
+			Address:     n.Address,
+			DDNSAddress: n.DDNSAddress,
+			ServerURL:   n.ServerURL,
+		})
 	}
 
-	nodeInfoCacheMu.Lock()
-	if nodeInfoCacheLoaded && nodeInfoCache != nil &&
-		nodeInfoCache.NodeID == cache.NodeID &&
-		nodeInfoCache.Name == cache.Name &&
-		nodeInfoCache.Address == cache.Address &&
-		nodeInfoCache.DDNSAddress == cache.DDNSAddress &&
-		nodeInfoCache.ServerURL == cache.ServerURL {
-		nodeInfoCacheMu.Unlock()
+	probeNodesCacheMu.Lock()
+	if probeNodesCacheLoaded && cachedNodesEqual(probeNodesCache, cached) {
+		probeNodesCacheMu.Unlock()
 		return nil
 	}
-	nodeInfoCacheLoaded = true
-	nodeInfoCache = &cachedProbeNodeInfo{
-		NodeID:      cache.NodeID,
-		Name:        cache.Name,
-		Address:     cache.Address,
-		DDNSAddress: cache.DDNSAddress,
-		ServerURL:   cache.ServerURL,
-	}
-	nodeInfoCacheMu.Unlock()
+	probeNodesCacheLoaded = true
+	probeNodesCache = make([]cachedProbeNodeInfo, len(cached))
+	copy(probeNodesCache, cached)
+	probeNodesCacheMu.Unlock()
 
-	data, err := json.MarshalIndent(cache, "", "  ")
+	data, err := json.MarshalIndent(cached, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
 }
 
-func cachedToProbeInfo(cache *cachedProbeNodeInfo) *ProbeNodeInfo {
-	return &ProbeNodeInfo{
-		NodeID:      cache.NodeID,
-		Name:        cache.Name,
-		Address:     cache.Address,
-		DDNSAddress: cache.DDNSAddress,
-		ServerURL:   cache.ServerURL,
+func cachedToProbeNodes(cached []cachedProbeNodeInfo) []ProbeNodeInfo {
+	nodes := make([]ProbeNodeInfo, 0, len(cached))
+	for _, c := range cached {
+		nodes = append(nodes, ProbeNodeInfo{
+			NodeID:      c.NodeID,
+			Name:        c.Name,
+			Address:     c.Address,
+			DDNSAddress: c.DDNSAddress,
+			ServerURL:   c.ServerURL,
+		})
 	}
+	return nodes
 }
 
-func deriveDDNSAddress(address string) string {
-	address = strings.TrimSpace(address)
-	if address == "" {
-		return ""
+func cachedNodesEqual(a, b []cachedProbeNodeInfo) bool {
+	if len(a) != len(b) {
+		return false
 	}
-
-	u, err := nurl.Parse(address)
-	if err == nil && u.Hostname() != "" {
-		return u.Hostname()
-	}
-
-	if strings.Contains(address, "://") {
-		return ""
-	}
-	if strings.Contains(address, "/") {
-		parts := strings.Split(address, "/")
-		if len(parts) > 0 {
-			address = parts[0]
+	for i := range a {
+		if a[i].NodeID != b[i].NodeID ||
+			a[i].Name != b[i].Name ||
+			a[i].Address != b[i].Address ||
+			a[i].DDNSAddress != b[i].DDNSAddress ||
+			a[i].ServerURL != b[i].ServerURL {
+			return false
 		}
 	}
-	if strings.Contains(address, ":") {
-		host := strings.Split(address, ":")[0]
-		return strings.TrimSpace(host)
-	}
-	return address
+	return true
 }
