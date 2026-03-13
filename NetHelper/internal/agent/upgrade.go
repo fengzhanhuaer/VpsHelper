@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"NetHelper/internal/config"
+	"NetHelper/internal/update"
 	"NetHelper/internal/version"
 )
 
