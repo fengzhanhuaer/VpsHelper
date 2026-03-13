@@ -1,11 +1,13 @@
 import DashboardView from './views/DashboardView.js';
 import ConnectionsView from './views/ConnectionsView.js';
+import LogsView from './views/LogsView.js';
 import SettingsView from './views/SettingsView.js';
 
 // ── 简易路由配置 ──
 const routes = {
     'dashboard': DashboardView,
     'connections': ConnectionsView,
+    'logs': LogsView,
     // 其他占位:
     'proxies': class { mount() { document.getElementById('main-content').innerHTML = '<div style="padding:20px">节点配置开发中...</div>'; } unmount() {} },
     'settings': SettingsView

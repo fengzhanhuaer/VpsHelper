@@ -7,6 +7,7 @@ import (
 	"NetHelper/internal/agent"
 	"NetHelper/internal/config"
 	"NetHelper/internal/conntrack"
+	"NetHelper/internal/runlog"
 	"NetHelper/internal/version"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -28,6 +29,10 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	runlog.SetEmitter(func(line string) {
+		wruntime.EventsEmit(a.ctx, "nethelper:runtime:log", line)
+	})
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Printf("Failed to load config: %v", err)
@@ -89,4 +94,9 @@ func (a *App) DoUpdate(useProxy bool, targetVersion, urlsDict string) error {
 // GetVersion 返回当前版本号
 func (a *App) GetVersion() string {
 	return version.Version
+}
+
+// GetRuntimeLogs 返回运行日志（最近 limit 条）
+func (a *App) GetRuntimeLogs(limit int) []string {
+	return runlog.Snapshot(limit)
 }

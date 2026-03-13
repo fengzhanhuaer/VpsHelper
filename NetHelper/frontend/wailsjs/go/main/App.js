@@ -25,3 +25,7 @@ export function SaveSettings(arg1, arg2) {
 export function GetVersion() {
   return window['go']['main']['App']['GetVersion']();
 }
+
+export function GetRuntimeLogs(arg1) {
+  return window['go']['main']['App']['GetRuntimeLogs'](arg1);
+}

@@ -2,6 +2,10 @@ package main
 
 import (
 	"embed"
+	"log"
+
+	"NetHelper/internal/runlog"
+	"NetHelper/internal/update"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -12,6 +16,17 @@ import (
 var assets embed.FS
 
 func main() {
+	runlog.Init()
+
+	handled, err := update.HandleProcessMode()
+	if err != nil {
+		log.Printf("update process mode error: %v", err)
+		return
+	}
+	if handled {
+		return
+	}
+
 	// Create an instance of the app structure
 	app := NewApp()
 

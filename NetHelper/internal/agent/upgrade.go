@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"NetHelper/internal/config"
-	"NetHelper/internal/update"
 	"NetHelper/internal/version"
 )
 
@@ -450,40 +449,71 @@ func DoUpdate(ctx context.Context, cfg *config.Config, useProxy bool, targetVers
 	}
 	emitProgress("更新包校验通过")
 
-	if runtime.GOOS == "windows" {
-		log.Printf("[Agent] Windows 平台将使用外部替换脚本执行同名替换与重启...")
-		emitProgress("正在替换核心程序并准备重启...")
-		if err := scheduleWindowsReplaceAndRestart(exePath, tmpFile, backupPath); err != nil {
-			emitProgress("升级失败：启动替换流程失败")
-			return fmt.Errorf("启动 Windows 替换流程失败: %w", err)
-		}
-		cleanupTmp = false
-		emitProgress("更新成功，正在重启...")
-		go func() {
-			time.Sleep(800 * time.Millisecond)
-			os.Exit(0)
-		}()
-		return nil
+	log.Printf("[Agent] 预检通过，准备启动临时升级进程...")
+	emitProgress("校验通过，正在拉起临时升级进程...")
+
+	workerPath, err := prepareUpdateWorkerBinary(exePath)
+	if err != nil {
+		emitProgress("升级失败：创建临时进程失败")
+		return fmt.Errorf("创建临时升级进程失败: %w", err)
 	}
 
-	// ── 热替换 ──────────────────────────────────────────────────────
-	log.Printf("[Agent] 预检通过，正在执行程序文件热替换...")
-	emitProgress("正在替换核心程序...")
-
-	_ = os.Rename(exePath, backupPath)
-	if replaceErr := os.Rename(tmpFile, exePath); replaceErr != nil {
-		_ = os.Rename(backupPath, exePath)
-		emitProgress("升级失败：核心文件替换失败")
-		return fmt.Errorf("核心文件替换失败，尝试回滚: %w", replaceErr)
+	if err := startUpdateWorker(workerPath, exePath, tmpFile, backupPath); err != nil {
+		emitProgress("升级失败：临时进程启动失败")
+		_ = os.Remove(workerPath)
+		return fmt.Errorf("启动临时升级进程失败: %w", err)
 	}
 
-	_ = os.Chmod(exePath, 0o755)
-	log.Printf("[Agent] 文件替换完成，准备重启进程...")
-	emitProgress("更新成功，正在重启...")
 	cleanupTmp = false
-	update.RestartToDelayed(exePath, os.Args[1:], 1*time.Second)
+	emitProgress("临时进程已接管，当前进程即将退出...")
+	go func() {
+		time.Sleep(800 * time.Millisecond)
+		os.Exit(0)
+	}()
 	
 	return nil
+}
+
+func prepareUpdateWorkerBinary(exePath string) (string, error) {
+	workerExt := filepath.Ext(exePath)
+	workerPath := filepath.Join(filepath.Dir(exePath), "nethelper.worker"+workerExt)
+
+	if err := copyFile(exePath, workerPath); err != nil {
+		return "", err
+	}
+	_ = os.Chmod(workerPath, 0o755)
+	return workerPath, nil
+}
+
+func startUpdateWorker(workerPath, exePath, downloadPath, backupPath string) error {
+	cmd := exec.Command(workerPath,
+		"--update-mode", "worker",
+		"--update-old-exe", exePath,
+		"--update-download", downloadPath,
+		"--update-backup", backupPath,
+	)
+	cmd.Dir = filepath.Dir(exePath)
+	return cmd.Start()
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	_ = os.Remove(dst)
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
 }
 
 func probeDownloadViaProxyWithProgress(ctx context.Context, host, secret, rawURL, destPath string, onProgress func(received, total int64)) (string, error) {
@@ -601,25 +631,4 @@ func validateDownloadedBinary(filePath string) error {
 	return nil
 }
 
-func scheduleWindowsReplaceAndRestart(exePath, newPath, backupPath string) error {
-	scriptPath := filepath.Join(filepath.Dir(exePath), "nethelper.swap.cmd")
 
-	esc := func(s string) string {
-		return strings.ReplaceAll(s, "%", "%%")
-	}
-
-	script := fmt.Sprintf("@echo off\r\nsetlocal\r\nset \"EXE=%s\"\r\nset \"NEW=%s\"\r\nset \"BAK=%s\"\r\n\r\nfor /L %%%%I in (1,1,120) do (\r\n  move /Y \"%%EXE%%\" \"%%BAK%%\" >nul 2>nul\r\n  if not errorlevel 1 goto MOVED_OLD\r\n  timeout /T 1 /NOBREAK >nul\r\n)\r\nexit /b 1\r\n\r\n:MOVED_OLD\r\nfor /L %%%%I in (1,1,120) do (\r\n  move /Y \"%%NEW%%\" \"%%EXE%%\" >nul 2>nul\r\n  if not errorlevel 1 goto RESTART\r\n  timeout /T 1 /NOBREAK >nul\r\n)\r\nmove /Y \"%%BAK%%\" \"%%EXE%%\" >nul 2>nul\r\nexit /b 1\r\n\r\n:RESTART\r\nstart \"\" \"%%EXE%%\"\r\ndel /F /Q \"%%~f0\"\r\nexit /b 0\r\n", esc(exePath), esc(newPath), esc(backupPath))
-
-	if err := os.WriteFile(scriptPath, []byte(script), 0o644); err != nil {
-		return fmt.Errorf("写入替换脚本失败: %w", err)
-	}
-
-	cmd := exec.Command("cmd", "/C", "start", "", scriptPath)
-	cmd.Dir = filepath.Dir(exePath)
-	if err := cmd.Start(); err != nil {
-		_ = os.Remove(scriptPath)
-		return fmt.Errorf("启动替换脚本失败: %w", err)
-	}
-
-	return nil
-}
