@@ -31,7 +31,7 @@ func main() {
 	app := NewApp()
 
 	// Create application with options
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:  "NetHelper",
 		Width:  1024,
 		Height: 768,
