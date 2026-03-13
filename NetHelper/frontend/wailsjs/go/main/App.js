@@ -29,3 +29,7 @@ export function GetVersion() {
 export function GetRuntimeLogs(arg1) {
   return window['go']['main']['App']['GetRuntimeLogs'](arg1);
 }
+
+export function GetProbeNodeInfo(arg1) {
+  return window['go']['main']['App']['GetProbeNodeInfo'](arg1);
+}

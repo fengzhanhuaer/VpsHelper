@@ -100,3 +100,21 @@ func (a *App) GetVersion() string {
 func (a *App) GetRuntimeLogs(limit int) []string {
 	return runlog.Snapshot(limit)
 }
+
+// GetProbeNodeInfo 获取探针节点信息，forceRefresh=true 时强制从主控拉取并更新本地缓存
+func (a *App) GetProbeNodeInfo(forceRefresh bool) (map[string]interface{}, error) {
+	info, err := agent.GetProbeNodeInfo(a.ctx, a.cfg, forceRefresh)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"node_id":         info.NodeID,
+		"name":            info.Name,
+		"address":         info.Address,
+		"ddns_address":    info.DDNSAddress,
+		"report_interval": info.ReportInterval,
+		"server_url":      info.ServerURL,
+		"updated_at":      info.UpdatedAt,
+	}, nil
+}
