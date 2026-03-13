@@ -8,6 +8,7 @@ import (
 	"NetHelper/internal/config"
 	"NetHelper/internal/conntrack"
 	"NetHelper/internal/version"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -80,7 +81,9 @@ func (a *App) CheckUpdate(useProxy bool) (map[string]interface{}, error) {
 
 // DoUpdate 执行版本更新
 func (a *App) DoUpdate(useProxy bool, targetVersion, urlsDict string) error {
-	return agent.DoUpdate(a.ctx, a.cfg, useProxy, targetVersion, urlsDict)
+	return agent.DoUpdate(a.ctx, a.cfg, useProxy, targetVersion, urlsDict, func(msg string) {
+		wruntime.EventsEmit(a.ctx, "nethelper:update:progress", msg)
+	})
 }
 
 // GetVersion 返回当前版本号

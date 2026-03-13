@@ -1,8 +1,10 @@
 import { GetSettings, SaveSettings, CheckUpdate, DoUpdate, GetVersion } from '../../wailsjs/go/main/App.js';
+import { EventsOn } from '../../wailsjs/runtime/runtime.js';
 
 export default class SettingsView {
     constructor(container) {
         this.container = container;
+        this.updateProgressUnsubscribe = null;
     }
 
     async mount() {
@@ -102,6 +104,17 @@ export default class SettingsView {
         const btnDo = document.getElementById('btn-do-update');
         const statusText = document.getElementById('update-status');
 
+        if (this.updateProgressUnsubscribe) {
+            this.updateProgressUnsubscribe();
+            this.updateProgressUnsubscribe = null;
+        }
+        this.updateProgressUnsubscribe = EventsOn('nethelper:update:progress', (payload) => {
+            const msg = Array.isArray(payload) ? payload[0] : payload;
+            if (!msg) return;
+            statusText.style.display = 'block';
+            statusText.innerText = String(msg);
+        });
+
         let currentUpdateInfo = null;
         let isUsingProxy = false;
 
@@ -136,7 +149,7 @@ export default class SettingsView {
                 btnDo.disabled = true;
                 btnCheck.disabled = true;
                 statusText.style.display = 'block';
-                statusText.innerText = "正在下载并替换更新包，请耐心等待...";
+                statusText.innerText = "准备开始升级...";
                 
                 await DoUpdate(isUsingProxy, currentUpdateInfo.version, currentUpdateInfo.urls);
                 alert("更新成功！NetHelper 即将重启。");
@@ -149,6 +162,10 @@ export default class SettingsView {
     }
 
     unmount() {
+        if (this.updateProgressUnsubscribe) {
+            this.updateProgressUnsubscribe();
+            this.updateProgressUnsubscribe = null;
+        }
         this.container.innerHTML = '';
     }
 }

@@ -274,6 +274,10 @@ func probeDownloadViaProxy(ctx context.Context, host, secret, rawURL, destPath s
 
 // directDownload downloads a given full string URL directly.
 func directDownload(ctx context.Context, targetURL, destPath string) (string, error) {
+	return directDownloadWithProgress(ctx, targetURL, destPath, nil)
+}
+
+func directDownloadWithProgress(ctx context.Context, targetURL, destPath string, onProgress func(received, total int64)) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
 	if err != nil {
 		return "", err
@@ -287,6 +291,7 @@ func directDownload(ctx context.Context, targetURL, destPath string) (string, er
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("直连下载返回状态 %d", resp.StatusCode)
 	}
+	total := resp.ContentLength
 
 	tmpPath := destPath + ".tmp"
 	f, err := os.Create(tmpPath)
@@ -300,6 +305,7 @@ func directDownload(ctx context.Context, targetURL, destPath string) (string, er
 	}()
 
 	buf := make([]byte, 32*1024)
+	var received int64
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
@@ -307,6 +313,10 @@ func directDownload(ctx context.Context, targetURL, destPath string) (string, er
 				_ = f.Close()
 				err = writeErr
 				return "", fmt.Errorf("写入文件失败: %w", writeErr)
+			}
+			received += int64(n)
+			if onProgress != nil {
+				onProgress(received, total)
 			}
 		}
 		if readErr == io.EOF {
@@ -331,17 +341,26 @@ func directDownload(ctx context.Context, targetURL, destPath string) (string, er
 }
 
 // DoUpdate performs the upgrade logic
-func DoUpdate(ctx context.Context, cfg *config.Config, useProxy bool, targetVersion string, urlsDict string) error {
+func DoUpdate(ctx context.Context, cfg *config.Config, useProxy bool, targetVersion string, urlsDict string, onProgress func(string)) error {
+	emitProgress := func(msg string) {
+		if onProgress != nil {
+			onProgress(msg)
+		}
+	}
+
 	log.Printf("[Agent] 准备执行自更新流程 (version=%s, use_proxy=%v)...", targetVersion, useProxy)
+	emitProgress("开始准备升级...")
 
 	if targetVersion == version.Version {
 		log.Printf("[Agent] 当前版本 %s 已是目标版本，跳过升级", version.Version)
+		emitProgress("当前已是目标版本，无需更新")
 		return nil
 	}
 
 	// 1. Parse URLs Map
 	var urls map[string]string
 	if err := json.Unmarshal([]byte(urlsDict), &urls); err != nil {
+		emitProgress("升级失败：下载地址解析失败")
 		return fmt.Errorf("无法解析下载地址字典: %w", err)
 	}
 
@@ -349,11 +368,13 @@ func DoUpdate(ctx context.Context, cfg *config.Config, useProxy bool, targetVers
 	osArchKey := runtime.GOOS + "_" + runtime.GOARCH
 	targetURL, ok := urls[osArchKey]
 	if !ok {
+		emitProgress("升级失败：未找到当前架构更新包")
 		return fmt.Errorf("未找到适用于 %s 架构的发布程序", osArchKey)
 	}
 
 	exePath, err := os.Executable()
 	if err != nil {
+		emitProgress("升级失败：无法获取程序路径")
 		return fmt.Errorf("无法获取当前执行路径: %w", err)
 	}
 
@@ -364,49 +385,241 @@ func DoUpdate(ctx context.Context, cfg *config.Config, useProxy bool, targetVers
 
 	if useProxy {
 		if cfg.ServerUrl == "" || cfg.SecretKey == "" {
+			emitProgress("升级失败：主控地址或密钥未配置")
 			return errors.New("通过代理下载失败：主控服务地址和密钥未配置")
 		}
 		log.Printf("[Agent] 将通过主控代理下载: %s", targetURL)
-		tmpFile, err = probeDownloadViaProxy(ctx, cfg.ServerUrl, cfg.SecretKey, targetURL, downloadPath)
+		emitProgress("开始通过主控代理下载更新包...")
+		lastPct := -1
+		tmpFile, err = probeDownloadViaProxyWithProgress(ctx, cfg.ServerUrl, cfg.SecretKey, targetURL, downloadPath, func(received, total int64) {
+			if total > 0 {
+				pct := int(received * 100 / total)
+				if pct >= 100 {
+					pct = 100
+				}
+				if pct != lastPct {
+					lastPct = pct
+					emitProgress(fmt.Sprintf("下载中... %d%%", pct))
+				}
+			} else {
+				emitProgress(fmt.Sprintf("下载中... 已接收 %d KB", received/1024))
+			}
+		})
 		if err != nil {
+			emitProgress("升级失败：主控代理下载失败")
 			return fmt.Errorf("主控代理下载失败: %w", err)
 		}
 	} else {
 		log.Printf("[Agent] 将直接从 GitHub 下载: %s", targetURL)
-		tmpFile, err = directDownload(ctx, targetURL, downloadPath)
+		emitProgress("开始直连下载更新包...")
+		lastPct := -1
+		tmpFile, err = directDownloadWithProgress(ctx, targetURL, downloadPath, func(received, total int64) {
+			if total > 0 {
+				pct := int(received * 100 / total)
+				if pct >= 100 {
+					pct = 100
+				}
+				if pct != lastPct {
+					lastPct = pct
+					emitProgress(fmt.Sprintf("下载中... %d%%", pct))
+				}
+			} else {
+				emitProgress(fmt.Sprintf("下载中... 已接收 %d KB", received/1024))
+			}
+		})
 		if err != nil {
+			emitProgress("升级失败：直连下载失败")
 			return fmt.Errorf("直连下载失败: %w", err)
 		}
 	}
 
-	defer os.Remove(tmpFile)
+	cleanupTmp := true
+	defer func() {
+		if cleanupTmp && tmpFile != "" {
+			_ = os.Remove(tmpFile)
+		}
+	}()
 
 	// ── 预检 ────────────────────────────────────────────────────────
 	log.Printf("[Agent] 新版下载完成，执行可用性预检测试...")
+	emitProgress("下载完成，正在校验更新包...")
 
-	cmd := exec.CommandContext(ctx, tmpFile, "version")
-	output, testErr := cmd.CombinedOutput()
+	if err := validateDownloadedBinary(tmpFile); err != nil {
+		emitProgress("升级失败：更新包校验未通过")
+		return fmt.Errorf("预检失败，拒绝升级: %w", err)
+	}
+	emitProgress("更新包校验通过")
 
-	if testErr != nil && !strings.Contains(string(output), "NetHelper") {
-		return fmt.Errorf("预检失败，拒绝升级: %v, 输出: %s", testErr, string(output))
+	if runtime.GOOS == "windows" {
+		log.Printf("[Agent] Windows 平台将使用外部替换脚本执行同名替换与重启...")
+		emitProgress("正在替换核心程序并准备重启...")
+		if err := scheduleWindowsReplaceAndRestart(exePath, tmpFile, backupPath); err != nil {
+			emitProgress("升级失败：启动替换流程失败")
+			return fmt.Errorf("启动 Windows 替换流程失败: %w", err)
+		}
+		cleanupTmp = false
+		emitProgress("更新成功，正在重启...")
+		go func() {
+			time.Sleep(800 * time.Millisecond)
+			os.Exit(0)
+		}()
+		return nil
 	}
 
 	// ── 热替换 ──────────────────────────────────────────────────────
 	log.Printf("[Agent] 预检通过，正在执行程序文件热替换...")
+	emitProgress("正在替换核心程序...")
 
 	_ = os.Rename(exePath, backupPath)
 	if replaceErr := os.Rename(tmpFile, exePath); replaceErr != nil {
 		_ = os.Rename(backupPath, exePath)
+		emitProgress("升级失败：核心文件替换失败")
 		return fmt.Errorf("核心文件替换失败，尝试回滚: %w", replaceErr)
 	}
 
 	_ = os.Chmod(exePath, 0o755)
 	log.Printf("[Agent] 文件替换完成，准备重启进程...")
-
-	go func() {
-		time.Sleep(2 * time.Second)
-		os.Exit(0)
-	}()
+	emitProgress("更新成功，正在重启...")
+	cleanupTmp = false
+	update.RestartToDelayed(exePath, os.Args[1:], 1*time.Second)
 	
+	return nil
+}
+
+func probeDownloadViaProxyWithProgress(ctx context.Context, host, secret, rawURL, destPath string, onProgress func(received, total int64)) (string, error) {
+	baseURL := strings.TrimSuffix(host, "/")
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		baseURL = "https://" + baseURL
+	}
+	proxyURL := fmt.Sprintf("%s/api/probe/download?url=%s", baseURL, url.QueryEscape(rawURL))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", proxyURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, _ := fetchChallengeNonce(ctx, baseURL)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	AddProbeAuthHeaders(req, secret, nonce)
+
+	client := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("通用代理下载失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("通用代理返回状态 %d", resp.StatusCode)
+	}
+	total := resp.ContentLength
+
+	tmpPath := destPath + ".tmp"
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		return "", fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	buf := make([]byte, 32*1024)
+	var received int64
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := f.Write(buf[:n]); writeErr != nil {
+				_ = f.Close()
+				err = writeErr
+				return "", fmt.Errorf("写入文件失败: %w", writeErr)
+			}
+			received += int64(n)
+			if onProgress != nil {
+				onProgress(received, total)
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			_ = f.Close()
+			err = readErr
+			return "", fmt.Errorf("下载流读取失败: %w", readErr)
+		}
+	}
+	if err = f.Close(); err != nil {
+		return "", fmt.Errorf("关闭文件失败: %w", err)
+	}
+	if err = os.Chmod(tmpPath, 0o755); err != nil {
+		return "", fmt.Errorf("设置文件权限失败: %w", err)
+	}
+	if err = os.Rename(tmpPath, destPath); err != nil {
+		return "", fmt.Errorf("移动文件失败: %w", err)
+	}
+	return destPath, nil
+}
+
+func validateDownloadedBinary(filePath string) error {
+	st, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("无法读取下载文件: %w", err)
+	}
+	if st.Size() < 1024 {
+		return fmt.Errorf("下载文件体积异常(%d bytes)", st.Size())
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("无法打开下载文件: %w", err)
+	}
+	defer f.Close()
+
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(f, header); err != nil {
+		return fmt.Errorf("读取下载文件头失败: %w", err)
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		if header[0] != 'M' || header[1] != 'Z' {
+			return errors.New("下载文件不是有效的 Windows 可执行文件(MZ)")
+		}
+	case "linux":
+		if !(header[0] == 0x7f && header[1] == 'E' && header[2] == 'L' && header[3] == 'F') {
+			return errors.New("下载文件不是有效的 Linux ELF 可执行文件")
+		}
+	case "darwin":
+		isMachO := (header[0] == 0xFE && header[1] == 0xED && header[2] == 0xFA && (header[3] == 0xCE || header[3] == 0xCF)) ||
+			(header[0] == 0xCE && header[1] == 0xFA && header[2] == 0xED && header[3] == 0xFE) ||
+			(header[0] == 0xCF && header[1] == 0xFA && header[2] == 0xED && header[3] == 0xFE)
+		if !isMachO {
+			return errors.New("下载文件不是有效的 macOS Mach-O 可执行文件")
+		}
+	}
+
+	return nil
+}
+
+func scheduleWindowsReplaceAndRestart(exePath, newPath, backupPath string) error {
+	scriptPath := filepath.Join(filepath.Dir(exePath), "nethelper.swap.cmd")
+
+	esc := func(s string) string {
+		return strings.ReplaceAll(s, "%", "%%")
+	}
+
+	script := fmt.Sprintf("@echo off\r\nsetlocal\r\nset \"EXE=%s\"\r\nset \"NEW=%s\"\r\nset \"BAK=%s\"\r\n\r\nfor /L %%%%I in (1,1,120) do (\r\n  move /Y \"%%EXE%%\" \"%%BAK%%\" >nul 2>nul\r\n  if not errorlevel 1 goto MOVED_OLD\r\n  timeout /T 1 /NOBREAK >nul\r\n)\r\nexit /b 1\r\n\r\n:MOVED_OLD\r\nfor /L %%%%I in (1,1,120) do (\r\n  move /Y \"%%NEW%%\" \"%%EXE%%\" >nul 2>nul\r\n  if not errorlevel 1 goto RESTART\r\n  timeout /T 1 /NOBREAK >nul\r\n)\r\nmove /Y \"%%BAK%%\" \"%%EXE%%\" >nul 2>nul\r\nexit /b 1\r\n\r\n:RESTART\r\nstart \"\" \"%%EXE%%\"\r\ndel /F /Q \"%%~f0\"\r\nexit /b 0\r\n", esc(exePath), esc(newPath), esc(backupPath))
+
+	if err := os.WriteFile(scriptPath, []byte(script), 0o644); err != nil {
+		return fmt.Errorf("写入替换脚本失败: %w", err)
+	}
+
+	cmd := exec.Command("cmd", "/C", "start", "", scriptPath)
+	cmd.Dir = filepath.Dir(exePath)
+	if err := cmd.Start(); err != nil {
+		_ = os.Remove(scriptPath)
+		return fmt.Errorf("启动替换脚本失败: %w", err)
+	}
+
 	return nil
 }
