@@ -164,7 +164,7 @@ func (h *Handler) probeNodes(c *gin.Context) {
 			host := c.Request.Host
 			baseURL := fmt.Sprintf("%s://%s", scheme, host)
 
-			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address", "probe_install_method"})
+			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address"})
 			if settings["probe_master_address"] != "" {
 				addr := strings.TrimRight(settings["probe_master_address"], "/")
 				// 确保始终携带 scheme，避免老版本探针收到无协议的地址后拼出非法 URL
@@ -172,10 +172,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 					addr = "https://" + addr
 				}
 				baseURL = addr
-			}
-			useProxy := settings["probe_install_method"]
-			if useProxy == "" {
-				useProxy = "direct"
 			}
 
 			info, rel, fetchErr := update.FetchLatestGitHubRelease(c.Request.Context(), "fengzhanhuaer", "VpsHelper", "")
@@ -217,10 +213,14 @@ func (h *Handler) probeNodes(c *gin.Context) {
 				count := 0
 				for _, n := range nodes {
 					if n.Online {
+						installMethod := strings.TrimSpace(n.InstallMethod)
+						if installMethod != "proxy" {
+							installMethod = "direct"
+						}
 						payload := map[string]string{
 							"secret":    n.Secret,
 							"host":      baseURL,
-							"use_proxy": useProxy,
+							"use_proxy": installMethod,
 							"version":   info.TagName,
 							"urls":      urlsStr,
 						}
@@ -249,10 +249,15 @@ func (h *Handler) probeNodes(c *gin.Context) {
 					}
 				}
 
+				installMethod := strings.TrimSpace(node.InstallMethod)
+				if installMethod != "proxy" {
+					installMethod = "direct"
+				}
+
 				payload := map[string]string{
 					"secret":    node.Secret,
 					"host":      baseURL,
-					"use_proxy": useProxy,
+					"use_proxy": installMethod,
 					"version":   info.TagName,
 					"urls":      urlsStr,
 				}
@@ -369,7 +374,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"probe_history_days", "probe_auto_tls",
 		"probe_tls_cert_status", "probe_tls_cert_error", "probe_tls_cert_updated_at",
 		"probe_master_address", "probe_node_ddns_domain", "probe_node_ddns_prefix",
-		"probe_install_os", "probe_install_type", "probe_install_method",
 	})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "加载设置失败")
@@ -425,19 +429,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		templateName = "probe_nodes_comm.html"
 	}
 
-	installOS := settings["probe_install_os"]
-	if installOS == "" {
-		installOS = "linux"
-	}
-	installType := settings["probe_install_type"]
-	if installType == "" {
-		installType = "vpsprobe"
-	}
-	installMethod := settings["probe_install_method"]
-	if installMethod == "" {
-		installMethod = "direct"
-	}
-
 	c.HTML(http.StatusOK, templateName, gin.H{
 		"Title":          "探针管理",
 		"Message":        message,
@@ -456,9 +447,6 @@ func (h *Handler) probeNodes(c *gin.Context) {
 		"MasterAddress":  masterAddress,
 		"NodeDDNSDomain": nodeDDNSDomain,
 		"NodeDDNSPrefix": nodeDDNSPrefix,
-		"InstallOS":      installOS,
-		"InstallType":    installType,
-		"InstallMethod":  installMethod,
 	})
 }
 
@@ -999,16 +987,12 @@ func (h *Handler) probeNodeManage(c *gin.Context) {
 				scheme = "https"
 			}
 			baseURL := fmt.Sprintf("%s://%s", scheme, c.Request.Host)
-			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address", "probe_install_method"})
+			settings, _ := store.GetSettings(h.dbConn, []string{"probe_master_address"})
 			if ma := strings.TrimRight(settings["probe_master_address"], "/"); ma != "" {
 				if !strings.HasPrefix(ma, "http://") && !strings.HasPrefix(ma, "https://") {
 					ma = "https://" + ma
 				}
 				baseURL = ma
-			}
-			useProxy := settings["probe_install_method"]
-			if useProxy == "" {
-				useProxy = "direct"
 			}
 
 			info, rel, fetchErr := update.FetchLatestGitHubRelease(c.Request.Context(), "fengzhanhuaer", "VpsHelper", "")
@@ -1045,10 +1029,15 @@ func (h *Handler) probeNodeManage(c *gin.Context) {
 			if err != nil {
 				msg = "节点不存在"
 			} else {
+				installMethod := strings.TrimSpace(node.InstallMethod)
+				if installMethod != "proxy" {
+					installMethod = "direct"
+				}
+
 				payload := map[string]string{
 					"secret":    node.Secret,
 					"host":      baseURL,
-					"use_proxy": useProxy,
+					"use_proxy": installMethod,
 					"version":   info.TagName,
 					"urls":      urlsStr,
 				}
