@@ -46,11 +46,18 @@ curl -sSL https://raw.githubusercontent.com/fengzhanhuaer/VpsHelper/main/install
 ```
 
 ### 3. 子节点探针一键卸载
-如果只需要清理子节点上的 `vpsprobe` 探针服务（停止服务、删除服务文件、清理安装目录与日志），可直接执行：
+如果只需要清理子节点上的 `vpsprobe` 探针服务（停止服务、删除服务文件、清理安装目录与日志），可按系统类型执行：
+
+**通用 Linux（systemd 环境）**：
 ```bash
-sudo bash -c 'set -e; SVC=vpsprobe; DIR=/opt/vpsprobe; if command -v systemctl >/dev/null 2>&1; then systemctl disable --now ${SVC}.service 2>/dev/null || true; rm -f /etc/systemd/system/${SVC}.service; systemctl daemon-reload; systemctl reset-failed ${SVC}.service 2>/dev/null || true; elif command -v rc-service >/dev/null 2>&1; then rc-service ${SVC} stop 2>/dev/null || true; rc-update del ${SVC} 2>/dev/null || true; rm -f /etc/init.d/${SVC}; fi; pkill -x "${SVC}" 2>/dev/null || true; rm -rf "${DIR}"; rm -f /var/log/${SVC}.log /var/log/${SVC}.err; echo "vpsprobe 已卸载并清理完成"'
+sudo bash -c 'set -e; SVC=vpsprobe; DIR=/opt/vpsprobe; if command -v systemctl >/dev/null 2>&1; then systemctl disable --now ${SVC}.service 2>/dev/null || true; rm -f /etc/systemd/system/${SVC}.service; systemctl daemon-reload; systemctl reset-failed ${SVC}.service 2>/dev/null || true; elif command -v rc-service >/dev/null 2>&1; then rc-service ${SVC} stop 2>/dev/null || true; rc-update del ${SVC} 2>/dev/null || true; rm -f /etc/init.d/${SVC}; fi; if command -v pkill >/dev/null 2>&1; then pkill -x "${SVC}" 2>/dev/null || true; elif command -v killall >/dev/null 2>&1; then killall "${SVC}" 2>/dev/null || true; fi; rm -rf "${DIR}"; rm -f /var/log/${SVC}.log /var/log/${SVC}.err; echo "vpsprobe 已卸载并清理完成"'
 ```
-> 若安装时使用了 `--dir` 自定义路径，请将命令中的 `DIR=/opt/vpsprobe` 改为实际目录。
+
+**Alpine / OpenRC（默认无 bash/sudo 时）**：
+```sh
+sh -c 'set -e; SVC=vpsprobe; DIR=/opt/vpsprobe; rc-service "$SVC" stop 2>/dev/null || true; rc-update del "$SVC" 2>/dev/null || true; rm -f "/etc/init.d/$SVC"; if command -v pkill >/dev/null 2>&1; then pkill -x "$SVC" 2>/dev/null || true; elif command -v killall >/dev/null 2>&1; then killall "$SVC" 2>/dev/null || true; fi; rm -rf "$DIR"; rm -f "/var/log/$SVC.log" "/var/log/$SVC.err"; echo "vpsprobe 已卸载并清理完成"'
+```
+> Alpine 请以 `root` 执行；若安装时使用了 `--dir` 自定义路径，请将命令中的 `DIR=/opt/vpsprobe` 改为实际目录。
 
 ### 4. 系统级安全卸载
 需要清退系统和迁移时进行彻底卸载 (包含所有历史数据卷的销毁)：
